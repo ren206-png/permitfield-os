@@ -1,7 +1,8 @@
--- Lifecycle & Compliance Expansion, Phase 1.1. Proves three things about
+-- Lifecycle & Compliance Expansion, Phase 1.1. Proves four things about
 -- taxonomies/clients/properties/projects
--- (20260806000019_lifecycle_intake_properties_clients_taxonomies.sql), the
--- same way supabase/tests/tenant_isolation.test.sql and
+-- (20260806000019_lifecycle_intake_properties_clients_taxonomies.sql,
+-- 20260806000020_create_project_with_intake_atomic.sql), the same way
+-- supabase/tests/tenant_isolation.test.sql and
 -- supabase/tests/audit_logs.test.sql prove them for earlier tables:
 --   1. Tenant isolation: org A cannot read org B's rows in any of the four
 --      new tables.
@@ -16,6 +17,15 @@
 --      clients/properties/projects (is_org_member) -- exercised the same
 --      way audit_logs.test.sql proves can_read_audit_logs is narrower than
 --      is_org_member: via a real 'member'-role fixture, not by inspection.
+--   4. create_project_with_intake() is atomic: when the project insert step
+--      fails (e.g. a cross-org taxonomy_id), the inline client insert that
+--      already ran earlier in the same function call is rolled back too --
+--      no orphaned client row survives. This is the concrete proof for
+--      20260806000020's header comment, and the fix for the gap the Phase
+--      1.1 report's adversarial self-check (question 6) flagged and left
+--      open: three sequential `.insert()` calls from the Server Action used
+--      to each be their own transaction, so a client could be created and
+--      then silently orphaned by a later failure.
 --
 -- HOW TO RUN (written but NOT EXECUTED in this environment -- no Docker/psql;
 -- see PHASE_0_FINDINGS.md SS1 and the Phase 1.0 report's "Tests" section):
@@ -169,6 +179,99 @@ begin
   end;
 end $$;
 
+-- === create_project_with_intake() happy path: the happy-path block above
+-- (line ~71) exercises clients/properties/projects via raw inserts to
+-- prove RLS/composite-FK behavior on the tables themselves; this block
+-- calls the RPC createProjectAction actually uses, proving the function
+-- itself creates all three rows together and returns their ids -- the
+-- positive-path counterpart to the atomicity (failure) test below.
+do $$
+declare
+  v_taxonomy_id uuid;
+  v_result record;
+begin
+  select id into v_taxonomy_id from taxonomies
+  where org_id = '20000000-0000-0000-0000-00000000000a' and kind = 'project_type' and code = 'addition';
+
+  select * into v_result from create_project_with_intake(
+    p_org_id := '20000000-0000-0000-0000-00000000000a',
+    p_title := 'RPC happy path project',
+    p_description := null,
+    p_taxonomy_id := v_taxonomy_id,
+    p_property_owner_name := null,
+    p_applicant_name := null,
+    p_status := 'draft',
+    p_client_name := 'RPC Test Client',
+    p_client_email := null,
+    p_client_phone := null,
+    p_address_line1 := '321 RPC Ave',
+    p_address_line2 := null,
+    p_city := 'Toronto',
+    p_province_code := 'ON',
+    p_postal_code := 'M5V 2T6'
+  );
+
+  if v_result.project_id is null or v_result.client_id is null or v_result.property_id is null then
+    raise exception 'FAIL: create_project_with_intake did not return all three ids on the happy path (project_id=%, client_id=%, property_id=%)', v_result.project_id, v_result.client_id, v_result.property_id;
+  end if;
+
+  raise notice 'PASS: create_project_with_intake created client/property/project together and returned all three ids';
+end $$;
+
+-- === create_project_with_intake() atomicity: force the function's final
+-- (project) insert to fail on a cross-org taxonomy_id, after its earlier
+-- (client) insert has already run in the same call, then prove that client
+-- row did NOT survive -- the whole function call rolled back as one unit,
+-- not just the statement that raised. This is the fix for the gap the
+-- Phase 1.1 report's adversarial self-check (question 6) flagged: before
+-- 20260806000020, createProjectAction issued three independent
+-- `.insert()` calls (each its own transaction), so a client created by the
+-- first call could be silently orphaned if a later call failed. Still
+-- running as org A's owner (claims unchanged since line 117 above).
+do $$
+declare
+  v_org_b_taxonomy_id uuid;
+  client_count_before int;
+  client_count_after int;
+begin
+  select id into v_org_b_taxonomy_id from taxonomies
+  where org_id = '20000000-0000-0000-0000-00000000000b' and kind = 'project_type' and code = 'renovation';
+
+  select count(*) into client_count_before from clients where org_id = '20000000-0000-0000-0000-00000000000a';
+
+  begin
+    perform create_project_with_intake(
+      p_org_id := '20000000-0000-0000-0000-00000000000a',
+      p_title := 'FAIL: should never persist (atomicity test)',
+      p_description := null,
+      p_taxonomy_id := v_org_b_taxonomy_id, -- cross-org, rejected by the composite FK on the final insert
+      p_property_owner_name := null,
+      p_applicant_name := null,
+      p_status := 'draft',
+      p_client_name := 'Should Not Persist (atomicity test)',
+      p_client_email := null,
+      p_client_phone := null,
+      p_address_line1 := null,
+      p_address_line2 := null,
+      p_city := null,
+      p_province_code := null,
+      p_postal_code := null
+    );
+    raise exception 'FAIL: create_project_with_intake accepted a cross-org taxonomy_id';
+  exception
+    when foreign_key_violation then
+      raise notice 'PASS: create_project_with_intake rejected cross-org taxonomy_id on its final insert (%)', sqlerrm;
+  end;
+
+  select count(*) into client_count_after from clients where org_id = '20000000-0000-0000-0000-00000000000a';
+
+  if client_count_after <> client_count_before then
+    raise exception 'FAIL: create_project_with_intake left an orphaned client row behind after its project insert failed (before=%, after=%)', client_count_before, client_count_after;
+  end if;
+
+  raise notice 'PASS: create_project_with_intake is atomic -- the inline client insert rolled back along with the failed project insert';
+end $$;
+
 -- properties.client_id has the same composite-FK guard -- one representative
 -- check (not all four again) since the mechanism is identical.
 do $$
@@ -220,6 +323,41 @@ begin
   end if;
 
   raise notice 'PASS: org B owner cannot read org A''s clients or projects rows';
+end $$;
+
+-- === create_project_with_intake() cross-org forgery: org B's owner
+-- (current claims) attempts to call the function with p_org_id = org A.
+-- security definer bypasses the projects_insert/clients_insert/
+-- properties_insert RLS policies entirely, which is exactly why the
+-- function does its own `is_org_member(p_org_id)` check as its first
+-- statement (20260806000020's header comment) -- this proves that check
+-- actually runs and actually rejects, not just that it's present in the
+-- source.
+do $$
+begin
+  begin
+    perform create_project_with_intake(
+      p_org_id := '20000000-0000-0000-0000-00000000000a',
+      p_title := 'FAIL: org B owner forging an org A project via RPC',
+      p_description := null,
+      p_taxonomy_id := null,
+      p_property_owner_name := null,
+      p_applicant_name := null,
+      p_status := 'draft',
+      p_client_name := null,
+      p_client_email := null,
+      p_client_phone := null,
+      p_address_line1 := null,
+      p_address_line2 := null,
+      p_city := null,
+      p_province_code := null,
+      p_postal_code := null
+    );
+    raise exception 'FAIL: create_project_with_intake let org B''s owner create a project for org A';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: create_project_with_intake rejected a non-member org_id (%)', sqlerrm;
+  end;
 end $$;
 
 -- === taxonomies: owner-only write, narrower than clients/properties/

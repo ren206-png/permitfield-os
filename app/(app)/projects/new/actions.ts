@@ -103,70 +103,50 @@ export async function createProjectAction(
     };
   }
 
-  // Inline client/property creation -- see lib/intake/schemas.ts's header
-  // comment on CreateProjectFormSchema for why: no standalone /clients/new
-  // or /properties/new page exists in this gate, so this is the only entry
-  // point that can populate those two tables at all today. Both are
+  // Inline client/property creation, plus the project itself, all in one
+  // atomic RPC call -- see supabase/migrations/
+  // 20260806000020_create_project_with_intake_atomic.sql's header comment
+  // for why this is a single `security definer` function call rather than
+  // three sequential `.insert()`s (the shape this code originally shipped
+  // with, and the Phase 1.1 report's own adversarial self-check flagged as
+  // an unfixed partial-write risk: a client created successfully followed
+  // by a failed property/project insert used to leave an orphaned client
+  // row behind, since each PostgREST `.insert()` is its own transaction).
+  // A single RPC call is a single statement, hence one transaction --
+  // failure at any step rolls back every insert the function already made,
+  // including the client/property. No standalone /clients/new or
+  // /properties/new page exists in this gate (see
+  // lib/intake/schemas.ts's header comment), so this remains the only
+  // entry point that can populate those two tables at all today; both stay
   // optional; a project can be created with neither.
-  let clientId: string | null = null;
-  if (data.clientName) {
-    const { data: clientRow, error: clientError } = await supabase
-      .from('clients')
-      .insert({
-        org_id: orgId,
-        name: data.clientName,
-        email: data.clientEmail ?? null,
-        phone: data.clientPhone ?? null,
-      })
-      .select('id')
-      .single();
-    if (clientError) {
-      return { error: `Failed to create client: ${clientError.message}` };
-    }
-    clientId = clientRow.id;
+  const { data: rpcRows, error: rpcError } = await supabase.rpc('create_project_with_intake', {
+    p_org_id: orgId,
+    p_title: data.title,
+    p_description: data.description ?? null,
+    p_taxonomy_id: data.taxonomyId ?? null,
+    p_property_owner_name: data.propertyOwnerName ?? null,
+    p_applicant_name: data.applicantName ?? null,
+    p_status: data.status,
+    p_client_name: data.clientName ?? null,
+    p_client_email: data.clientEmail ?? null,
+    p_client_phone: data.clientPhone ?? null,
+    // CreateProjectFormSchema's superRefine already guarantees these four
+    // are either all present or all absent, so gating on addressLine1
+    // alone (mirrored inside the SQL function) is sufficient.
+    p_address_line1: data.addressLine1 ?? null,
+    p_address_line2: data.addressLine2 ?? null,
+    p_city: data.city ?? null,
+    p_province_code: data.provinceCode ?? null,
+    p_postal_code: data.postalCode ?? null,
+  });
+
+  if (rpcError) {
+    return { error: `Failed to create project: ${rpcError.message}` };
   }
 
-  // CreateProjectFormSchema's superRefine already guarantees these four are
-  // either all present or all absent.
-  let propertyId: string | null = null;
-  if (data.addressLine1 && data.city && data.provinceCode && data.postalCode) {
-    const { data: propertyRow, error: propertyError } = await supabase
-      .from('properties')
-      .insert({
-        org_id: orgId,
-        client_id: clientId,
-        address_line1: data.addressLine1,
-        address_line2: data.addressLine2 ?? null,
-        city: data.city,
-        province_code: data.provinceCode,
-        postal_code: data.postalCode,
-      })
-      .select('id')
-      .single();
-    if (propertyError) {
-      return { error: `Failed to create property: ${propertyError.message}` };
-    }
-    propertyId = propertyRow.id;
-  }
-
-  const { data: projectRow, error: projectError } = await supabase
-    .from('projects')
-    .insert({
-      org_id: orgId,
-      client_id: clientId,
-      property_id: propertyId,
-      taxonomy_id: data.taxonomyId ?? null,
-      title: data.title,
-      description: data.description ?? null,
-      property_owner_name: data.propertyOwnerName ?? null,
-      applicant_name: data.applicantName ?? null,
-      status: data.status,
-    })
-    .select('id')
-    .single();
-
-  if (projectError) {
-    return { error: `Failed to create project: ${projectError.message}` };
+  const projectRow = rpcRows?.[0];
+  if (!projectRow) {
+    return { error: 'Failed to create project: no row returned.' };
   }
 
   // writeAuditLog() returns its error rather than throwing (see that file's
@@ -178,7 +158,7 @@ export async function createProjectAction(
     actorRole: role,
     action: 'project.created',
     entityType: 'projects',
-    entityId: projectRow.id,
+    entityId: projectRow.project_id,
     afterSummary: { title: data.title, status: data.status },
   });
   if (auditError) {

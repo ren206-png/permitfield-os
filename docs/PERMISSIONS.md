@@ -64,6 +64,22 @@ Notable properties this table makes explicit:
   describes but does not retroactively fix (out of scope for an
   additive-only phase). See `supabase/tests/lifecycle_intake.test.sql` for
   the executable proof.
+- **`clients`/`properties`/`projects` also have a second, `security
+  definer` write path**: `create_project_with_intake()`
+  (`20260806000020`), the same RPC-wrapping pattern
+  `create_organization_with_owner()` uses for `organizations`/`org_members`
+  above. It exists to make the inline "create a client, a property, and a
+  project together" flow (`app/(app)/projects/new/actions.ts`) atomic —
+  three separate `.insert()` calls used to each be their own transaction,
+  so a failure partway through could leave an orphaned client or property
+  row behind. Because `security definer` bypasses the
+  `clients_insert`/`properties_insert`/`projects_insert` policies in this
+  table entirely, the function does its own `is_org_member(p_org_id)`
+  check as its first statement — this is *not* a weaker path than the
+  table's own RLS policies, just a differently-enforced one covering the
+  same boundary. See `supabase/tests/lifecycle_intake.test.sql`'s
+  `create_project_with_intake()` tests (happy path, atomic rollback on
+  failure, and cross-org `p_org_id` rejection) for the executable proof.
 
 - **No role beyond `owner` vs. everyone-else exists at the DB layer today.**
   The 8 new `org_role` values added in Phase 1.0 are legal to store in
