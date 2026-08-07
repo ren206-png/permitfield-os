@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "eval": "tsx eval/run.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:sql": "bash scripts/run-sql-tests.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

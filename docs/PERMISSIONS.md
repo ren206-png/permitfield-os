@@ -109,13 +109,20 @@ per-role reasoning comments). **Aspirational.** No route calls `can()` yet.
 Legend: C = create, R = read, U = update, A = archive. A blank cell means
 the matrix has no entry for that role/resource pair (`can()` returns `false`).
 
+This table is checked against `lib/authz/index.ts`'s live matrix by
+`lib/authz/permissions-doc.test.ts` (`npm test`), which parses the table
+below straight out of this file and fails if any cell disagrees with
+`formatPermissionCell()`'s output for the corresponding role/resource pair.
+Edit the code and this table together; the test is what catches it if you
+don't.
+
 | Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
 | `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
 | `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
-| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U | C,R,U | C,R,U |
+| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A |
 | `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
 | `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R |
 | `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
@@ -149,16 +156,22 @@ Notes on deliberate asymmetries vs. Table 1:
   `document_reviewer`/`client_user`/`auditor_readonly` were in Phase 1.0 —
   product/design decisions, not citations of pre-existing DB behavior beyond
   `taxonomies`' owner-tier write gate (which *is* citation-backed, see Table
-  1 above). `member`/`permit_manager`/`permit_coordinator`/
-  `applicant_contractor` all get `C,R,U` (no `A`/archive distinction from
-  `U`, since archival on these four tables is just an UPDATE setting
-  `archived_at` — see Table 1's notes) on `clients`/`properties`/`projects`,
-  but only `R` on `taxonomies`, mirroring the DB-layer asymmetry:
-  `is_org_owner` gates taxonomies writes, `is_org_member` gates the other
-  three. `client_user` gets `R` on `properties`/`projects` only (not
-  `clients`/`taxonomies`) — a client-facing user can see the property and
-  project they're attached to, but has no reason to see the org's internal
-  client list or taxonomy configuration.
+  1 above). `member`/`permit_manager` get the full `C,R,U,A` on
+  `clients`/`properties`/`projects` — since archival on these three tables
+  is just an UPDATE setting `archived_at` (see Table 1's notes), not a
+  separate owner-only DELETE the way `contractors`/`permit_applications`
+  have, there is no narrower ceiling to hold either role to.
+  `permit_coordinator`/`applicant_contractor` get only `C,R,U` (no `A`) on
+  the same three — a deliberate narrower tier for those two roles, matching
+  the fact that they also lack `A` on `contractors`/`permit_applications`
+  elsewhere in this table. All four of `member`/`permit_manager`/
+  `permit_coordinator`/`applicant_contractor` get only `R` on `taxonomies`,
+  mirroring the DB-layer asymmetry: `is_org_owner` gates taxonomies writes,
+  `is_org_member` gates the other three. `client_user` gets `R` on
+  `properties`/`projects` only (not `clients`/`taxonomies`) — a
+  client-facing user can see the property and project they're attached to,
+  but has no reason to see the org's internal client list or taxonomy
+  configuration.
 
 ## Current status (read this before assigning any new role)
 

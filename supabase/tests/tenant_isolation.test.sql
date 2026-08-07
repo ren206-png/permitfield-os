@@ -11,6 +11,10 @@
 --   3. psql "$(supabase status -o env | grep DB_URL | cut -d= -f2)" \
 --        -f supabase/tests/tenant_isolation.test.sql
 -- A clean run prints only NOTICEs; any RAISE EXCEPTION means an isolation gap.
+--
+-- Or, to run this file together with every other supabase/tests/*.test.sql
+-- file in one command (after steps 1-2 above): npm run test:sql
+-- (see scripts/run-sql-tests.sh).
 
 begin;
 

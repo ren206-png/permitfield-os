@@ -363,3 +363,27 @@ export const ALL_RESOURCES: readonly Resource[] = [
 ];
 
 export const ALL_ACTIONS: readonly Action[] = ['create', 'read', 'update', 'archive'];
+
+// Single-letter labels, in ALL_ACTIONS order -- this is docs/PERMISSIONS.md
+// Table 2's own legend ("C = create, R = read, U = update, A = archive"),
+// not a new vocabulary invented here.
+const ACTION_LABELS: Record<Action, string> = {
+  create: 'C',
+  read: 'R',
+  update: 'U',
+  archive: 'A',
+};
+
+// Lifecycle & Compliance Expansion, Phase 1.1 gap follow-up: renders a
+// Table-2-style cell ("C,R,U,A", "R", or "" for no access) for a given
+// role/resource pair, straight from this module's own `matrix` via `can()`
+// -- not a second, hand-maintained copy of the data. Exists so
+// lib/authz/permissions-doc.test.ts can assert docs/PERMISSIONS.md's Table 2
+// never silently drifts from the matrix actually enforced by can(): the doc
+// is regenerable/verifiable from this function, not just prose someone has
+// to remember to update by hand.
+export function formatPermissionCell(role: Role, resource: Resource): string {
+  return ALL_ACTIONS.filter((action) => can(role, action, resource))
+    .map((action) => ACTION_LABELS[action])
+    .join(',');
+}
