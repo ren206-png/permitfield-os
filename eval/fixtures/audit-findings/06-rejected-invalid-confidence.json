@@ -1,0 +1,13 @@
+{
+  "description": "Out-of-range confidence (>1) fails AuditFindingSchema's Zod shape check. In the live pipeline this exact case would actually be caught one step earlier, by AuditResponseSchema at the whole-tool-call level (triggering a retry, not a per-item drop) -- this fixture exercises validateAuditFindingItem's own Zod-shape-failure branch directly and defensively, since it is an exported function other callers could hand unvalidated data to.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111"],
+  "rawFinding": {
+    "kind": "passed_check",
+    "severity": "info",
+    "issue": "Confidence out of the valid [0,1] range.",
+    "action_required": "N/A -- this finding should be rejected before it reaches a human.",
+    "code_chunk_id": "11111111-1111-4111-8111-111111111111",
+    "confidence": 1.5
+  },
+  "expected": { "ok": false, "reasonContains": "confidence" }
+}

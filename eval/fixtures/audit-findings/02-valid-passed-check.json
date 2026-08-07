@@ -1,0 +1,13 @@
+{
+  "description": "A passed_check finding citing a shown chunk is accepted.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"],
+  "rawFinding": {
+    "kind": "passed_check",
+    "severity": "info",
+    "issue": "Extracted project area (85 sq m) is within the threshold stated in this excerpt for a standard residential permit.",
+    "action_required": "No action required.",
+    "code_chunk_id": "22222222-2222-4222-8222-222222222222",
+    "confidence": 0.91
+  },
+  "expected": { "ok": true }
+}

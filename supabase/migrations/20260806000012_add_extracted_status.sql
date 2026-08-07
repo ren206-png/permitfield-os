@@ -1,0 +1,14 @@
+-- Additive-only (global engineering rule): adds a pipeline state between
+-- "extraction succeeded" and "auditing" that the original enum
+-- (20260806000006) had no room for. Without it, permit.extract
+-- (lib/inngest/functions/extract.ts) would have to either leave a
+-- successfully-extracted application sitting in 'extracting' forever, or
+-- jump straight to 'auditing' before Phase 3's audit engine exists to act on
+-- it -- both misrepresent the application's real state. 'extraction_failed'
+-- already exists as the failure counterpart; this is its success counterpart.
+--
+-- Postgres requires ALTER TYPE ... ADD VALUE to run outside any other DDL in
+-- the same transaction as a later use of that value, but a bare ADD VALUE by
+-- itself in its own migration file is safe and is what the Supabase CLI
+-- expects (each migration file is already its own transaction).
+alter type application_status add value 'extracted' after 'extraction_failed';

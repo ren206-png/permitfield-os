@@ -1,0 +1,14 @@
+{
+  "description": "Straightforward single-document text extraction with every field present.",
+  "documentId": "doc-1",
+  "filename": "scope-of-work.txt",
+  "textContent": "PERMIT APPLICATION SUPPORTING DOCUMENT\n\nApplicant: Jane Contractor\nContractor License #: ECN-12345\nProject Address: 42 Example St, Ottawa, ON\nProject Area: 85 square metres\nElectrical Service: 200 amp panel upgrade\nEstimated Job Value: $45,000.00\n\nScope of Work: Upgrade existing 100A residential electrical panel to a 200A panel to support a kitchen renovation and new EV charger circuit.",
+  "expectedFields": {
+    "applicant_name": { "value": "Jane Contractor" },
+    "license_number": { "value": "ECN-12345" },
+    "square_footage": { "value": 85 },
+    "electrical_amps": { "value": 200 },
+    "estimated_job_value_raw": { "value": "$45,000.00" },
+    "scope_of_work_summary": { "valueContains": "panel" }
+  }
+}

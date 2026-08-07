@@ -1,0 +1,14 @@
+{
+  "description": "A document that omits license number and electrical service size entirely -- SS4.2 requires those fields come back null (a missing field is missing information, not a zero and not an assumption), never a guessed/fabricated value.",
+  "documentId": "doc-1",
+  "filename": "scope-of-work-partial.txt",
+  "textContent": "PERMIT APPLICATION SUPPORTING DOCUMENT\n\nApplicant: Miguel Rivera\nProject Address: 100 Sample Ave, Calgary, AB\nProject Area: 60 square metres\nEstimated Job Value: $18,500\n\nScope of Work: Finish a basement into a secondary living area with a new bathroom.",
+  "expectedFields": {
+    "applicant_name": { "value": "Miguel Rivera" },
+    "license_number": { "value": null },
+    "square_footage": { "value": 60 },
+    "electrical_amps": { "value": null },
+    "estimated_job_value_raw": { "value": "$18,500" },
+    "scope_of_work_summary": { "valueContains": "basement" }
+  }
+}

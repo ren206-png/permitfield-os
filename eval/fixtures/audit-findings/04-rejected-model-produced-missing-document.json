@@ -1,0 +1,13 @@
+{
+  "description": "SS4.3: the model is never allowed to produce a missing_document finding itself -- that kind is computed deterministically from compliance_rules vs. actual uploaded documents (lib/inngest/functions/audit.ts's computeMissingDocumentFindings), not by the model. Even a structurally well-formed one is rejected.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111"],
+  "rawFinding": {
+    "kind": "missing_document",
+    "severity": "critical",
+    "issue": "The model attempted to report a missing document itself.",
+    "action_required": "N/A -- this finding should be rejected before it reaches a human.",
+    "code_chunk_id": null,
+    "confidence": 0.7
+  },
+  "expected": { "ok": false, "reasonContains": "determined deterministically" }
+}

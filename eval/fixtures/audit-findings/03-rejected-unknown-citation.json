@@ -1,0 +1,13 @@
+{
+  "description": "SS0.2 'no citation, no finding': a finding citing a chunk ID that was never shown to the model is rejected, not silently trusted.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111"],
+  "rawFinding": {
+    "kind": "code_conflict",
+    "severity": "critical",
+    "issue": "Fabricated conflict citing a code excerpt the model was never actually shown.",
+    "action_required": "N/A -- this finding should be rejected before it reaches a human.",
+    "code_chunk_id": "99999999-9999-4999-8999-999999999999",
+    "confidence": 0.95
+  },
+  "expected": { "ok": false, "reasonContains": "does not match any code excerpt that was shown" }
+}
