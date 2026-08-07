@@ -358,6 +358,16 @@ supabase db reset   # applies all migrations + supabase/seed.sql
 psql "$(supabase status -o env | grep DB_URL | cut -d= -f2)" -f supabase/tests/tenant_isolation.test.sql
 ```
 
+Or run every `supabase/tests/*.test.sql` file (tenant isolation, audit log append-only/tenant
+isolation/elevated-read, and lifecycle intake tenant isolation/composite-FK/atomicity) in one command
+after `supabase start` + `supabase db reset`: `npm run test:sql` (`scripts/run-sql-tests.sh`).
+
+**CI** (`.github/workflows/ci.yml`, added Phase 1.1 follow-up): runs on every push/PR. Two jobs —
+`build-and-test` (lint + build + `npm test`, no infra needed) and `sql-tests` (boots a real local
+Supabase/Postgres stack via the Supabase CLI and runs `npm run test:sql` against it). Closes the gap
+`PHASE_0_FINDINGS.md`'s original audit flagged ("CI: NOT FOUND") and every subsequent phase report
+repeated: lint/build/tests are no longer only manually-run commands someone has to remember.
+
 ## Setup
 
 ```bash

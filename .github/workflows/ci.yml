@@ -1,0 +1,98 @@
+# Lifecycle & Compliance Expansion, Phase 1.1 follow-up (B2): this repo's
+# first CI workflow. PHASE_0_FINDINGS.md's original audit ("CI: NOT FOUND.
+# No .github/ directory exists at repo root") and every later phase report
+# flagged this as a standing gap -- lint/build/tests were all documented as
+# manually-run commands, with nothing catching a regression automatically.
+# This file closes that gap for good, rather than relying on a human
+# remembering to run `npm test`/`npm run test:sql` before every commit.
+#
+# Two independent jobs, deliberately not chained:
+#   - build-and-test: lint + build + vitest. Needs nothing but Node -- no
+#     Docker, no secrets, no external services. This is the fast, always-on
+#     safety net (see lib/authz/permissions-doc.test.ts and friends).
+#   - sql-tests: boots a real local Supabase Postgres stack via the
+#     Supabase CLI (same `supabase start` / `supabase db reset` steps
+#     documented in every supabase/tests/*.test.sql file's own "HOW TO RUN"
+#     header) and runs scripts/run-sql-tests.sh (`npm run test:sql`)
+#     against it. This is the heavier job -- real Docker containers, full
+#     migration replay, seed data -- but it is what finally makes the
+#     tenant-isolation / composite-FK / atomicity proofs in
+#     supabase/tests/ run on every push instead of "written but not
+#     executed in this environment," which is what every one of those
+#     files' header comments has said since Phase 1.0.
+#
+# Kept as two jobs (not one) so a Postgres/Docker flake in sql-tests never
+# blocks the fast, infra-free build-and-test signal from reporting -- and
+# vice versa.
+name: CI
+
+# Quoted "on" (not bare) -- bare `on:` is parsed as the boolean `true` by
+# YAML 1.1 (a well-known footgun; GitHub's own workflow parser special-cases
+# it correctly either way, but quoting removes any ambiguity for every other
+# YAML tool/linter that touches this file).
+"on":
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      - run: npm test
+
+  sql-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # scripts/run-sql-tests.sh (npm run test:sql) itself only needs
+      # bash/psql/the supabase CLI, but `npm ci` here keeps this job
+      # self-contained rather than depending on build-and-test's cache.
+      - run: npm ci
+
+      # Official Supabase CLI installer -- installs the native binary
+      # directly (not through the npm wrapper devDependency), which is the
+      # documented pattern for CI per Supabase's own GitHub Actions guide.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # `supabase start` requires Docker, which ubuntu-latest runners
+      # provide out of the box -- this is the step that was impossible in
+      # the sandbox every prior phase report/self-check ran in (no Docker
+      # there; see PHASE_0_FINDINGS.md SS1). It applies every migration in
+      # supabase/migrations/ to a fresh local Postgres instance.
+      - run: supabase start
+
+      # Re-applies migrations from a clean slate and loads supabase/seed.sql
+      # -- the fixture data every supabase/tests/*.test.sql file's org
+      # A/org B/role rows depend on.
+      - run: supabase db reset
+
+      - run: npm run test:sql
+
+      # Best-effort cleanup; the runner is thrown away after the job
+      # regardless, but this documents intent and avoids leaving a
+      # container running if this job is ever moved to a persistent runner.
+      - if: always()
+        run: supabase stop --no-backup

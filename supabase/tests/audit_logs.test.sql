@@ -26,6 +26,11 @@
 -- Or, to run this file together with every other supabase/tests/*.test.sql
 -- file in one command (after steps 1-2 above): npm run test:sql
 -- (see scripts/run-sql-tests.sh).
+--
+-- Also runs automatically on every push/PR via .github/workflows/ci.yml's
+-- sql-tests job, which has Docker (ubuntu-latest runners) and so can
+-- actually execute this file end-to-end -- unlike every sandbox this file
+-- has been edited in so far.
 
 begin;
 
