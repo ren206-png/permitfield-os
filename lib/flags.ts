@@ -35,3 +35,13 @@ export function isVectorRetrievalEnabled(): boolean {
 export function isPdfFillEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_PDF_FILL');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.0. Gates nothing at runtime yet
+// -- there is no route or UI branch that reads it in this phase, since
+// lib/authz's can() and lib/audit/log.ts's writeAuditLog() are foundation
+// modules with zero call sites (see their own header comments). Declared
+// now, off by default, so the later phase that actually wires enforcement in
+// only has to flip this flag on, not invent it.
+export function isLifecycleCoreEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_LIFECYCLE_CORE');
+}
