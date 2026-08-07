@@ -57,6 +57,16 @@ export type Action = 'create' | 'read' | 'update' | 'archive';
 // repo's app/api/applications/[id]/findings/[findingId]/review/route.ts
 // performs -- the underlying rows are otherwise AI-written and not something
 // any role "creates" or "updates" outside that one reviewable field set.
+// Lifecycle & Compliance Expansion, Phase 1.1 adds the four resources below
+// (taxonomies/clients/properties/projects, from
+// 20260806000019_lifecycle_intake_properties_clients_taxonomies.sql). Same
+// "not wired into any route" caveat from the module header applies to these
+// too, EXCEPT that this phase's own createProject Server Action
+// (app/(app)/projects/new/actions.ts) IS this module's first real call
+// site -- see that file's header comment. It calls can() for the
+// 'projects' resource only; the other three new resources remain
+// aspirational alongside every pre-Phase-1.1 entry until something calls
+// can() for them too.
 export type Resource =
   | 'organizations'
   | 'org_members'
@@ -67,7 +77,11 @@ export type Resource =
   | 'audits'
   | 'audit_findings_review'
   | 'generated_documents'
-  | 'audit_logs';
+  | 'audit_logs'
+  | 'taxonomies'
+  | 'clients'
+  | 'properties'
+  | 'projects';
 
 type PermissionMatrix = Record<Role, Partial<Record<Resource, readonly Action[]>>>;
 
@@ -135,6 +149,21 @@ const ownerAndOrgOwnerGrants: PermissionMatrix['owner'] = {
   audit_findings_review: REVIEW,
   generated_documents: ['create', 'read'],
   audit_logs: SELF_LOG,
+  // taxonomies_insert/update require is_org_owner, same as org_members
+  // (20260806000019) -- taxonomies is org-wide shared configuration, not a
+  // per-record working set, so it gets the same owner-only write shape as
+  // org_members rather than contractors/projects' member-writable shape.
+  taxonomies: FULL,
+  // clients/properties/projects_insert/update only require is_org_member
+  // (20260806000019), same shape as contractors/permit_applications -- and
+  // unlike those two, none of the three has a real DELETE at the DB layer at
+  // all (archival-only, see that migration's header comment), so the
+  // is_org_member-gated UPDATE policy is the only mechanism for both
+  // "update" and "archive" -- FULL is not an overgrant here the way it would
+  // require is_org_owner for contractors/permit_applications' actual DELETE.
+  clients: FULL,
+  properties: FULL,
+  projects: FULL,
 };
 
 const matrix: PermissionMatrix = {
@@ -151,6 +180,10 @@ const matrix: PermissionMatrix = {
     audit_findings_review: REVIEW,
     generated_documents: FULL,
     audit_logs: ['create', 'read'],
+    taxonomies: FULL,
+    clients: FULL,
+    properties: FULL,
+    projects: FULL,
   },
   // Mirrors current RLS exactly (see contractors_select/insert/update,
   // permit_applications_select/insert/update, application_documents_select/
@@ -172,6 +205,14 @@ const matrix: PermissionMatrix = {
     audit_logs: SELF_LOG,
     // No org_members entry: a plain member cannot manage the roster today
     // (org_members_insert/update/delete all require is_org_owner).
+    // clients/properties/projects mirror contractors/permit_applications
+    // above: is_org_member-gated insert/update, no owner-only DELETE exists
+    // for these three (archival-only), so FULL is the correct ceiling, not
+    // an overgrant -- see ownerAndOrgOwnerGrants' comment on the same point.
+    taxonomies: READ_ONLY_LOG,
+    clients: FULL,
+    properties: FULL,
+    projects: FULL,
   },
   permit_manager: {
     organizations: READ_ONLY_LOG,
@@ -184,6 +225,15 @@ const matrix: PermissionMatrix = {
     audit_findings_review: REVIEW,
     generated_documents: ['create', 'read'],
     audit_logs: SELF_LOG,
+    // Same tier as org_members above: taxonomies is org-wide shared
+    // configuration, and permit_manager's whole design is "broad
+    // operational control MINUS org/member administration" (see the
+    // matrix's top-of-file reasoning comment) -- read-only here for the
+    // same reason it's read-only on org_members.
+    taxonomies: READ_ONLY_LOG,
+    clients: FULL,
+    properties: FULL,
+    projects: FULL,
   },
   permit_coordinator: {
     organizations: READ_ONLY_LOG,
@@ -195,6 +245,10 @@ const matrix: PermissionMatrix = {
     audit_findings_review: REVIEW,
     generated_documents: READ_ONLY_LOG,
     audit_logs: SELF_LOG,
+    taxonomies: READ_ONLY_LOG,
+    clients: ['create', 'read', 'update'],
+    properties: ['create', 'read', 'update'],
+    projects: ['create', 'read', 'update'],
   },
   document_reviewer: {
     organizations: READ_ONLY_LOG,
@@ -206,6 +260,13 @@ const matrix: PermissionMatrix = {
     audit_findings_review: REVIEW,
     generated_documents: READ_ONLY_LOG,
     audit_logs: SELF_LOG,
+    // Reviewer's job is the finding-review step, not project intake -- kept
+    // read-only across all four new resources, same tier as
+    // contractors/permit_applications above.
+    taxonomies: READ_ONLY_LOG,
+    clients: READ_ONLY_LOG,
+    properties: READ_ONLY_LOG,
+    projects: READ_ONLY_LOG,
   },
   applicant_contractor: {
     organizations: READ_ONLY_LOG,
@@ -217,6 +278,10 @@ const matrix: PermissionMatrix = {
     audit_findings_review: REVIEW,
     generated_documents: READ_ONLY_LOG,
     audit_logs: SELF_LOG,
+    taxonomies: READ_ONLY_LOG,
+    clients: ['create', 'read', 'update'],
+    properties: ['create', 'read', 'update'],
+    projects: ['create', 'read', 'update'],
   },
   // Deliberately sparse -- see the header comment above the matrix. No
   // audit_logs entry at all: a client neither reads the ledger nor performs
@@ -224,6 +289,16 @@ const matrix: PermissionMatrix = {
   client_user: {
     permit_applications: READ_ONLY_LOG,
     generated_documents: READ_ONLY_LOG,
+    // A client can plausibly see their own project's status and the
+    // property it's filed against, but NOT the `clients` row itself (that's
+    // the org's internal CRM record about them, e.g. `notes`, and no
+    // no-entry is a deliberately more conservative default than the sparse
+    // read access granted elsewhere) and NOT taxonomies (internal
+    // classification, not client-facing). Same "aspirational, RLS enforces
+    // none of this yet" caveat as the rest of this role -- see the module
+    // header and this matrix's top-of-file comment.
+    properties: READ_ONLY_LOG,
+    projects: READ_ONLY_LOG,
   },
   auditor_readonly: {
     organizations: READ_ONLY_LOG,
@@ -238,6 +313,10 @@ const matrix: PermissionMatrix = {
     // Can read the ledger (the whole point of the role) and can write an
     // entry describing their own access to it, but never anything else.
     audit_logs: SELF_LOG,
+    taxonomies: READ_ONLY_LOG,
+    clients: READ_ONLY_LOG,
+    properties: READ_ONLY_LOG,
+    projects: READ_ONLY_LOG,
   },
 };
 
@@ -277,6 +356,10 @@ export const ALL_RESOURCES: readonly Resource[] = [
   'audit_findings_review',
   'generated_documents',
   'audit_logs',
+  'taxonomies',
+  'clients',
+  'properties',
+  'projects',
 ];
 
 export const ALL_ACTIONS: readonly Action[] = ['create', 'read', 'update', 'archive'];

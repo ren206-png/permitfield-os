@@ -33,8 +33,37 @@ exists today.
 | `audit_findings` | `is_org_member` (via parent) | *(`service_role` only)* | `is_org_member`, but a trigger further restricts the update to `review_status`/`reviewed_by`/`reviewed_at` only (`audit_findings_restrict_update_trigger`) | *(none — `forbid_delete()` trigger)* | `20260806000009` |
 | `generated_documents` | `is_org_member` (via parent) | *(`service_role` only, Phase 4)* | *(none — append-only)* | *(none — append-only)* | `20260806000017` |
 | `audit_logs` (new, Phase 1.0) | `can_read_audit_logs` — **narrower than `is_org_member`**: only `role in ('owner','org_owner','platform_admin','auditor_readonly')` | `is_org_member(org_id) and actor_user_id = auth.uid()` | *(none — append-only, trigger-enforced)* | *(none — append-only, trigger-enforced)* | `20260806000018` |
+| `taxonomies` (new, Phase 1.1) | `is_org_member` | `is_org_owner` | `is_org_owner` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
+| `clients` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
+| `properties` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
+| `projects` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 
 Notable properties this table makes explicit:
+
+- **`taxonomies` is the first table since `audit_logs` whose write policy is
+  narrower than plain `is_org_member`** — INSERT/UPDATE both require
+  `is_org_owner`, while SELECT only requires membership. This is the opposite
+  asymmetry from `audit_logs` (which restricts SELECT, not write); documented
+  here so the two "narrower than membership" tables in this schema aren't
+  conflated with each other.
+- **`taxonomies`/`clients`/`properties`/`projects` have no DELETE policy at
+  all**, by design: this phase introduces `archived_at timestamptz` on all
+  four and treats archival (a plain UPDATE setting that column) as the
+  destructive-action path, rather than adding a real DELETE policy. RLS
+  itself does not filter out archived rows on SELECT — that's an
+  application-layer concern this phase does not implement (see the
+  migration's header comment).
+- **`clients`/`properties`/`projects` are additionally guarded by composite
+  foreign keys** (`unique (org_id, id)` on the referenced table +
+  `foreign key (org_id, x_id) references x (org_id, id)` on the referencing
+  table), not just RLS. A cross-org `client_id`/`property_id`/`contractor_id`/
+  `taxonomy_id` value is rejected by the FK constraint itself
+  (`foreign_key_violation`, SQLSTATE 23503) before RLS is even relevant —
+  this closes the gap `permit_applications`'s pre-existing bare-id FKs
+  (`20260806000006`) leave open, a gap this migration's header comment
+  describes but does not retroactively fix (out of scope for an
+  additive-only phase). See `supabase/tests/lifecycle_intake.test.sql` for
+  the executable proof.
 
 - **No role beyond `owner` vs. everyone-else exists at the DB layer today.**
   The 8 new `org_role` values added in Phase 1.0 are legal to store in
@@ -64,18 +93,18 @@ per-role reasoning comments). **Aspirational.** No route calls `can()` yet.
 Legend: C = create, R = read, U = update, A = archive. A blank cell means
 the matrix has no entry for that role/resource pair (`can()` returns `false`).
 
-| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R |
-| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R |
-| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R |
-| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R |
-| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R |
-| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R |
-| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R |
-| `client_user` | | | | R | | | | | R | |
-| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R |
+| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
+| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
+| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
+| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U | C,R,U | C,R,U |
+| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
+| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R |
+| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
+| `client_user` | | | | R | | | | | R | | | | R | R |
+| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R |
 
 Notes on deliberate asymmetries vs. Table 1:
 
@@ -99,6 +128,21 @@ Notes on deliberate asymmetries vs. Table 1:
   comments, not derived from existing enforcement.
 - `client_user` is intentionally near-empty and should not be assigned to a
   real user. See the warning below.
+- **`taxonomies`/`clients`/`properties`/`projects` (Phase 1.1) are new-role
+  rows, added the same way `permit_manager`/`permit_coordinator`/
+  `document_reviewer`/`client_user`/`auditor_readonly` were in Phase 1.0 —
+  product/design decisions, not citations of pre-existing DB behavior beyond
+  `taxonomies`' owner-tier write gate (which *is* citation-backed, see Table
+  1 above). `member`/`permit_manager`/`permit_coordinator`/
+  `applicant_contractor` all get `C,R,U` (no `A`/archive distinction from
+  `U`, since archival on these four tables is just an UPDATE setting
+  `archived_at` — see Table 1's notes) on `clients`/`properties`/`projects`,
+  but only `R` on `taxonomies`, mirroring the DB-layer asymmetry:
+  `is_org_owner` gates taxonomies writes, `is_org_member` gates the other
+  three. `client_user` gets `R` on `properties`/`projects` only (not
+  `clients`/`taxonomies`) — a client-facing user can see the property and
+  project they're attached to, but has no reason to see the org's internal
+  client list or taxonomy configuration.
 
 ## Current status (read this before assigning any new role)
 

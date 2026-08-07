@@ -45,3 +45,15 @@ export function isPdfFillEnabled(): boolean {
 export function isLifecycleCoreEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_LIFECYCLE_CORE');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.1. Gates the project intake UI
+// (app/(app)/projects/new/) and its Server Action -- this is the first flag
+// in this file with a real route call site (createProjectAction calls
+// notFound() when this is off; see that file's header comment). The
+// underlying schema (taxonomies/clients/properties/projects,
+// 20260806000019) and RLS exist regardless of this flag's value, same as
+// every other flag here: the flag gates the application-layer entry point,
+// not the table's existence.
+export function isIntakeEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_INTAKE');
+}

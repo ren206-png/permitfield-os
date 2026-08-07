@@ -144,3 +144,22 @@ insert into permit_applications (id, org_id, contractor_id, permit_type_id, proj
    '00000000-0000-0000-0003-000000000001', 'Org A - 200A Service Upgrade', '123 Test St, Toronto, ON', 'draft', 1250000, 'CAD'),
   ('40000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-00000000000b', '30000000-0000-0000-0000-00000000000b',
    '00000000-0000-0000-0003-000000000001', 'Org B - 400A Service Upgrade', '456 Test Ave, Toronto, ON', 'draft', 3400000, 'CAD');
+
+-- Lifecycle & Compliance Expansion, Phase 1.1 (20260806000019): Org A/B
+-- predate create_organization_with_owner()'s taxonomy-seeding extension (that
+-- RPC only seeds NEW orgs going forward), so backfill the same five
+-- 'project_type' rows here to keep the fixtures consistent with what a
+-- freshly created org would have. `on conflict do nothing` against
+-- taxonomies' `unique (org_id, kind, code)` makes this safe to re-run.
+insert into taxonomies (org_id, kind, code, label, sort_order, is_seed) values
+  ('20000000-0000-0000-0000-00000000000a', 'project_type', 'new_construction', 'New Construction', 1, true),
+  ('20000000-0000-0000-0000-00000000000a', 'project_type', 'renovation', 'Renovation', 2, true),
+  ('20000000-0000-0000-0000-00000000000a', 'project_type', 'addition', 'Addition', 3, true),
+  ('20000000-0000-0000-0000-00000000000a', 'project_type', 'repair', 'Repair', 4, true),
+  ('20000000-0000-0000-0000-00000000000a', 'project_type', 'demolition', 'Demolition', 5, true),
+  ('20000000-0000-0000-0000-00000000000b', 'project_type', 'new_construction', 'New Construction', 1, true),
+  ('20000000-0000-0000-0000-00000000000b', 'project_type', 'renovation', 'Renovation', 2, true),
+  ('20000000-0000-0000-0000-00000000000b', 'project_type', 'addition', 'Addition', 3, true),
+  ('20000000-0000-0000-0000-00000000000b', 'project_type', 'repair', 'Repair', 4, true),
+  ('20000000-0000-0000-0000-00000000000b', 'project_type', 'demolition', 'Demolition', 5, true)
+on conflict (org_id, kind, code) do nothing;

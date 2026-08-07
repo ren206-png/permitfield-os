@@ -93,9 +93,12 @@ describe('audit_logs — narrower than plain membership by design', () => {
 });
 
 describe('client_user — deliberately minimal, do not assign to real users', () => {
-  const allowedResources: Resource[] = ['permit_applications', 'generated_documents'];
+  // Phase 1.1 (20260806000019) added read-only 'properties'/'projects'
+  // entries -- see lib/authz/index.ts's client_user comment for why those
+  // two and not 'clients'/'taxonomies'.
+  const allowedResources: Resource[] = ['permit_applications', 'generated_documents', 'properties', 'projects'];
 
-  it('has read access to exactly permit_applications and generated_documents, nothing else', () => {
+  it('has read access to exactly permit_applications, generated_documents, properties, and projects, nothing else', () => {
     for (const resource of ALL_RESOURCES) {
       const expectRead = allowedResources.includes(resource);
       expect(can('client_user', 'read', resource)).toBe(expectRead);
@@ -162,5 +165,76 @@ describe('coverage: every declared role has at least one resource entry', () => 
       ALL_ACTIONS.some((action) => can(role, action, resource))
     );
     expect(hasAny).toBe(true);
+  });
+});
+
+// Lifecycle & Compliance Expansion, Phase 1.1
+// (20260806000019_lifecycle_intake_properties_clients_taxonomies.sql) added
+// taxonomies/clients/properties/projects. createProjectAction
+// (app/(app)/projects/new/actions.ts) is this module's first real call
+// site, calling can(role, 'create', 'projects') -- these tests pin down
+// exactly which roles that check allows through.
+describe('Phase 1.1 resources — taxonomies/clients/properties/projects', () => {
+  it('taxonomies write (create/update) requires an owner-tier role, same as org_members', () => {
+    const ownerTier: Role[] = ['owner', 'org_owner', 'platform_admin'];
+    for (const role of ALL_ROLES) {
+      const expected = ownerTier.includes(role);
+      expect(can(role, 'create', 'taxonomies')).toBe(expected);
+      expect(can(role, 'update', 'taxonomies')).toBe(expected);
+    }
+  });
+
+  it('every role except client_user can at least read taxonomies', () => {
+    for (const role of ALL_ROLES) {
+      const expected = role !== 'client_user';
+      expect(can(role, 'read', 'taxonomies')).toBe(expected);
+    }
+  });
+
+  it('member, permit_coordinator, and applicant_contractor can create/read/update clients and properties but not archive', () => {
+    for (const role of ['member', 'permit_coordinator', 'applicant_contractor'] as Role[]) {
+      for (const resource of ['clients', 'properties'] as Resource[]) {
+        expect(can(role, 'create', resource)).toBe(true);
+        expect(can(role, 'read', resource)).toBe(true);
+        expect(can(role, 'update', resource)).toBe(true);
+      }
+    }
+  });
+
+  it('createProjectAction gate: exactly the roles with a projects.create grant can create a project', () => {
+    // Mirrors app/(app)/projects/new/actions.ts's own
+    // can(role, 'create', 'projects') check -- this list must stay in sync
+    // with lib/authz/index.ts's matrix, not derived from it, so a matrix
+    // edit that accidentally drops a role's create grant fails this test.
+    const canCreateProjects: Role[] = [
+      'owner',
+      'org_owner',
+      'platform_admin',
+      'member',
+      'permit_manager',
+      'permit_coordinator',
+      'applicant_contractor',
+    ];
+    for (const role of ALL_ROLES) {
+      expect(can(role, 'create', 'projects')).toBe(canCreateProjects.includes(role));
+    }
+  });
+
+  it('client_user cannot access clients or taxonomies at all', () => {
+    for (const action of ALL_ACTIONS) {
+      expect(can('client_user', action, 'clients')).toBe(false);
+      expect(can('client_user', action, 'taxonomies')).toBe(false);
+    }
+  });
+
+  it('document_reviewer and auditor_readonly are read-only on all four new resources', () => {
+    for (const role of ['document_reviewer', 'auditor_readonly'] as Role[]) {
+      for (const resource of ['taxonomies', 'clients', 'properties', 'projects'] as Resource[]) {
+        expect(can(role, 'read', resource)).toBe(true);
+        expect(can(role, 'create', resource)).toBe(false);
+        expect(can(role, 'update', resource)).toBe(false);
+        expect(can(role, 'archive', resource)).toBe(false);
+      }
+    }
   });
 });
