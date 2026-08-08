@@ -2,7 +2,10 @@
 -- `authenticated`/`service_role` Postgres roles under RLS (not just "the UI
 -- doesn't show a button for it" -- see prior gates' adversarial self-checks),
 -- everything 20260806000022_permit_status_machine.sql and
--- 20260806000023_backfill_permit_application_project_id.sql add:
+-- 20260806000023_backfill_permit_application_project_id.sql add. (23b,
+-- the NOT NULL half of the original single 23 migration, is written but
+-- deliberately not applied -- supabase/migrations_blocked/ -- so it isn't
+-- exercised here; see 20260806000023's file header and the Gate 1.3 report.)
 --   1. permit_applications gets permit_status ('intake' default), project_id,
 --      and the three evidence columns; a fresh INSERT fires
 --      seed_permit_status_history() and records the mandatory
@@ -34,12 +37,39 @@
 --   8. permit_status_tier() classifies all three tiers correctly (spot check
 --      -- the exhaustive 16-status matrix is lib/permit-status/
 --      transitions.test.ts's job, mirrored from this same seed data).
---   9. The 20260806000023 backfill: both supabase/seed.sql fixture
---      applications (which predate `project_id`) now have a non-null
---      project_id pointing at a `projects` row with `source = 'backfill'`.
+--   9. Both supabase/seed.sql fixture applications carry a real, non-null
+--      project_id pointing at an ordinary projects row (source is null) --
+--      seed.sql supplies this directly (Gate 1.3 review, round 2), it is
+--      NOT produced by the 20260806000023 backfill: `supabase db reset`
+--      applies every migration before seed.sql runs, so a row seed.sql
+--      inserts is structurally invisible to that migration's scan. See
+--      item 14 for actual coverage of the backfill function itself.
+--  10. Column-level lockout: a direct `update permit_applications set
+--      permit_status = ...` from `authenticated` (probed as the lowest-tier
+--      applicant_contractor role) is rejected with insufficient_privilege
+--      (42501) BEFORE it ever reaches RLS -- transition_permit_status() is
+--      the only write path left. A direct UPDATE against the *pipeline's*
+--      `status` column (a different column) still succeeds -- this revoke
+--      is scoped to permit_status only.
+--  11. Idempotency reservation ordering: a retried call with the same
+--      request_key short-circuits to a no-op via the ON CONFLICT DO
+--      NOTHING reservation before Check 1/Check 2 ever run (SS6 already
+--      covers this behaviorally; this file does not attempt to simulate
+--      genuine cross-session concurrency for the request_key race or the
+--      optimistic-concurrency row-count guard -- both are single-
+--      connection-transaction-safe code reviewed, not exercised under real
+--      concurrency here; see the Gate 1.3 report's self-check).
+--  12. backfill_orphaned_application_projects() (20260806000023), called
+--      directly against self-contained fixtures inside this file's own
+--      rolled-back transaction, since supabase/seed.sql no longer produces
+--      any orphans for `supabase db reset` to exercise it against: (a) 2
+--      orphaned applications -> the function synthesizes 2 placeholder
+--      projects, both source = 'backfill', both applications linked; (b)
+--      11 orphaned applications -> the function RAISES (safety valve),
+--      synthesizing nothing. This is the only test coverage the safety
+--      valve has anywhere in the repo.
 --
--- HOW TO RUN (written but NOT EXECUTED in this environment -- no Docker/psql;
--- see PHASE_0_FINDINGS.md SS1 and prior gate reports' "Tests" sections):
+-- HOW TO RUN:
 --   1. supabase start
 --   2. supabase db reset
 --   3. psql "$(supabase status -o env | grep DB_URL | cut -d= -f2)" \
@@ -71,13 +101,16 @@ values
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000f', 'authenticated', 'authenticated',
    'permit-coordinator@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now()),
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated',
-   'member@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
+   'member@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated',
+   'applicant-contractor@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
 on conflict (id) do nothing;
 
 insert into org_members (org_id, user_id, role) values
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000e', 'permit_manager'),
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000f', 'permit_coordinator'),
-  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000010', 'member')
+  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000010', 'member'),
+  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000011', 'applicant_contractor')
 on conflict (org_id, user_id) do nothing;
 
 -- === 1. Fresh INSERT trigger: seed_permit_status_history() fires automatically ===
@@ -405,29 +438,159 @@ begin
   raise notice 'PASS: permit_status_transitions is globally readable, same shape as jurisdiction_sources';
 end $$;
 
--- === 12. 20260806000023 backfill: both seed fixture applications now have a project_id ===
+-- === 12. seed.sql fixtures carry a real, non-backfilled project_id ===
 -- Runs against seed.sql's OTHER fixture row (Org B's, 40000000-...b) since
--- Org A's (...a) was already exercised extensively above but never had its
--- project_id touched by anything in this file -- either row proves the
--- backfill migration ran.
+-- Org A's (...a) was already exercised extensively above. This is NOT
+-- testing the backfill migration/function (see item 14 for that) -- it's
+-- confirming seed.sql's own direct project_id assignment (Gate 1.3 review,
+-- round 2) is what's actually in effect after `supabase db reset`, and
+-- that it is deliberately NOT a `source = 'backfill'` placeholder.
 do $$
 declare
-  backfilled_project_id uuid;
+  seed_project_id uuid;
   project_source text;
 begin
-  select project_id into backfilled_project_id
+  select project_id into seed_project_id
   from permit_applications where id = '40000000-0000-0000-0000-00000000000b';
 
-  if backfilled_project_id is null then
-    raise exception 'FAIL: Org B seed fixture application still has a null project_id after the backfill migration';
+  if seed_project_id is null then
+    raise exception 'FAIL: Org B seed fixture application has a null project_id -- seed.sql should supply one directly';
   end if;
 
-  select source into project_source from projects where id = backfilled_project_id;
-  if project_source <> 'backfill' then
-    raise exception 'FAIL: backfilled project''s source column is %, expected ''backfill''', project_source;
+  select source into project_source from projects where id = seed_project_id;
+  if project_source is not null then
+    raise exception 'FAIL: Org B seed fixture''s project has source = %, expected null (an ordinary project, not a backfill placeholder)', project_source;
   end if;
 
-  raise notice 'PASS: 20260806000023 backfilled Org B''s orphaned seed application with a source=backfill placeholder project';
+  raise notice 'PASS: Org B seed fixture application has a real, non-backfilled project_id, supplied directly by seed.sql';
+end $$;
+
+-- === 13. Column-level lockout: direct UPDATE of permit_status is rejected ===
+-- Probed as applicant_contractor (org_role's lowest client-facing tier,
+-- 20260806000018) specifically because it's the role with the least reason
+-- to be trusted with a self-attested status change -- if the revoke holds
+-- for this role it holds for every other `authenticated` role too, since
+-- the revoke is not role-specific within `authenticated`.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000011","role":"authenticated"}';
+
+do $$
+begin
+  begin
+    update permit_applications set permit_status = 'closed' where id = '40000000-0000-0000-0000-00000000000a';
+    raise exception 'FAIL: applicant_contractor was able to directly UPDATE permit_status, bypassing transition_permit_status()';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: direct UPDATE of permit_status correctly rejected with insufficient_privilege (%)', sqlerrm;
+    when others then
+      raise exception 'FAIL: direct UPDATE of permit_status was rejected, but with the wrong error (expected insufficient_privilege / 42501): % (%)', sqlerrm, sqlstate;
+  end;
+end $$;
+
+-- Confirm the revoke is scoped to permit_status only -- the SAME role can
+-- still directly UPDATE the pipeline's own `status` column (untouched by
+-- this gate's revoke; permit_applications_update RLS only requires
+-- is_org_member, unchanged).
+do $$
+begin
+  update permit_applications set status = 'draft' where id = '40000000-0000-0000-0000-00000000000a';
+  raise notice 'PASS: direct UPDATE of the unrelated `status` column still succeeds -- the column-level revoke is scoped to permit_status only';
+end $$;
+
+-- Confirm transition_permit_status() itself -- SECURITY DEFINER -- is
+-- unaffected by the revoke: it still writes permit_status successfully via
+-- the RPC, even though NO `authenticated` identity (regardless of role
+-- tier) has column privilege to write permit_status directly anymore.
+-- Fixture app A is currently 'approved' (SS5); switch to permit_coordinator
+-- (jurisdiction_outcome tier) to make the legal approved -> issued move --
+-- proves the RPC path, not a repeat of SS3/SS5's role-tier checks.
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000f","role":"authenticated"}';
+
+do $$
+declare
+  result permit_applications;
+begin
+  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'issued', 'issued via the RPC after the column-level revoke');
+  if result.permit_status <> 'issued' then
+    raise exception 'FAIL: transition_permit_status() could not write permit_status after the column-level revoke, got %', result.permit_status;
+  end if;
+  raise notice 'PASS: transition_permit_status() (SECURITY DEFINER) still writes permit_status after the column-level revoke from authenticated';
+end $$;
+
+-- === 14. backfill_orphaned_application_projects() (20260806000023) ===
+-- seed.sql no longer creates any orphans (Gate 1.3 review, round 2), so
+-- `supabase db reset` never actually exercises this function's loop or its
+-- safety valve. Self-contained fixtures here are the only coverage either
+-- gets. Reuses Org A / contractor A / the existing permit_type fixture --
+-- only project_id is deliberately left null.
+reset role;
+reset request.jwt.claims;
+
+-- --- 14a: a normal-scale backfill (2 orphans) ---
+do $$
+declare
+  orphan_count_before integer;
+  applied_count integer;
+  a_project_id uuid;
+  b_project_id uuid;
+  a_source text;
+  b_source text;
+begin
+  select count(*) into orphan_count_before from permit_applications where project_id is null;
+  if orphan_count_before <> 0 then
+    raise exception 'FAIL: test setup assumption violated -- expected 0 pre-existing orphans before section 14a, found %. seed.sql or an earlier section introduced one.', orphan_count_before;
+  end if;
+
+  insert into permit_applications (id, org_id, contractor_id, permit_type_id, project_title, project_address, permit_status)
+  values
+    ('60000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0003-000000000001', 'SS14a orphan 1', '1 Test St', 'intake'),
+    ('60000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0003-000000000001', 'SS14a orphan 2', '2 Test St', 'intake');
+
+  select backfill_orphaned_application_projects() into applied_count;
+  if applied_count <> 2 then
+    raise exception 'FAIL: backfill_orphaned_application_projects() reported % orphans, expected 2', applied_count;
+  end if;
+
+  select project_id into a_project_id from permit_applications where id = '60000000-0000-0000-0000-000000000001';
+  select project_id into b_project_id from permit_applications where id = '60000000-0000-0000-0000-000000000002';
+  if a_project_id is null or b_project_id is null then
+    raise exception 'FAIL: backfill_orphaned_application_projects() left a project_id null after reporting success';
+  end if;
+
+  select source into a_source from projects where id = a_project_id;
+  select source into b_source from projects where id = b_project_id;
+  if a_source <> 'backfill' or b_source <> 'backfill' then
+    raise exception 'FAIL: backfilled projects should have source = ''backfill'', got % and %', a_source, b_source;
+  end if;
+
+  raise notice 'PASS: backfill_orphaned_application_projects() backfilled 2 orphans into 2 source=backfill projects';
+end $$;
+
+-- --- 14b: the >10 safety valve ---
+do $$
+declare
+  i integer;
+begin
+  for i in 1..11 loop
+    insert into permit_applications (id, org_id, contractor_id, permit_type_id, project_title, project_address, permit_status)
+    values (
+      ('60000000-0000-0000-0000-0000000001' || lpad(i::text, 2, '0'))::uuid,
+      '20000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0003-000000000001', 'SS14b orphan ' || i, i || ' Test St', 'intake'
+    );
+  end loop;
+
+  begin
+    perform backfill_orphaned_application_projects();
+    raise exception 'FAIL: backfill_orphaned_application_projects() should have raised with 11 orphans (safety valve is >10), but returned normally';
+  exception
+    when others then
+      if sqlerrm like '%backfill safety valve%' then
+        raise notice 'PASS: backfill_orphaned_application_projects() raised the safety valve at 11 orphans: %', sqlerrm;
+      else
+        raise exception 'FAIL: backfill_orphaned_application_projects() raised, but not the expected safety-valve message: % (%)', sqlerrm, sqlstate;
+      end if;
+  end;
 end $$;
 
 rollback;

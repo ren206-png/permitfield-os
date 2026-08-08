@@ -75,14 +75,18 @@
 -- new RLS policy on permit_applications (explicit user instruction: the
 -- function is the only sanctioned write path for `permit_status`, so that's
 -- where the rule belongs, and the rejection message can name the required
--- role/tier). This does NOT touch permit_applications' existing RLS at all --
--- a plain UPDATE against `permit_status` remains blocked from actually doing
--- anything meaningful only by application code choosing to call the RPC
--- instead; see this migration's own tests for what a direct UPDATE can and
--- cannot do to `permit_status` today (nothing stops it at the RLS layer,
--- same "aspirational enforcement, not yet wired everywhere" caveat every
--- lib/authz-adjacent resource in this repo carries -- documented, not
--- silently left as a gap).
+-- role/tier). This does NOT touch permit_applications' existing RLS at all
+-- -- RLS still allows `authenticated` to reach an UPDATE statement against
+-- this table. What actually forecloses the bypass is narrower and blunter:
+-- a column-level privilege revoke (`revoke update (permit_status) on
+-- permit_applications from authenticated`, at the bottom of this file,
+-- added after Gate 1.3 review) means a direct `update permit_applications
+-- set permit_status = ...` from `authenticated` fails immediately with
+-- insufficient_privilege (42501) -- it never reaches RLS evaluation at all,
+-- since Postgres checks column-level grants first. transition_permit_status
+-- () is unaffected (SECURITY DEFINER, executes as the function owner, not
+-- as `authenticated`). See this migration's own tests for the direct-UPDATE
+-- probe that proves this.
 create type permit_status_enum as enum (
   'intake',
   'requirements_review',
@@ -392,12 +396,55 @@ create trigger permit_applications_seed_status_history
 -- discusses who's allowed to make it), not a security-relevant one (both
 -- checks still run before any write happens either way).
 --
--- Idempotency: if p_request_key is supplied and a row already exists for
--- (org_id, application_id, request_key), this function returns the
--- application UNCHANGED (a no-op), without re-validating or re-erroring --
--- a retried call with the same key always succeeds silently, per the
--- partial unique index's own design (see application_status_history's
--- comment above).
+-- Idempotency (Gate 1.3 review -- REVISED from the original SELECT
+-- COUNT(*) pre-check): if p_request_key is supplied, this function
+-- RESERVES it by attempting the application_status_history insert FIRST,
+-- via `on conflict (org_id, application_id, request_key) where
+-- request_key is not null do nothing`, before doing anything else.
+--   - If the insert is rejected by the conflict (0 rows affected per GET
+--     DIAGNOSTICS), a row for this exact (org_id, application_id,
+--     request_key) already exists -- either a truly concurrent duplicate
+--     call that lost a row-level lock race, or a later, fully-sequential
+--     retry of an already-committed transition. Either way, this function
+--     returns the CURRENT application state as a silent no-op, without
+--     running Check 1/Check 2/the cross-machine gate/the UPDATE at all.
+--     This is deliberately checked BEFORE those checks: on a sequential
+--     retry, v_from_status below would already equal the NEW (post-
+--     transition) status, not the one this call was originally validated
+--     against, so re-running Check 1 against it would raise a spurious
+--     invalid_transition error instead of recognizing the retry.
+--   - If the insert succeeds, its row is NOT yet durable in any
+--     transactionally-visible sense outside this function call: if any
+--     later check in this same function raises (Check 1, Check 2, the
+--     cross-machine gate, or the optimistic-concurrency row-count check
+--     below), the whole function call's transaction aborts and this insert
+--     is rolled back along with it -- so a validation failure never leaves
+--     a "reserved but not really executed" history row behind.
+--   - Closes the original design's TOCTOU: the old SELECT COUNT(*)
+--     pre-check and the later INSERT were two separate statements with a
+--     window between them where two concurrent identical retries could
+--     both pass the SELECT before either committed the INSERT. A single
+--     INSERT ... ON CONFLICT ... DO NOTHING is atomic -- the second
+--     concurrent caller blocks on the unique index's row lock until the
+--     first commits or rolls back, then correctly sees the conflict (or
+--     correctly proceeds, if the first rolled back).
+--   - When p_request_key is null, the partial unique index's `where
+--     request_key is not null` means a null-key row is never indexed
+--     there at all, so this same INSERT statement can never conflict --
+--     it always just inserts normally, same as the pre-review behavior for
+--     callers that don't supply a request_key.
+--
+-- Concurrency (Gate 1.3 review -- NEW): the UPDATE below now carries `and
+-- permit_status = v_from_status` and checks ROW_COUNT, closing a
+-- lost-update race -- without this, two concurrent transitions reading the
+-- same v_from_status could both pass Check 1/Check 2 (both legal/
+-- authorized against the state each of them read) and both write,
+-- silently discarding whichever UPDATE committed first with no error to
+-- either caller. With the added WHERE clause, whichever call commits first
+-- wins; the second finds 0 rows matching (permit_status has already moved
+-- on) and raises concurrent_transition (SQLSTATE 40001, the standard
+-- "serialization failure, retry me" family) instead of silently losing the
+-- race.
 --
 -- The cross-machine gate (SS L.3(b), see this migration's header comment):
 -- refuses 'submitted' unless the pipeline's own `status` column has already
@@ -420,7 +467,7 @@ declare
   v_from_status permit_status_enum;
   v_role org_role;
   v_tier text;
-  v_existing_count int;
+  v_row_count int;
 begin
   select * into v_app from permit_applications where id = p_application_id;
   if v_app.id is null then
@@ -431,18 +478,17 @@ begin
     raise exception 'not a member of this organization' using errcode = '42501';
   end if;
 
-  if p_request_key is not null then
-    select count(*) into v_existing_count
-      from application_status_history
-      where org_id = v_app.org_id
-        and application_id = p_application_id
-        and request_key = p_request_key;
-    if v_existing_count > 0 then
-      return v_app; -- idempotent no-op: this exact transition was already recorded.
-    end if;
-  end if;
-
   v_from_status := v_app.permit_status;
+
+  -- Idempotency reservation -- see the comment above this function.
+  insert into application_status_history (org_id, application_id, from_status, to_status, changed_by, reason, request_key)
+  values (v_app.org_id, v_app.id, v_from_status, p_to_status, auth.uid(), p_reason, p_request_key)
+  on conflict (org_id, application_id, request_key) where request_key is not null do nothing;
+
+  get diagnostics v_row_count = row_count;
+  if v_row_count = 0 then
+    return v_app; -- idempotent no-op: this exact request_key was already recorded.
+  end if;
 
   -- Check 1: transition legality, independent of who is asking.
   if not exists (
@@ -477,10 +523,14 @@ begin
   update permit_applications
   set permit_status = p_to_status, updated_at = now()
   where id = p_application_id
+    and permit_status = v_from_status
   returning * into v_app;
 
-  insert into application_status_history (org_id, application_id, from_status, to_status, changed_by, reason, request_key)
-  values (v_app.org_id, v_app.id, v_from_status, p_to_status, auth.uid(), p_reason, p_request_key);
+  get diagnostics v_row_count = row_count;
+  if v_row_count = 0 then
+    raise exception 'concurrent_transition: permit_status for application % changed since this transition was validated (expected %); retry the request', p_application_id, v_from_status
+      using errcode = '40001';
+  end if;
 
   return v_app;
 end;
@@ -488,3 +538,30 @@ $$;
 
 revoke all on function transition_permit_status(uuid, permit_status_enum, text, uuid) from public;
 grant execute on function transition_permit_status(uuid, permit_status_enum, text, uuid) to authenticated;
+
+-- Column-level lockout (Gate 1.3 review), not a trigger -- explicit user
+-- instruction: transition_permit_status() above is the ONLY sanctioned
+-- write path for permit_status; a trigger-based guard would still let a
+-- direct UPDATE appear to run (and would need its own logic to silently
+-- discard or rewrite the value), which is a worse failure mode than a
+-- hard, immediate privilege error at the column-grant layer. This does NOT
+-- touch table-level UPDATE on permit_applications (every other column
+-- remains writable by `authenticated` as before, e.g. the pipeline's own
+-- `status` column, written by app/api/applications/[id]/{submit,
+-- confirm-review}/route.ts and lib/inngest/functions/*.ts) -- only
+-- permit_status is locked down.
+--   - `anon` never had UPDATE on this table at all (20260806000011 L25:
+--     select-only) -- nothing to revoke there.
+--   - `service_role` keeps table-level UPDATE (20260806000015 L30). It is
+--     not a client-facing role -- it already bypasses RLS by design (that
+--     migration's own documented reasoning) -- and nothing in this gate
+--     has it write permit_status directly; Inngest's three functions
+--     (extract/audit/generate-pdf) only ever touch the pre-existing
+--     pipeline `status` column. Left alone deliberately, not an oversight.
+--   - transition_permit_status() itself is SECURITY DEFINER, so it
+--     executes as the function's owner (the role that ran this migration),
+--     not as `authenticated` -- this revoke does not affect its ability to
+--     write permit_status. Verified empirically post-migration, not just
+--     asserted; see the Gate 1.3 report SS12 for the actual command run and
+--     its output.
+revoke update (permit_status) on permit_applications from authenticated;
