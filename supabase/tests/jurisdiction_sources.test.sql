@@ -358,6 +358,12 @@ begin
 end $$;
 
 -- === 10. No DELETE policy: even platform_admin cannot delete a row ===
+-- Same underlying gotcha as the anon-access assertion above: `authenticated`
+-- has no DELETE grant on this table at all (migration grants select/insert/
+-- update only -- see its "archival-only" comment), so Postgres denies the
+-- statement for lack of privilege before RLS is ever evaluated. It does not
+-- fall through to "0 rows affected" the way an RLS-filtered DELETE would.
+-- Accept either as proof DELETE doesn't work here.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000d","role":"authenticated"}';
 
@@ -365,12 +371,17 @@ do $$
 declare
   deleted_count int;
 begin
-  delete from jurisdiction_sources where id = '60000000-0000-0000-0000-00000000000a';
-  get diagnostics deleted_count = row_count;
-  if deleted_count <> 0 then
-    raise exception 'FAIL: platform_admin was able to DELETE a jurisdiction_sources row (archival-only rule violated)';
-  end if;
-  raise notice 'PASS: DELETE on jurisdiction_sources affects 0 rows for platform_admin -- no DELETE policy exists';
+  begin
+    delete from jurisdiction_sources where id = '60000000-0000-0000-0000-00000000000a';
+    get diagnostics deleted_count = row_count;
+    if deleted_count <> 0 then
+      raise exception 'FAIL: platform_admin was able to DELETE a jurisdiction_sources row (archival-only rule violated)';
+    end if;
+    raise notice 'PASS: DELETE on jurisdiction_sources affects 0 rows for platform_admin -- no DELETE policy exists';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: platform_admin has no DELETE grant on jurisdiction_sources at all (%)', sqlerrm;
+  end;
 end $$;
 
 rollback;
