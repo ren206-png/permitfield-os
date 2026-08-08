@@ -77,17 +77,23 @@ alter table audit_logs enable row level security;
 -- since a legacy-role org has no other way to reach this data.
 create or replace function can_read_audit_logs(check_org_id uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (
+begin
+  -- plpgsql (not sql) so the body is not parsed at CREATE FUNCTION time --
+  -- this function references enum values added by an ALTER TYPE in this
+  -- same migration, which are not visible to the SQL parser until commit.
+  -- Do not convert to language sql.
+  return exists (
     select 1 from org_members
     where org_id = check_org_id
       and user_id = auth.uid()
       and role in ('owner', 'org_owner', 'platform_admin', 'auditor_readonly')
   );
+end;
 $$;
 
 revoke all on function can_read_audit_logs(uuid) from public;
