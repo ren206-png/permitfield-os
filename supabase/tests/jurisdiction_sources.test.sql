@@ -158,7 +158,13 @@ begin
   raise notice 'PASS: org B owner can also read the same jurisdiction_sources row -- confirms global, not org-scoped';
 end $$;
 
--- anon: no policy at all AND no table grant -- must see zero rows.
+-- anon: no policy at all AND no table grant -- must see zero rows. With zero
+-- table-level privileges, Postgres denies the query with "permission denied
+-- for table jurisdiction_sources" before RLS is ever evaluated -- it does
+-- NOT fall through to an empty result set the way an RLS-filtered query
+-- would for a role that does hold a grant. Both outcomes prove the same
+-- thing (anon cannot read any row here); this accepts either so the test
+-- isn't coupled to which of the two mechanisms is currently in effect.
 set local request.jwt.claims = '';
 set local role anon;
 
@@ -166,11 +172,16 @@ do $$
 declare
   visible_count int;
 begin
-  select count(*) into visible_count from jurisdiction_sources;
-  if visible_count <> 0 then
-    raise exception 'FAIL: anon role could see % jurisdiction_sources rows', visible_count;
-  end if;
-  raise notice 'PASS: anon role sees zero jurisdiction_sources rows';
+  begin
+    select count(*) into visible_count from jurisdiction_sources;
+    if visible_count <> 0 then
+      raise exception 'FAIL: anon role could see % jurisdiction_sources rows', visible_count;
+    end if;
+    raise notice 'PASS: anon role sees zero jurisdiction_sources rows';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: anon role has no table-level grant on jurisdiction_sources at all (%)', sqlerrm;
+  end;
 end $$;
 
 -- === 5. UPDATE forged verified_by: platform_admin cannot attribute the row to someone else ===
