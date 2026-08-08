@@ -80,6 +80,48 @@ values ('60000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-0000000
 insert into properties (id, org_id, address_line1, city, province_code, postal_code)
 values ('60000000-0000-0000-0000-00000000001b', '20000000-0000-0000-0000-00000000000b', '456 Test Ave', 'Toronto', 'ON', 'M5V 2T6');
 
+-- Capture org B's fixture ids now, while still `service_role` -- i.e.
+-- before the switch to org A owner's claims immediately below. The
+-- composite-FK rejection tests further down need org B's *real*
+-- client/property/taxonomy ids, but org A's owner cannot read org B's rows
+-- under RLS. A `select ... into` against a row RLS has filtered out
+-- doesn't error, it silently leaves the variable NULL -- and a NULL in a
+-- composite FK column is exempt from enforcement under MATCH SIMPLE, so a
+-- lookup done too late doesn't fail loudly, it makes the downstream test
+-- assert nothing at all. Captured once here and stashed in session-level
+-- GUCs so every later `do $$ ... $$` block (which doesn't share PL/pgSQL
+-- variable scope with this one) can read them regardless of which
+-- role/claims are active by the time it runs -- including both the
+-- cross-org-taxonomy rejection test below and the atomicity test further
+-- down, which reference the same org B taxonomy id and previously each ran
+-- their own copy of this lookup, both broken the same way.
+do $$
+declare
+  v_org_b_client_id uuid;
+  v_org_b_property_id uuid;
+  v_org_b_taxonomy_id uuid;
+begin
+  select id into v_org_b_client_id from clients where id = '60000000-0000-0000-0000-00000000000b';
+  if v_org_b_client_id is null then
+    raise exception 'FAIL: org B client fixture row not found immediately after seeding it';
+  end if;
+
+  select id into v_org_b_property_id from properties where id = '60000000-0000-0000-0000-00000000001b';
+  if v_org_b_property_id is null then
+    raise exception 'FAIL: org B property fixture row not found immediately after seeding it';
+  end if;
+
+  select id into v_org_b_taxonomy_id from taxonomies
+  where org_id = '20000000-0000-0000-0000-00000000000b' and kind = 'project_type' and code = 'renovation';
+  if v_org_b_taxonomy_id is null then
+    raise exception 'FAIL: expected seed.sql to have backfilled a renovation taxonomy for org B';
+  end if;
+
+  perform set_config('permitfield_test.org_b_client_id', v_org_b_client_id::text, false);
+  perform set_config('permitfield_test.org_b_property_id', v_org_b_property_id::text, false);
+  perform set_config('permitfield_test.org_b_taxonomy_id', v_org_b_taxonomy_id::text, false);
+end $$;
+
 -- === Org A owner: happy path -- create a client, a property under that
 -- client, and a project referencing that client/property plus org A's own
 -- existing contractor and taxonomy. All same-org references, all four
@@ -136,10 +178,12 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
 
 do $$
+declare
+  v_org_b_client_id uuid := current_setting('permitfield_test.org_b_client_id')::uuid;
 begin
   begin
     insert into projects (org_id, client_id, title)
-    values ('20000000-0000-0000-0000-00000000000a', '60000000-0000-0000-0000-00000000000b', 'FAIL: cross-org client');
+    values ('20000000-0000-0000-0000-00000000000a', v_org_b_client_id, 'FAIL: cross-org client');
     raise exception 'FAIL: org A project accepted a client_id belonging to org B';
   exception
     when foreign_key_violation then
@@ -148,10 +192,12 @@ begin
 end $$;
 
 do $$
+declare
+  v_org_b_property_id uuid := current_setting('permitfield_test.org_b_property_id')::uuid;
 begin
   begin
     insert into projects (org_id, property_id, title)
-    values ('20000000-0000-0000-0000-00000000000a', '60000000-0000-0000-0000-00000000001b', 'FAIL: cross-org property');
+    values ('20000000-0000-0000-0000-00000000000a', v_org_b_property_id, 'FAIL: cross-org property');
     raise exception 'FAIL: org A project accepted a property_id belonging to org B';
   exception
     when foreign_key_violation then
@@ -171,13 +217,12 @@ begin
   end;
 end $$;
 
+-- v_org_b_taxonomy_id is the value captured up top (before the role switch
+-- to org A owner's claims), not looked up here -- see that block's comment.
 do $$
 declare
-  v_org_b_taxonomy_id uuid;
+  v_org_b_taxonomy_id uuid := current_setting('permitfield_test.org_b_taxonomy_id')::uuid;
 begin
-  select id into v_org_b_taxonomy_id from taxonomies
-  where org_id = '20000000-0000-0000-0000-00000000000b' and kind = 'project_type' and code = 'renovation';
-
   begin
     insert into projects (org_id, taxonomy_id, title)
     values ('20000000-0000-0000-0000-00000000000a', v_org_b_taxonomy_id, 'FAIL: cross-org taxonomy');
@@ -201,6 +246,10 @@ declare
 begin
   select id into v_taxonomy_id from taxonomies
   where org_id = '20000000-0000-0000-0000-00000000000a' and kind = 'project_type' and code = 'addition';
+
+  if v_taxonomy_id is null then
+    raise exception 'FAIL: expected seed.sql to have backfilled an addition taxonomy for org A';
+  end if;
 
   select * into v_result from create_project_with_intake(
     p_org_id := '20000000-0000-0000-0000-00000000000a',
@@ -237,15 +286,16 @@ end $$;
 -- `.insert()` calls (each its own transaction), so a client created by the
 -- first call could be silently orphaned if a later call failed. Still
 -- running as org A's owner (claims unchanged since line 117 above).
+-- v_org_b_taxonomy_id reuses the value captured up top (before the role
+-- switch), same as the cross-org-taxonomy rejection test above -- this
+-- block used to run its own copy of that lookup under org A owner's claims
+-- and get NULL back the same way.
 do $$
 declare
-  v_org_b_taxonomy_id uuid;
+  v_org_b_taxonomy_id uuid := current_setting('permitfield_test.org_b_taxonomy_id')::uuid;
   client_count_before int;
   client_count_after int;
 begin
-  select id into v_org_b_taxonomy_id from taxonomies
-  where org_id = '20000000-0000-0000-0000-00000000000b' and kind = 'project_type' and code = 'renovation';
-
   select count(*) into client_count_before from clients where org_id = '20000000-0000-0000-0000-00000000000a';
 
   begin

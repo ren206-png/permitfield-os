@@ -43,9 +43,9 @@ begin;
 -- can_read_audit_logs()'s narrower-than-membership boundary: seeded with the
 -- legacy 'member' role, which is a full org member (is_org_member = true)
 -- but NOT in can_read_audit_logs()'s allowed-role list.
-insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raised_at, created_at, updated_at)
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
 values ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000c', 'authenticated', 'authenticated',
-        'orgc-member@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now(), now())
+        'orgc-member@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
 on conflict (id) do nothing;
 
 insert into org_members (org_id, user_id, role)

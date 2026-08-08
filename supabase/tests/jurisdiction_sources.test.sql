@@ -60,9 +60,9 @@ begin;
 -- don't cover. Placed in Org A's org_members roster (platform_admin is
 -- org-agnostic per this migration's design -- see its header comment -- so
 -- which org the row lives under is incidental to what it can do).
-insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raised_at, created_at, updated_at)
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
 values ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000d', 'authenticated', 'authenticated',
-        'platform-admin@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now(), now())
+        'platform-admin@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
 on conflict (id) do nothing;
 
 insert into org_members (org_id, user_id, role)
