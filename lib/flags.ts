@@ -70,3 +70,20 @@ export function isIntakeEnabled(): boolean {
 export function isJurisdictionsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_JURISDICTIONS');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.3. Gates nothing at runtime yet --
+// same "declared ahead of its consumer" pattern as isLifecycleCoreEnabled/
+// isJurisdictionsEnabled above: this gate ships
+// supabase/migrations/20260806000022_permit_status_machine.sql (the
+// permit_status_enum column, application_status_history, and
+// transition_permit_status()) and 20260806000023 (the project_id backfill)
+// with zero UI or Server Action call site. The schema, RLS, and RPC are live
+// regardless of this flag's value, same as every other flag in this file --
+// the flag will gate the application-layer entry point once a later phase
+// adds one. Named for the master prompt's own gate identifier
+// ("permitfield_applications"), not "permit_status", since the gate covers
+// permit applications generally (project_id linkage, evidence columns), not
+// only the status machine.
+export function isApplicationsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_APPLICATIONS');
+}

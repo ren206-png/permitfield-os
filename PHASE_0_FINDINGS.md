@@ -512,3 +512,106 @@ module surface), so planning them now would be guessing ahead of real informatio
 Zero code written. Zero migrations written. Zero packages installed. No branch created. Awaiting
 `APPROVED: PHASE 1.0` (or corrections) — per the master prompt's own rule, any other reply is not
 approval.
+
+---
+
+## L. Gate 1.3 pre-migration addendum — `status` vs. `permit_status` (added post-Phase-1.2, before Gate 1.3's migration)
+
+Everything above this line is the original Phase 0 document, unchanged, dated to the `APPROVED: PHASE 1.0`
+request. This section is a **targeted re-run**, not a rewrite: Gate 1.3 ("Permit applications & status
+machine," master prompt §3.5) surfaced a real conflict between the master prompt's 16-status permit
+lifecycle machine and this repo's existing `permit_applications.status` column, and per the operating
+contract's rule 8, that conflict is resolved here, on the record, before any migration SQL is written —
+not inferred silently inside a migration comment.
+
+### L.1 What already exists, re-confirmed
+
+`permit_applications.status` (`application_status` enum, `20260806000006_applications_and_documents.sql:5-15`,
+extended additively by `20260806000012:14` and `20260806000016:23-25`) is a **live, actively-used
+13-value document-processing pipeline**, not scaffolding:
+
+```
+draft → uploading → extracting → (extraction_failed | extracted)
+  → auditing → (audit_failed | ready_for_review)
+  → reviewed → generating_documents → (document_generation_failed | documents_generated)
+  → submitted
+```
+
+Three real call sites read/write it today:
+- `lib/inngest/functions/extract.ts:64,182` — `draft/uploading → extracting → (extracted | extraction_failed)`
+- `lib/inngest/functions/audit.ts:127,161,244` — `extracted → auditing → (audit_failed | ready_for_review)`
+- `lib/inngest/functions/generate-pdf.ts:129,148,297` — `(extracted|reviewed) → generating_documents → (documents_generated | document_generation_failed)`
+- `app/api/applications/[id]/confirm-review/route.ts:43,93` — `ready_for_review → reviewed` (human confirms every AI audit finding has been individually reviewed/dismissed; this route does not touch `audit_findings` rows itself)
+- `app/api/applications/[id]/submit/route.ts:4,34` — `documents_generated → submitted`
+
+None of the master prompt's 16 lifecycle status names (`intake`, `requirements_review`,
+`collecting_documents`, `internal_review`, `ready_to_submit`, `under_municipal_review`,
+`additional_info_required`, `corrections_required`, `resubmitted`, `approved`, `rejected`, `issued`,
+`expired`, `closed`, `withdrawn` — 15 of 16; `submitted` is the 16th and the one name shared with the
+existing enum) appear anywhere in this codebase today (grep-verified, repo-wide, this pass).
+
+### L.2 What `submitted` actually means in the existing pipeline (load-bearing finding)
+
+`app/api/applications/[id]/submit/route.ts:4`'s own header comment states this is a "terminal,
+contractor-driven 'I filed this with the authority' marker" — confirmed independently by
+`20260806000016_add_pdf_generation_statuses.sql:11-16`'s migration comment: *"`documents_generated` is
+the success terminal state. It is deliberately NOT `submitted` — `submitted` means the contractor has
+actually filed the generated PDF with the authority ... conflating 'we produced a PDF' with 'this was
+submitted to the authority' would be a false claim this system must not make."* The UI copy in
+`app/(app)/applications/[id]/review-actions.tsx:59` reads: *"Once you've filed the generated documents
+with the authority, mark this application submitted."*
+
+This means the existing `status = 'submitted'` and the new `permit_status`'s planned `'submitted'` value
+are **not two different things that happen to share a name** — they assert the identical real-world fact
+(the contractor filed the package with the jurisdiction). That equivalence is the basis for L.3(b) below.
+
+### L.3 The relationship, specified
+
+**(a) Does any pipeline transition automatically advance `permit_status`?** **No, not in this gate.**
+Every pipeline transition continues to be driven by its existing Inngest function or route handler,
+unmodified. Auto-advancing a second, independent state machine as a side effect of already-shipped,
+already-tested Phase-0-era code is a behavior change to that code, not an additive extension of it — out
+of this gate's scope per §0.1's one-phase-one-diff discipline. Consequence, stated plainly as a
+limitation, not hidden: after a contractor marks a pipeline `status = 'submitted'`, `permit_status`
+remains wherever it was (typically `ready_to_submit`) until a **separate**, explicit call to
+`transition_permit_status(..., 'submitted', ...)` is made. Two user actions, not one, until a future gate
+wires the pipeline's submit route to also call the new transition function. That wiring is listed as a
+"what is NOT done" item in the eventual Gate 1.3 report, not attempted here.
+
+**(b) Is any `permit_status` transition gated on a pipeline state?** **Yes — exactly one, and it is
+DB-enforced, not a convention.** `transition_permit_status()` refuses to transition a row's `permit_status`
+into `'submitted'` unless that row's existing `status` column already equals `'submitted'`. This is the
+direct consequence of L.2: allowing `permit_status` to independently claim `'submitted'` while the
+pipeline hasn't recorded that the contractor actually filed with the authority would be exactly the
+"false claim this system must not make" `20260806000016`'s own comment already forbids for the pipeline
+column alone — the same rule has to hold for the new column asserting the same fact. No other
+`permit_status` transition (intake through ready_to_submit, or anything post-submission:
+under_municipal_review through issued/closed/expired, or withdrawn) reads the pipeline `status` column at
+all — those states have no pipeline equivalent to gate against.
+
+**(c) Which column drives contractor-facing UI?** **`status` still does, unchanged, today** — via
+`components/status-badge.tsx` on `app/(app)/applications/page.tsx:73` and
+`app/(app)/applications/[id]/page.tsx:166`, both unmodified by this gate. `permit_status` drives no UI in
+this gate — Gate 1.3 ships zero UI/Server Action call sites, same "infrastructure only" shape as every
+prior gate in this expansion. Stated intent for whichever future gate does add UI for it: `status`
+should keep representing internal AI-pipeline mechanics (extraction/audit/generation progress) that only
+matter to the org preparing the package; `permit_status` should become the primary contractor-facing
+signal for anything the *jurisdiction* is doing with it (under review, corrections requested, approved,
+issued) — an intent, not a built behavior, and not binding on whoever builds that gate if the product
+picture has changed by then.
+
+### L.4 `project_id` — confirmed absent, backfill planned
+
+Re-confirmed (this pass): no `permit_applications.project_id` column, no join table, in any migration
+through `20260806000021` (`20260806000019`/`20260806000020` add `projects` and its intake RPC but never
+reference `permit_applications`). `supabase/seed.sql:142-146` has exactly two `permit_applications` fixture
+rows (Org A, Org B), both `status = 'draft'`, neither linked to a project — this is dev/test fixture data
+only, not production data, which is why a same-branch backfill (§ Gate 1.3 migration plan, migration 2)
+is viable rather than requiring a separate coordinated data-migration effort.
+
+### L.5 What this addendum does not decide
+
+This section fixes the *relationship rule*, not the full migration. `application_status_history`'s exact
+column list, the transition function's idempotency-key mechanics, and `permit_status_enum`'s literal
+values are specified in the Gate 1.3 migration plan presented separately (per your request, before any
+SQL is written).

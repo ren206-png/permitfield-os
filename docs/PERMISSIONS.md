@@ -38,6 +38,7 @@ exists today.
 | `properties` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 | `projects` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 | `jurisdiction_sources` (new, Phase 1.2) | `true` (any authenticated, no role/org check at all) | `is_platform_admin` | `is_platform_admin`, `with check` additionally requires `verified_by is null or verified_by = auth.uid()` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000021` |
+| `application_status_history` (new, Phase 1.3) | `is_org_member` | *(no policy for `authenticated` — the only writers are `seed_permit_status_history()` and `transition_permit_status()`, both `security definer`)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | `20260806000022` |
 
 Notable properties this table makes explicit:
 
@@ -130,6 +131,24 @@ Notable properties this table makes explicit:
   narrower than plain `is_org_member`.** Every other table in this list uses
   org membership as the entire read boundary; `audit_logs` additionally
   requires an elevated role.
+- **`application_status_history` has no INSERT/UPDATE/DELETE policy for
+  `authenticated` at all** — stricter than every other append-only table in
+  this list (`extractions`/`audits`/`generated_documents`, all `service_role`-
+  write), since even `service_role` has no direct INSERT policy here either;
+  the only two writers are `security definer` functions
+  (`seed_permit_status_history()`, fired by an `AFTER INSERT` trigger on
+  `permit_applications`, and `transition_permit_status()`, the sanctioned RPC
+  for every subsequent status change) that both write as the table owner,
+  bypassing RLS the same way `create_organization_with_owner()` does. This is
+  deliberate: a status history row must always correspond to a real,
+  validated transition, never a direct client-side insert.
+- **`permit_status_transitions` (new, Phase 1.3) is global reference data,
+  same shape as `jurisdiction_sources`/`jurisdictions`** — `select using
+  (true)` for `authenticated`, no write policy at all (seeded once by the
+  migration itself, 33 rows encoding the full legal transition graph — see
+  `docs/STATUS_TRANSITIONS.md`). Not modeled as a `lib/authz` `Resource`, same
+  reasoning as `jurisdictions`/`authorities`: no role ever writes it, so there
+  is no permission distinction to express.
 - Service-role (`service_role`) access is a *separate* grant layer from RLS
   (`service_role` has `BYPASSRLS` but holds no table privileges of its own —
   see `20260806000015`'s header comment) and is omitted from the table above
@@ -152,18 +171,18 @@ below straight out of this file and fails if any cell disagrees with
 Edit the code and this table together; the test is what catches it if you
 don't.
 
-| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects | jurisdiction_sources |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
-| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
-| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
-| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R |
-| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R |
-| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R | R |
-| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R |
-| `client_user` | | | | R | | | | | R | | | | R | R | |
-| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R |
+| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects | jurisdiction_sources | application_status_history |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
+| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
+| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
+| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
+| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
+| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R | R | R |
+| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
+| `client_user` | | | | R | | | | | R | | | | R | R | | R |
+| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R | R |
 
 Notes on deliberate asymmetries vs. Table 1:
 
@@ -219,6 +238,17 @@ Notes on deliberate asymmetries vs. Table 1:
   is the one deliberate override of raw RLS here (see
   `lib/authz/index.ts`'s `client_user` comment) — verification bookkeeping
   is internal tooling metadata, not part of that role's product surface.
+- **`application_status_history` (Phase 1.3) is the first *new* resource
+  where literally every role, including `platform_admin`, is capped at `R`**
+  — the opposite of `jurisdiction_sources`' `platform_admin` row just above.
+  This IS citation-backed: the table has no INSERT/UPDATE/DELETE RLS policy
+  for `authenticated` at all (Table 1 above), so there is no role for which
+  granting more than `R` would reflect real enforcement, not even PermitField
+  staff. `client_user` is granted `R` here too, unlike its `jurisdiction_sources`
+  blank cell — a deliberate product-surface choice (not a citation, since RLS
+  draws no distinction), reasoned in `lib/authz/index.ts`'s `client_user`
+  comment: a client that can already read `permit_applications` has no
+  reason to be blocked from that same application's status trail.
 
 ## Current status (read this before assigning any new role)
 
@@ -260,3 +290,11 @@ Notes on deliberate asymmetries vs. Table 1:
   yet — no UI, no Server Action, no Route Handler. `isJurisdictionsEnabled()`
   (`lib/flags.ts`) exists ahead of any consumer, same as
   `isLifecycleCoreEnabled()` did in Phase 1.0.
+- **`application_status_history` / `permit_status_transitions` / `permit_status`
+  (Phase 1.3) are infrastructure only, same pattern.** The tables, RLS,
+  `permit_status_tier()`, and `transition_permit_status()` all exist and are
+  live, but nothing in `app/` reads or writes any of them yet — no UI, no
+  Server Action, no Route Handler. `isApplicationsEnabled()` (`lib/flags.ts`)
+  exists ahead of any consumer, same as `isJurisdictionsEnabled()` did in
+  Phase 1.2. See `docs/STATUS_TRANSITIONS.md` for the full transition graph
+  and role-tier model this gate introduces.

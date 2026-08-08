@@ -77,6 +77,16 @@ export type Action = 'create' | 'read' | 'update' | 'archive';
 // real RLS distinction for would be guessing, not documenting -- adding it
 // is deferred to whichever future gate actually changes how a role can act
 // on jurisdictions/authorities themselves.
+//
+// Phase 1.3 adds `application_status_history`
+// (20260806000022_permit_status_machine.sql) -- read-only for every role,
+// citation-backed for all of them: that table has no INSERT/UPDATE/DELETE
+// RLS policy for `authenticated` at all (its two writers are both SECURITY
+// DEFINER functions that write as the table owner), so no role, not even
+// platform_admin, ever gets more than `read` here. Deliberately NOT adding a
+// `permit_status_transitions` resource: that table is global reference data
+// like `jurisdiction_sources`/`jurisdictions`, seeded once by the migration
+// itself with no runtime writer at all, not a role-gated concept.
 export type Resource =
   | 'organizations'
   | 'org_members'
@@ -92,7 +102,8 @@ export type Resource =
   | 'clients'
   | 'properties'
   | 'projects'
-  | 'jurisdiction_sources';
+  | 'jurisdiction_sources'
+  | 'application_status_history';
 
 type PermissionMatrix = Record<Role, Partial<Record<Resource, readonly Action[]>>>;
 
@@ -181,6 +192,11 @@ const ownerAndOrgOwnerGrants: PermissionMatrix['owner'] = {
   // beyond READ_ONLY_LOG here since jurisdiction_sources' INSERT/UPDATE
   // policies require is_platform_admin() specifically, not is_org_owner().
   jurisdiction_sources: READ_ONLY_LOG,
+  // application_status_history has no INSERT/UPDATE/DELETE policy for
+  // `authenticated` at all (20260806000022 -- its two writers are both
+  // SECURITY DEFINER functions) -- READ_ONLY_LOG here, same as every other
+  // role in this matrix, per the Resource type's own header comment.
+  application_status_history: READ_ONLY_LOG,
 };
 
 const matrix: PermissionMatrix = {
@@ -206,6 +222,11 @@ const matrix: PermissionMatrix = {
     // platform_admin's grant is citation-backed against real RLS, not a
     // product/design aspiration like its other FULL entries above.
     jurisdiction_sources: FULL,
+    // Still READ_ONLY_LOG even for platform_admin -- application_status_history
+    // has no INSERT/UPDATE/DELETE policy for `authenticated` at all
+    // (20260806000022), so unlike jurisdiction_sources just above, there is no
+    // real RLS distinction to grant platform_admin here.
+    application_status_history: READ_ONLY_LOG,
   },
   // Mirrors current RLS exactly (see contractors_select/insert/update,
   // permit_applications_select/insert/update, application_documents_select/
@@ -240,6 +261,7 @@ const matrix: PermissionMatrix = {
     // in this matrix gets at least READ_ONLY_LOG here, citation-backed the
     // same way member's other entries above are.
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
   permit_manager: {
     organizations: READ_ONLY_LOG,
@@ -262,6 +284,7 @@ const matrix: PermissionMatrix = {
     properties: FULL,
     projects: FULL,
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
   permit_coordinator: {
     organizations: READ_ONLY_LOG,
@@ -278,6 +301,7 @@ const matrix: PermissionMatrix = {
     properties: ['create', 'read', 'update'],
     projects: ['create', 'read', 'update'],
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
   document_reviewer: {
     organizations: READ_ONLY_LOG,
@@ -297,6 +321,7 @@ const matrix: PermissionMatrix = {
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
   applicant_contractor: {
     organizations: READ_ONLY_LOG,
@@ -313,6 +338,7 @@ const matrix: PermissionMatrix = {
     properties: ['create', 'read', 'update'],
     projects: ['create', 'read', 'update'],
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
   // Deliberately sparse -- see the header comment above the matrix. No
   // audit_logs entry at all: a client neither reads the ledger nor performs
@@ -340,6 +366,16 @@ const matrix: PermissionMatrix = {
     // purpose-built resource, not this one.
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
+    // Unlike the jurisdiction_sources omission above, this one IS granted:
+    // a client can already read the permit_applications row itself
+    // (READ_ONLY_LOG above), and its status history is strictly less
+    // sensitive than the application row -- just the same status transitions
+    // a status-tracking UI would already need to show this role. No RLS
+    // policy distinguishes client_user from any other role on this table
+    // either way (20260806000022 grants SELECT to `authenticated` broadly),
+    // so this is product-surface reasoning, not a citation, same caveat as
+    // the rest of this role.
+    application_status_history: READ_ONLY_LOG,
   },
   auditor_readonly: {
     organizations: READ_ONLY_LOG,
@@ -359,6 +395,7 @@ const matrix: PermissionMatrix = {
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
     jurisdiction_sources: READ_ONLY_LOG,
+    application_status_history: READ_ONLY_LOG,
   },
 };
 
@@ -403,6 +440,7 @@ export const ALL_RESOURCES: readonly Resource[] = [
   'properties',
   'projects',
   'jurisdiction_sources',
+  'application_status_history',
 ];
 
 export const ALL_ACTIONS: readonly Action[] = ['create', 'read', 'update', 'archive'];

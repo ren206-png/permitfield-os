@@ -95,10 +95,18 @@ describe('audit_logs — narrower than plain membership by design', () => {
 describe('client_user — deliberately minimal, do not assign to real users', () => {
   // Phase 1.1 (20260806000019) added read-only 'properties'/'projects'
   // entries -- see lib/authz/index.ts's client_user comment for why those
-  // two and not 'clients'/'taxonomies'.
-  const allowedResources: Resource[] = ['permit_applications', 'generated_documents', 'properties', 'projects'];
+  // two and not 'clients'/'taxonomies'. Phase 1.3 (20260806000022) added
+  // 'application_status_history' -- see that same comment block for why this
+  // one IS granted despite the jurisdiction_sources omission just below it.
+  const allowedResources: Resource[] = [
+    'permit_applications',
+    'generated_documents',
+    'properties',
+    'projects',
+    'application_status_history',
+  ];
 
-  it('has read access to exactly permit_applications, generated_documents, properties, and projects, nothing else', () => {
+  it('has read access to exactly permit_applications, generated_documents, properties, projects, and application_status_history, nothing else', () => {
     for (const resource of ALL_RESOURCES) {
       const expectRead = allowedResources.includes(resource);
       expect(can('client_user', 'read', resource)).toBe(expectRead);
@@ -272,6 +280,30 @@ describe('Phase 1.2 resource — jurisdiction_sources', () => {
       expect(can(role, 'create', 'jurisdiction_sources')).toBe(false);
       expect(can(role, 'update', 'jurisdiction_sources')).toBe(false);
       expect(can(role, 'archive', 'jurisdiction_sources')).toBe(false);
+    }
+  });
+});
+
+// Lifecycle & Compliance Expansion, Phase 1.3
+// (20260806000022_permit_status_machine.sql) added
+// application_status_history. Unlike jurisdiction_sources, EVERY role
+// (including client_user, and including platform_admin) gets read-only
+// access here and nothing more -- the table has no INSERT/UPDATE/DELETE RLS
+// policy for `authenticated` at all, so there is no citation for granting
+// any role more than READ_ONLY_LOG, not even PermitField's own staff. See
+// lib/authz/index.ts's Resource type header comment.
+describe('Phase 1.3 resource — application_status_history', () => {
+  it('every role can read application_status_history, no exceptions', () => {
+    for (const role of ALL_ROLES) {
+      expect(can(role, 'read', 'application_status_history')).toBe(true);
+    }
+  });
+
+  it('no role, including platform_admin, can create, update, or archive application_status_history', () => {
+    for (const role of ALL_ROLES) {
+      expect(can(role, 'create', 'application_status_history')).toBe(false);
+      expect(can(role, 'update', 'application_status_history')).toBe(false);
+      expect(can(role, 'archive', 'application_status_history')).toBe(false);
     }
   });
 });
