@@ -37,8 +37,44 @@ exists today.
 | `clients` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 | `properties` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 | `projects` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
+| `jurisdiction_sources` (new, Phase 1.2) | `true` (any authenticated, no role/org check at all) | `is_platform_admin` | `is_platform_admin`, `with check` additionally requires `verified_by is null or verified_by = auth.uid()` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000021` |
 
 Notable properties this table makes explicit:
+
+- **`jurisdiction_sources` is global reference data, not org-scoped** — like
+  `jurisdictions`/`authorities` (`20260806000004`), its SELECT policy has no
+  `org_id` or membership check at all; every authenticated user across every
+  org sees the same rows. Unlike `jurisdictions`/`authorities` (write
+  restricted to `service_role` only, no `authenticated` write policy
+  whatsoever), `jurisdiction_sources` grants `authenticated` INSERT/UPDATE
+  directly, gated by a **new** helper, `is_platform_admin()` — the first RLS
+  policy in this schema besides `can_read_audit_logs()` to check the
+  `'platform_admin'` role value by name rather than treating all
+  `org_role` values as equivalent to `is_org_member`. See this migration's
+  header comment for why a new function was added instead of widening
+  `is_org_owner()`, and the "Current status" section below for what this
+  does and does not change about `platform_admin` elsewhere in the schema.
+- **`verify_jurisdiction_source(source_id, status, notes, clear_notes)` is the
+  sanctioned write path for the verification action** (`security definer`,
+  same RPC-wrapping pattern as `create_organization_with_owner`/
+  `create_project_with_intake`) — it re-checks `is_platform_admin()` itself
+  (bypassing RLS the way every `security definer` function here does) and
+  always sets `verified_by = auth.uid()` server-side; there is no parameter
+  that accepts a caller-supplied `verified_by`, so this path has no forgery
+  vector at all, stronger than the base UPDATE policy's `with check`.
+  `clear_notes` (default `false`) is an explicit opt-in to null out an
+  existing note — `notes` alone can only set/preserve a note, never clear
+  one, since a bare `coalesce(p_notes, notes)` cannot distinguish "caller
+  passed nothing" from "caller wants this cleared."
+- **Staleness is computed at read time, not stored.** `verification_status`
+  can be persisted as `'stale'` (it's a legal enum value), but nothing in
+  this migration ever writes it — there is no scheduled job in this repo.
+  `jurisdiction_source_effective_status(verification_status, verified_at,
+  threshold_days default 180)` is a plain `stable` SQL function every read
+  path must call to get the true current status; reading the column
+  directly can show a 180+-day-old `'verified'` row as still `'verified'`.
+  See the migration's header comment for why a cron-based approach was
+  rejected.
 
 - **`taxonomies` is the first table since `audit_logs` whose write policy is
   narrower than plain `is_org_member`** — INSERT/UPDATE both require
@@ -116,18 +152,18 @@ below straight out of this file and fails if any cell disagrees with
 Edit the code and this table together; the test is what catches it if you
 don't.
 
-| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
-| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
-| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
-| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A |
-| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
-| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R |
-| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U |
-| `client_user` | | | | R | | | | | R | | | | R | R |
-| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R |
+| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects | jurisdiction_sources |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
+| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
+| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A |
+| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R |
+| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R |
+| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R | R |
+| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R |
+| `client_user` | | | | R | | | | | R | | | | R | R | |
+| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R |
 
 Notes on deliberate asymmetries vs. Table 1:
 
@@ -172,18 +208,44 @@ Notes on deliberate asymmetries vs. Table 1:
   client-facing user can see the property and project they're attached to,
   but has no reason to see the org's internal client list or taxonomy
   configuration.
+- **`jurisdiction_sources` (Phase 1.2) is the first *new* resource in this
+  table whose grants ARE fully citation-backed against real RLS, for every
+  role, not just the legacy two** — `jurisdiction_sources_select` is `using
+  (true)` with no role branch (`20260806000021`), so every role except
+  `client_user` gets `R` here as a direct citation, not a design guess; and
+  `platform_admin`'s `C,R,U,A` is likewise a direct citation of
+  `is_platform_admin()` gating INSERT/UPDATE, not the product-decision
+  reasoning the rest of `platform_admin`'s row above carries. `client_user`
+  is the one deliberate override of raw RLS here (see
+  `lib/authz/index.ts`'s `client_user` comment) — verification bookkeeping
+  is internal tooling metadata, not part of that role's product surface.
 
 ## Current status (read this before assigning any new role)
 
 - **Do not assign any of the 8 new `org_role` values to a real user yet.**
   Doing so today does not grant or restrict anything beyond what `member`
-  already has (except for `audit_logs` read access, since
-  `can_read_audit_logs()` — a real RLS-layer function, not aspirational —
-  does check for `'platform_admin'` and `'auditor_readonly'` by name; every
-  other table ignores the new values entirely).
+  already has, **except**: `audit_logs` read access, since
+  `can_read_audit_logs()` checks for `'platform_admin'` and
+  `'auditor_readonly'` by name; and, as of Phase 1.2,
+  `jurisdiction_sources` INSERT/UPDATE, since `is_platform_admin()`
+  (`20260806000021`) checks for `'platform_admin'` by name too. Every other
+  table still ignores the new values entirely.
   `client_user` in particular is the one role in Table 2 designed to be
   *more* restrictive than a plain member, and RLS provides none of that
   restriction today — assigning it does not sandbox anyone.
+- **`platform_admin` is still not a first-class concept anywhere outside
+  RLS.** `is_platform_admin()` (Phase 1.2) and `can_read_audit_logs()`
+  (Phase 1.0) are both narrow, single-purpose SQL functions that check
+  `org_role = 'platform_admin'` on a normal `org_members` row — there is
+  still no table distinguishing "PermitField staff" from "org member," and
+  `lib/auth/org-context.ts`'s `OrgContext.role` is still typed as
+  `'owner' | 'member'` only, so no Route Handler or Server Action can
+  currently even observe that a signed-in user is a `platform_admin`, let
+  alone call `verify_jurisdiction_source()` on their behalf. A user with a
+  `platform_admin` row can act as one only via direct SQL/RPC access (e.g.
+  the Supabase SQL editor or a service script), not through the app. Widening
+  `OrgContext` is deferred, not solved, by this phase — see the Gate 1.2
+  report's "What is NOT done" section.
 - **`can()` becomes meaningful only once a Route Handler or Server Action
   calls it.** Zero do, as of Phase 1.0. A future phase's report should update
   this section (and this file's "Current status") when the first call site
@@ -191,3 +253,10 @@ Notes on deliberate asymmetries vs. Table 1:
 - **`lib/audit/log.ts`'s `writeAuditLog()` is infrastructure only.** No
   existing route calls it. The `audit_logs` table exists and its RLS/grants
   are live, but it has no writers in this codebase yet.
+- **`jurisdiction_sources` (Phase 1.2) is infrastructure only, same
+  pattern.** The table, RLS, `is_platform_admin()`,
+  `verify_jurisdiction_source()`, and `jurisdiction_source_effective_status()`
+  all exist and are live, but nothing in `app/` reads or writes any of them
+  yet — no UI, no Server Action, no Route Handler. `isJurisdictionsEnabled()`
+  (`lib/flags.ts`) exists ahead of any consumer, same as
+  `isLifecycleCoreEnabled()` did in Phase 1.0.

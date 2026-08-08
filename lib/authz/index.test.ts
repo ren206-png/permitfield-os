@@ -238,3 +238,40 @@ describe('Phase 1.1 resources — taxonomies/clients/properties/projects', () =>
     }
   });
 });
+
+// Lifecycle & Compliance Expansion, Phase 1.2
+// (20260806000021_jurisdiction_sources.sql) added jurisdiction_sources.
+// jurisdiction_sources_select is `using (true)` for any authenticated user
+// (RLS, no role branch); INSERT/UPDATE both require is_platform_admin(). No
+// route calls can() for this resource yet, same "aspirational until a call
+// site exists" caveat as every other Phase 1.1/1.2 resource -- see the Gate
+// 1.2 report.
+describe('Phase 1.2 resource — jurisdiction_sources', () => {
+  it('platform_admin has full C,R,U,A — the one citation-backed FULL grant on this resource', () => {
+    for (const action of ALL_ACTIONS) {
+      expect(can('platform_admin', action, 'jurisdiction_sources')).toBe(true);
+    }
+  });
+
+  it('every role except client_user can read jurisdiction_sources (RLS has no role branch on SELECT)', () => {
+    for (const role of ALL_ROLES) {
+      const expected = role !== 'client_user';
+      expect(can(role, 'read', 'jurisdiction_sources')).toBe(expected);
+    }
+  });
+
+  it('client_user has zero access to jurisdiction_sources (deliberate product override of raw RLS)', () => {
+    for (const action of ALL_ACTIONS) {
+      expect(can('client_user', action, 'jurisdiction_sources')).toBe(false);
+    }
+  });
+
+  it('no role other than platform_admin can create, update, or archive jurisdiction_sources', () => {
+    for (const role of ALL_ROLES) {
+      if (role === 'platform_admin') continue;
+      expect(can(role, 'create', 'jurisdiction_sources')).toBe(false);
+      expect(can(role, 'update', 'jurisdiction_sources')).toBe(false);
+      expect(can(role, 'archive', 'jurisdiction_sources')).toBe(false);
+    }
+  });
+});

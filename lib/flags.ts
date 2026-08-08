@@ -57,3 +57,16 @@ export function isLifecycleCoreEnabled(): boolean {
 export function isIntakeEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_INTAKE');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.2. Gates nothing at runtime yet --
+// same "declared ahead of its consumer" pattern as isLifecycleCoreEnabled
+// above: this gate ships supabase/migrations/20260806000021_jurisdiction_sources.sql
+// (schema, RLS, the verify_jurisdiction_source() RPC, and the staleness
+// computation) with zero UI or Server Action call site. The table's RLS and
+// grants are live regardless of this flag's value, same as every other flag
+// in this file -- the flag will gate the application-layer entry point once
+// a later phase adds one (SS3.3's own "every requirement surfaced to a user
+// renders ..." bullet is Gate 1.6/1.7 scope, not this one).
+export function isJurisdictionsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_JURISDICTIONS');
+}

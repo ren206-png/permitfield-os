@@ -67,6 +67,16 @@ export type Action = 'create' | 'read' | 'update' | 'archive';
 // 'projects' resource only; the other three new resources remain
 // aspirational alongside every pre-Phase-1.1 entry until something calls
 // can() for them too.
+//
+// Phase 1.2 adds `jurisdiction_sources`
+// (20260806000021_jurisdiction_sources.sql) -- deliberately NOT adding a
+// plain `jurisdictions` resource alongside it: jurisdictions/authorities
+// (20260806000004) predate lib/authz entirely, are service_role-write-only
+// with no `authenticated` INSERT/UPDATE policy at all, and this gate does
+// not touch that table. Modeling a resource this module cannot cite any
+// real RLS distinction for would be guessing, not documenting -- adding it
+// is deferred to whichever future gate actually changes how a role can act
+// on jurisdictions/authorities themselves.
 export type Resource =
   | 'organizations'
   | 'org_members'
@@ -81,7 +91,8 @@ export type Resource =
   | 'taxonomies'
   | 'clients'
   | 'properties'
-  | 'projects';
+  | 'projects'
+  | 'jurisdiction_sources';
 
 type PermissionMatrix = Record<Role, Partial<Record<Resource, readonly Action[]>>>;
 
@@ -164,6 +175,12 @@ const ownerAndOrgOwnerGrants: PermissionMatrix['owner'] = {
   clients: FULL,
   properties: FULL,
   projects: FULL,
+  // jurisdiction_sources_select is `using (true)` for every authenticated
+  // user regardless of role (20260806000021, same global-reference-data
+  // shape as jurisdictions/authorities) -- owner/org_owner get nothing
+  // beyond READ_ONLY_LOG here since jurisdiction_sources' INSERT/UPDATE
+  // policies require is_platform_admin() specifically, not is_org_owner().
+  jurisdiction_sources: READ_ONLY_LOG,
 };
 
 const matrix: PermissionMatrix = {
@@ -184,6 +201,11 @@ const matrix: PermissionMatrix = {
     clients: FULL,
     properties: FULL,
     projects: FULL,
+    // jurisdiction_sources_insert/update both require is_platform_admin()
+    // (20260806000021) -- the one resource in this matrix where
+    // platform_admin's grant is citation-backed against real RLS, not a
+    // product/design aspiration like its other FULL entries above.
+    jurisdiction_sources: FULL,
   },
   // Mirrors current RLS exactly (see contractors_select/insert/update,
   // permit_applications_select/insert/update, application_documents_select/
@@ -213,6 +235,11 @@ const matrix: PermissionMatrix = {
     clients: FULL,
     properties: FULL,
     projects: FULL,
+    // jurisdiction_sources_select has no role branch at all -- `using
+    // (true)` for any authenticated user (20260806000021) -- so every role
+    // in this matrix gets at least READ_ONLY_LOG here, citation-backed the
+    // same way member's other entries above are.
+    jurisdiction_sources: READ_ONLY_LOG,
   },
   permit_manager: {
     organizations: READ_ONLY_LOG,
@@ -234,6 +261,7 @@ const matrix: PermissionMatrix = {
     clients: FULL,
     properties: FULL,
     projects: FULL,
+    jurisdiction_sources: READ_ONLY_LOG,
   },
   permit_coordinator: {
     organizations: READ_ONLY_LOG,
@@ -249,6 +277,7 @@ const matrix: PermissionMatrix = {
     clients: ['create', 'read', 'update'],
     properties: ['create', 'read', 'update'],
     projects: ['create', 'read', 'update'],
+    jurisdiction_sources: READ_ONLY_LOG,
   },
   document_reviewer: {
     organizations: READ_ONLY_LOG,
@@ -267,6 +296,7 @@ const matrix: PermissionMatrix = {
     clients: READ_ONLY_LOG,
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
+    jurisdiction_sources: READ_ONLY_LOG,
   },
   applicant_contractor: {
     organizations: READ_ONLY_LOG,
@@ -282,6 +312,7 @@ const matrix: PermissionMatrix = {
     clients: ['create', 'read', 'update'],
     properties: ['create', 'read', 'update'],
     projects: ['create', 'read', 'update'],
+    jurisdiction_sources: READ_ONLY_LOG,
   },
   // Deliberately sparse -- see the header comment above the matrix. No
   // audit_logs entry at all: a client neither reads the ledger nor performs
@@ -297,6 +328,16 @@ const matrix: PermissionMatrix = {
     // classification, not client-facing). Same "aspirational, RLS enforces
     // none of this yet" caveat as the rest of this role -- see the module
     // header and this matrix's top-of-file comment.
+    //
+    // No jurisdiction_sources entry either, despite jurisdiction_sources_select
+    // being `using (true)` for literally any authenticated role including
+    // this one (20260806000021) -- same deliberate-override-of-raw-RLS
+    // reasoning as the taxonomies omission just above: verification
+    // bookkeeping (who reviewed a source, internal notes) is internal
+    // tooling metadata, not something client_user's product surface is
+    // meant to expose. A future gate presenting a client-facing "verified
+    // as of <date>" requirements view would read through a narrower,
+    // purpose-built resource, not this one.
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
   },
@@ -317,6 +358,7 @@ const matrix: PermissionMatrix = {
     clients: READ_ONLY_LOG,
     properties: READ_ONLY_LOG,
     projects: READ_ONLY_LOG,
+    jurisdiction_sources: READ_ONLY_LOG,
   },
 };
 
@@ -360,6 +402,7 @@ export const ALL_RESOURCES: readonly Resource[] = [
   'clients',
   'properties',
   'projects',
+  'jurisdiction_sources',
 ];
 
 export const ALL_ACTIONS: readonly Action[] = ['create', 'read', 'update', 'archive'];
