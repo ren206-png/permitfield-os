@@ -875,3 +875,97 @@ small follow-up gate, **1.4.1**. Gate 1.4 itself ships schema + the archive path
 change, same "grant exists ahead of its RPC" shape `permit_status` shipped under between Gate 1.3's
 schema and `transition_permit_status()`. Until 1.4.1 lands, `document_reviewer`'s new `U` grant has no
 route or RPC that exercises it — do not infer a working review flow from the matrix alone.
+
+## O. Gate 1.5 pre-branch addendum — Readiness checker (added before any Gate 1.5 branch, per rule 8's
+own "stop and ask if the spec conflicts with the repo" discipline — three real conflicts found before
+any migration is written)
+
+**Status: OPEN — three design questions below need your decision before schema is written. No branch
+created, no migration written, no code changed for this yet.**
+
+Master prompt citation: §3.7 (Gate 1.5). Field list: checklist items each with required/optional,
+responsible party, due date, completion status, reviewer, review timestamp, rejection reason, related
+document, source requirement, last verified date. Readiness score computed from checklist rows only
+(no heuristic, no AI, no cache without the row versions it was computed from). `ready_to_submit` blocked
+while any required item is incomplete. Override requires `permit_manager`+, mandatory free-text reason,
+an `audit_logs` entry of type `readiness_override`, permanent visibility on the application record, and
+is gated by the `readiness_override` entitlement.
+
+### O.1 `source_requirement` has nothing to reference yet — the master prompt's own gate table conflicts
+with its own field spec
+
+§3.7's checklist field list includes `source requirement`. §3.4 (Gate 1.6, deterministic requirements
+engine) is what actually produces requirement rows — `permit_requirement`, database-enforced
+`verified_at`/`verified_by`/`source_id` before anything on it counts as authoritative. But §2's own gate
+table sequences **1.6 after 1.5**: `1.3 → 1.4 → 1.5 → 1.6 → 1.7`. Confirmed by a repo-wide search: no
+`permit_requirement`/`jurisdiction_permit_rules`-shaped table exists anywhere in `supabase/migrations/`
+today — Gate 1.6 genuinely has not shipped. A `source_requirement` column cannot be a real foreign key
+to something that does not exist. This is rule 8 territory: the spec conflicts with the repo, and I'm
+not resolving it silently in either direction.
+
+Three ways to resolve it, not picking one for you:
+
+1. **`source_requirement` ships as a nullable free-text column** now (e.g. "IBC 2021 §105.2" typed by a
+   human, no FK) — additive-only compatible, and a later Gate 1.6 migration can add a real
+   `permit_requirement_id uuid references permit_requirements(id)` column alongside it (or replacing it)
+   without touching anything this gate builds. This is the same "schema exists, real enforcement lands
+   later" shape `permit_status` shipped under in Gate 1.3 and the review columns shipped under in Gate
+   1.4.
+2. **Reorder**: build Gate 1.6 before Gate 1.5, deviating from §2's table, so `source_requirement` can be
+   a real FK from day one. This is a bigger ask — Gate 1.6 is a full deterministic rules engine, not a
+   small follow-up.
+3. Some other shape you have in mind (e.g. `source_requirement` is intentionally never meant to be an FK
+   at all — just a durable text citation a human enters, independent of whether an automated engine ever
+   exists).
+
+My recommendation, stated but not acted on: **option 1**. It matches this repo's established pattern
+exactly (ship the column, defer the enforcement/FK to the gate that actually produces the referent) and
+keeps Gate 1.5 shippable without waiting on a full rules-engine gate.
+
+### O.2 Does "`ready_to_submit` is blocked while any required item is incomplete" mean a new precondition
+inside `transition_permit_status()`?
+
+`ready_to_submit` already exists as a real `permit_status` value (`20260806000022`, Gate 1.3) reachable
+via `internal_review → ready_to_submit` in `transition_permit_status()` — see `docs/STATUS_TRANSITIONS.md`.
+That RPC has exactly one existing cross-cutting precondition today (the `submitted` pipeline-status gate,
+`docs/STATUS_TRANSITIONS.md`'s "cross-machine gate" section). The most literal reading of §3.7's sentence
+is a second precondition on the `internal_review → ready_to_submit` edge specifically: refuse the
+transition unless the readiness score says complete (or the override path was used).
+
+If that reading is right, Gate 1.5 modifies already-shipped Gate 1.3 code
+(`replace/create or replace function transition_permit_status()`), not just new tables — this is the same
+kind of "does this new gate reach back and change a previous gate's RPC" question raised and left
+explicitly open in `PHASE_0_FINDINGS.md` §I #6 for a different function. Confirming before writing it
+rather than guessing: is this reading correct, and is modifying `transition_permit_status()` in-scope for
+Gate 1.5?
+
+### O.3 Entitlement key naming: master-prompt spelling vs. this repo's established convention
+
+§4 lists the literal entitlement key `readiness_override` (and `readiness_checker`). The one entitlement
+key that exists in this repo today, `lib/entitlements/index.ts` (Gate 1.1), uses a different convention:
+dot-namespaced strings (`'projects.create'`, `'projects.active_max'`), not the master prompt's literal
+snake_case spelling — an adaptation already made once without it being flagged as a conflict at the time.
+Proposing to continue that established convention (`'readiness.checker'`, `'readiness.override'`) for
+consistency with the one precedent this repo has, rather than switching to the master prompt's literal
+spelling now. Both keys would be added to the existing single hardcoded `DEFAULT_TIER` (still no real
+billing system, per §H/§I #2 — unchanged since Gate 1.1) — every org keeps getting both, same "one tier,
+real enforcement seam" shape already established. Low-stakes compared to O.1/O.2, but naming it as a
+decision rather than silently picking one.
+
+### Not blocked by the above, previewed for when work starts
+
+- **`related document`**: a straightforward FK to `application_documents(id)`, already real (Gate 1.4) —
+  no conflict, no open question.
+- **Override role gate**: `permit_manager`+ already has a precedent tier in this repo — Gate 1.3's
+  `submission` tier (`owner`, `org_owner`, `platform_admin`, `permit_manager`) is the exact role list
+  `docs/STATUS_TRANSITIONS.md` already uses for "accountable handoff" actions. Reusable verbatim for the
+  override check unless you want a different list.
+- **`audit_logs` entry for the override**: no schema change needed — `audit_logs.action` is a free `text`
+  column (`20260806000018`), not a closed enum, so `action = 'readiness_override'` is a value, not a
+  migration.
+- **Readiness score caching**: "cache it with the row versions it was computed from" reads as the same
+  optimistic-concurrency shape `transition_permit_status()` already uses (`for update` row lock,
+  version/timestamp comparison) — no new pattern needs inventing, just reuse.
+
+Zero decision made on O.1/O.2/O.3. Zero branch created. Waiting on you before any Gate 1.5 migration SQL
+is written.
