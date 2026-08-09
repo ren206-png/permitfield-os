@@ -260,7 +260,7 @@ end $$;
 
 -- 3d. Role with no 'create' grant on application_documents (auditor_readonly)
 -- rejected, even though it IS a member of the org.
-set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000022","role":"authenticated"}';
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000022","role":"authenticated"}';
 
 do $$
 begin
