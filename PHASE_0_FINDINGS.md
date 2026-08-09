@@ -880,8 +880,8 @@ route or RPC that exercises it — do not infer a working review flow from the m
 own "stop and ask if the spec conflicts with the repo" discipline — three real conflicts found before
 any migration is written)
 
-**Status: OPEN — three design questions below need your decision before schema is written. No branch
-created, no migration written, no code changed for this yet.**
+**Status: RESOLVED — all three design questions decided by you. See "Resolutions" at the end of this
+section. Original questions preserved unedited above it, same record-keeping shape as §N.**
 
 Master prompt citation: §3.7 (Gate 1.5). Field list: checklist items each with required/optional,
 responsible party, due date, completion status, reviewer, review timestamp, rejection reason, related
@@ -967,5 +967,29 @@ decision rather than silently picking one.
   optimistic-concurrency shape `transition_permit_status()` already uses (`for update` row lock,
   version/timestamp comparison) — no new pattern needs inventing, just reuse.
 
-Zero decision made on O.1/O.2/O.3. Zero branch created. Waiting on you before any Gate 1.5 migration SQL
-is written.
+### Resolutions (your decisions)
+
+**O.1 — Option 1, as recommended.** `source_requirement` ships as a nullable free-text column on the
+checklist-item table now — no FK. The migration's own comment on that column must say, verbatim in
+substance: "Nullable; will be constrained to `permit_requirements(id)` in Gate 1.6." — so the deferred-FK
+intent is discoverable from the schema itself, not just from this section, the same "the migration cites
+its own future constraint" discipline `permit_status`'s columns and Gate 1.4's review columns both
+followed.
+
+**O.2 — Confirmed, in-scope.** Gate 1.5 adds a precondition to `transition_permit_status()`
+(`20260806000022`) on the `internal_review → ready_to_submit` edge specifically: the application's
+readiness checklist must have every required item marked complete (or a valid override must already be
+recorded) before that transition is allowed. Implemented as a new, clearly delimited check inside the
+existing function — same numbered-check structure the function already uses for its other preconditions
+(the tier/role check, the `submitted`-pipeline cross-machine gate), added as the next one in sequence
+(**`CHECK_5`**) rather than interleaved or restructuring what's already there. This is a real modification
+to already-shipped Gate 1.3 code, done with your explicit go-ahead, not a silent reach-back — cite this
+resolution (§O.2) in that function's updated header comment when it's written.
+
+**O.3 — Dot-namespaced convention confirmed.** `'readiness.checker'` and `'readiness.override'`, added to
+`lib/entitlements/index.ts`'s `Entitlement` union and its single `DEFAULT_TIER`'s `features` array,
+matching `'projects.create'`'s existing shape exactly. No master-prompt-literal spelling used anywhere in
+code; this section is the citation for why they diverge from §4's literal key names.
+
+Gate 1.5 schema work is unblocked. Waiting on your literal `APPROVED: PHASE 1.5` token, per rule 0.1.1,
+before any branch is created or migration SQL is written.
