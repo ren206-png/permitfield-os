@@ -615,3 +615,206 @@ This section fixes the *relationship rule*, not the full migration. `application
 column list, the transition function's idempotency-key mechanics, and `permit_status_enum`'s literal
 values are specified in the Gate 1.3 migration plan presented separately (per your request, before any
 SQL is written).
+
+---
+
+## M. Gate 1.4 pre-branch architecture addendum — documents (added post-Gate-1.3, before any Gate 1.4 branch, per your request)
+
+Everything above this line, through L.5, is unchanged. Same discipline as §L: this is a **targeted
+re-run**, not a rewrite, produced before branching because you flagged that master prompt §3.6
+("Documents," reproduced in full below) is *correct but incomplete* — it states tenant-scoping, signed-URL,
+MIME-validation, revision-immutability and IDOR requirements, but is silent on bucket/retention/quota
+limits, the download-access model, generation sourcing, and any relationship to `jurisdiction_sources`.
+Per rule 8, the gaps are resolved here, on the record, before migration SQL is written.
+
+**§3.6's full text, quoted for reference:**
+
+> Private bucket only. Tenant-scoped storage paths: `org/{org_id}/project/{project_id}/application/{application_id}/{document_id}/{revision}`.
+> Path must be derived server-side from the authenticated session, never from a client-supplied value.
+> Signed URLs only, short TTL (≤15 min), generated per request, never cached in client state, never
+> logged, never written to audit rows. Server-side validation of MIME type (by magic bytes, not
+> extension), size cap, and filename sanitization. Reject on mismatch. Revisions are immutable. A
+> re-upload creates `document_revisions.revision_number + 1` and retains all prior versions. No overwrite
+> path exists in the code — not behind an admin flag, not for correcting a mistake. Per-document:
+> category, status, uploaded_by, uploaded_at, reviewed_by, reviewed_at, rejection_reason.
+> Direct-object-reference test required: authenticated user from Org B requesting a valid Org A document
+> ID must receive a 404 (not 403 — do not confirm existence).
+
+### M.1 The load-bearing question first: is Gate 1.4 a new table, or does it extend `application_documents`?
+
+This has to be answered before anything else in this addendum, because it changes what "bucket
+constraints" and "generation sourcing" even mean. Two documents systems already exist in this repo,
+neither built by this expansion track:
+
+- **`application_documents`** (`20260806000006_applications_and_documents.sql:35-49`) — contractor-uploaded
+  source documents (blueprints, spec sheets, scope of work), `doc_kind` enum
+  (`blueprint`/`spec_sheet`/`scope_of_work`/`other`), stored in the `permitfield-uploads` bucket
+  (`20260806000013_storage_buckets.sql:5-9`, 25 MB/file cap), path convention
+  `${orgId}/${applicationId}/${sha256}-${filename}` (`buildStoragePath`, cited in
+  `20260806000013:11-18`'s comment). It has **no** `status`, `uploaded_by`, `reviewed_by`, `reviewed_at`,
+  or `rejection_reason` column today — only `doc_kind`, `uploaded_at`. Its DELETE policy is a real hard
+  delete, not archival, and is **already flagged as a known, pre-existing gap** in
+  `docs/PERMISSIONS.md:125-129`: *"Any org member can delete any document in their org today... fixing it
+  is a behavior change this phase's additive-only discipline does not authorize"* — written during Gate
+  1.0, when documents were out of that gate's scope.
+- **`generated_documents`** (`20260806000017_filing_form_templates_and_generated_documents.sql:50-90`) —
+  service-role-only, append-only (trigger-enforced), filled PDFs produced by
+  `lib/inngest/functions/generate-pdf.ts`, stored in `permitfield-generated`. No `reviewed_by`/
+  `rejection_reason` concept exists or is meaningful here — nothing reviews a generated PDF for
+  acceptance, the pipeline's own `status` enum (`documents_generated` / `document_generation_failed`,
+  cited in §L.1 above) is what tracks its outcome.
+
+**Finding: `docs/PERMISSIONS.md`'s own forward-looking Table 2 already answers this.** Written in Gate
+1.0, before Gate 1.4 was scoped in detail, `document_reviewer` — one of the 8 roles Gate 1.0 added
+specifically for this expansion track (`20260806000018:26`) — is modeled with `C,R,A` against the
+resource literally named `application_documents` (`docs/PERMISSIONS.md:182`, `lib/authz/index.ts`'s
+`Resource` type). No alternate `documents` resource exists anywhere in Table 2. That is a citation, not
+an inference: the role this expansion track invented for exactly this purpose was already pointed at the
+existing table before Gate 1.4 was written in detail.
+
+**Decision (confirmed):** Gate 1.4 **extends
+`application_documents`** additively — new columns (`status`, `uploaded_by`, `reviewed_by`,
+`reviewed_at`, `rejection_reason`; `category` is already served by `doc_kind`), a new
+`document_revisions` table for immutable versioning, tightened storage-path derivation and signed-URL
+issuance for new uploads going forward, and a replacement DELETE→archive policy that finally closes the
+`docs/PERMISSIONS.md:125-129` gap (allowed under additive-only discipline because it adds a column and
+replaces a policy — it does not drop, rename, or retype anything). It does **not** touch
+`generated_documents`, `permitfield-generated`, or any file under `lib/pdf/*`/`lib/inngest/functions/
+generate-pdf.ts` — consistent with `PHASE_0_FINDINGS.md:456-459`'s existing finding that the AI
+extraction/audit/PDF-fill pipeline "should be left untouched."
+
+One consequence stated plainly: **existing `application_documents` rows keep their existing
+`storage_path` values** (`${orgId}/${applicationId}/${sha256}-${filename}`) — this addendum does not
+propose a backfill/rewrite of already-uploaded files' paths, only that *new* uploads and revisions from
+Gate 1.4 onward use the fuller `org/{org_id}/project/{project_id}/application/{application_id}/
+{document_id}/{revision}` convention from §3.6. Both conventions share the same first path segment
+(`org_id`), so the existing `uploads_select`/`uploads_insert`/`uploads_delete` policies
+(`20260806000013:19-38`, which authorize purely off `storage.foldername(name)[1]`) continue to work
+unmodified for old and new paths alike — no policy rewrite is forced by the path-convention change
+itself.
+
+Confirmed correct — "extend `application_documents` rather than build parallel" is the intended reading.
+
+### M.2 Bucket constraints
+
+- **Storage backend:** Supabase Storage, not S3 or another provider — both existing buckets already use
+  it (`20260806000013`, `20260806000017:122-124`) and M.1's extend-not-replace decision means Gate 1.4
+  reuses the existing `permitfield-uploads` bucket rather than introducing a new one. **Cited + follows
+  from M.1**, not an independent decision.
+- **Size cap per document:** §3.6 says "size cap" but no number. Existing precedent: 26,214,400 bytes
+  (25 MB) on `permitfield-uploads` itself (`20260806000013:7`) and redundantly at the row level
+  (`application_documents.byte_size` check constraint, `20260806000006:41-43`, comment cites "SS4.1").
+  **Decision: keep 25 MB/document** — no stated reason in §3.6 or elsewhere to change it, and Gate 1.4
+  extending the same bucket makes a differing cap incoherent (the bucket-level cap would silently
+  override a lower row-level one, or a higher row-level check would never bind against the bucket's own
+  25 MB ceiling).
+- **Size cap per org per month:** **NOT FOUND** anywhere — not in §3.6, not elsewhere in the master
+  prompt, not in this repo. §4's entitlement key list (line 227) is a closed enumeration
+  (`maximum_active_projects`, `maximum_team_members`, `jurisdiction_requirements`, `readiness_checker`,
+  `readiness_override`, `client_portal`, `correction_tracking`, `inspection_management`,
+  `permit_expiration_tracking`, `analytics`, `api_access`) and does **not** include any storage-quota key.
+  **Decision (confirmed): deferred; no per-org monthly cap enforced in Gate 1.4.** It is a
+  quota/entitlement feature, not a document-handling feature, and belongs in a later gate — probably
+  alongside billing/usage tracking, whenever that lands — not invented here just to gate a feature this
+  gate isn't building. Adding one now would mean inventing a new entitlement key beyond what §4
+  enumerates, which is scope expansion, not an implementation detail.
+- **Retention/deletion policy for generated PDFs:** out of scope for this addendum — "generated PDFs"
+  (`generated_documents`) are explicitly not part of Gate 1.4 per M.1. For `application_documents` itself:
+  **NOT FOUND** — no TTL or cleanup job exists for either current bucket, and master prompt §3.1's
+  cross-cutting rule binds here regardless: *"Archival, not deletion. Every entity gets `archived_at`/
+  `archived_by`. No hard deletes anywhere in this work"* (line 150). **Decision: no automatic
+  expiry/deletion of documents in Gate 1.4** — rows and files persist indefinitely until an authorized
+  role explicitly archives them (M.3). This is the direct, mandatory reading of §3.1's rule, not a
+  discretionary choice.
+- **Versioning (one-shot vs. multiple):** **already answered by §3.6 itself**, no decision needed —
+  "Revisions are immutable. A re-upload creates `document_revisions.revision_number + 1` and retains all
+  prior versions... not for correcting a mistake" (lines 206). Multiple revisions per document are
+  mandatory; one-shot is explicitly ruled out.
+
+### M.3 Access model
+
+- **Who can download/share:** §3.6 specifies the *mechanism* (signed URLs, ≤15 min TTL) but not the
+  *authorization* boundary. Per M.1, `application_documents` already has a target permission model in
+  `docs/PERMISSIONS.md:174-185` — every role except `client_user` and (per its blank cell) a handful of
+  narrow ones gets at least `R`; `document_reviewer`/`owner`/`org_owner`/`permit_manager`/
+  `applicant_contractor` get `C,R,A`. **Decision: Gate 1.4 wires `can()` into the document-download route
+  for the first time** (per `docs/PERMISSIONS.md:279-282`, "`can()` becomes meaningful only once a Route
+  Handler or Server Action calls it. Zero do, as of Phase 1.0" — Gate 1.4 is that first call site) rather
+  than inventing a separate access rule. No new external/non-org-member sharing capability is added —
+  `client_user`'s row is blank for `application_documents` today and this addendum proposes leaving it
+  blank, consistent with §2's explicit deferral of the client portal ("must not be scaffolded even
+  partially," summary point on Gate 2.0).
+- **Audit trail — is every download logged:** §3.6 line 204 is explicit that signed URLs are "never
+  logged, never written to audit rows," and §3.1 line 147 reinforces it generally ("Never store...
+  signed URLs... in audit rows"). **Decision (confirmed): "never logged" covers the download event
+  itself, not just the upload/review actions.** `audit_logs` captures upload and review events;
+  download events (via signed URL) are intentionally not logged, per §3.6. This repo's
+  `writeAuditLog()` (`lib/audit/log.ts`, infrastructure-only per `docs/PERMISSIONS.md:283-285`) also has
+  no precedent for a high-frequency read-event log anywhere else in the schema.
+- **Can documents be deleted, and by whom:** §3.1 line 150 answers the "by whom" half of this
+  unconditionally — nobody, archival only, for every entity in this work. **Decision: Gate 1.4 adds
+  `archived_at`/`archived_by` to `application_documents` and replaces the existing hard-DELETE policy
+  (`20260806000006:97-105`, the one `docs/PERMISSIONS.md:125-129` already flags as ungated — "any org
+  member") with an UPDATE-only archive path gated to the roles `docs/PERMISSIONS.md:182,176-177,180,183`
+  already model as holding `A` on this resource: `owner`/`org_owner`/`platform_admin`/`permit_manager`/
+  `document_reviewer`/`applicant_contractor`.** This closes a real, previously-documented gap rather than
+  leaving it open past the one gate whose explicit remit is documents.
+
+### M.4 Generation sourcing
+
+**Finding, not a gap:** §3.6's text contains no reference to generation at all — no "PDF generator," no
+mention of a data source, no failure-handling language. Its vocabulary is entirely upload/revision-centric
+("re-upload," "revision," "uploaded_by," "uploaded_at"). Per M.1, the object Gate 1.4 governs
+(`application_documents`) is the **contractor-supplied source-document** table, not the
+**system-generated output** table (`generated_documents`) — the latter is what the "what feeds the PDF
+generator / what happens on failure / idempotency" questions actually describe, and that pipeline already
+answers them for itself, outside this expansion's scope:
+- **Sources:** `buildFieldResolutionContext` combines parsed/extracted application data and structured
+  contractor fields (`lib/inngest/functions/generate-pdf.ts:153-158`).
+- **Failure handling:** a dedicated terminal enum state, `document_generation_failed`
+  (`20260806000016_add_pdf_generation_statuses.sql`, cited in §L.1 above) — not a rollback, not a retry
+  queue; the row stops there for a human to act on.
+- **Idempotency:** **not idempotent by content.** Each generation attempt inserts a new
+  `generated_documents` row (append-only, `20260806000017:81-83`); nothing prevents or collapses repeat
+  runs into one row. Re-running produces an additional record, not a guaranteed-identical replacement.
+
+**Decision: none of the above is in Gate 1.4's scope**, and this addendum does not propose changing any
+of it — doing so would mean modifying already-shipped, already-tested Phase 4/5 code, which
+`PHASE_0_FINDINGS.md:456-459` already found should stay untouched. **If you intend Gate 1.4 to add a new
+generation capability** (as opposed to managing contractor-uploaded documents with review/revisioning),
+that is not present in §3.6's text as written and would need to be added to scope explicitly, with its
+own sourcing/failure/idempotency answers, before branching.
+
+### M.5 Relationship to Phase 1.2 `jurisdiction_sources`
+
+**NOT FOUND** — §3.6 does not mention `jurisdiction_sources`, and §3.3 (`jurisdiction_sources`'s own
+spec) does not mention documents. They model different things: a `jurisdiction_sources` row
+(`20260806000021_jurisdiction_sources.sql`) is a citation/link to *external government reference
+material* (a fee schedule page, a bylaw, a forms page) with its own verification/staleness lifecycle
+(§3.3, `PHASE_0_FINDINGS.md` §L context); an `application_documents` row (per M.1, what Gate 1.4 extends)
+is a file a contractor uploaded for one specific application. Nothing in either spec section implies one
+references the other.
+
+**Decision: no FK or embedding relationship between `application_documents`/`document_revisions` and
+`jurisdiction_sources` in Gate 1.4.** A document does not carry a `jurisdiction_source_id`, and generated
+PDFs (out of scope per M.4 in any case) are not versioned against jurisdiction-source updates by this
+gate. If a future feature wants to attach a jurisdiction's official checklist or form PDF to an
+application and track it against source updates, that is a new, explicitly-scoped capability — not
+implied by §3.3 or §3.6 as written today, and not something this addendum invents on their behalf.
+
+### M.6 Confirmed decisions and what this addendum still does not decide
+
+All decisions in this section are confirmed, not open:
+
+- **M.1:** Gate 1.4 extends `application_documents` (and its existing bucket/policies), not a parallel
+  table. Confirmed.
+- **M.2, org-per-month storage cap:** deferred; no per-org monthly cap enforced in Gate 1.4. Belongs in a
+  later gate alongside billing/usage tracking. Confirmed.
+- **M.3, per-download audit logging:** `audit_logs` captures upload and review events only; download
+  events (via signed URL) are intentionally not logged, per §3.6. Confirmed.
+
+Still reserved for the Gate 1.4 migration plan itself, to be presented separately before any SQL is
+written (same discipline as §L.5): the exact new/altered column list, `document_revisions`' schema, the
+replacement archive-RLS policy text, and the feature-flag name.
+
+Zero code written, zero migrations written for Gate 1.4.
