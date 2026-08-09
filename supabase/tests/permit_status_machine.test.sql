@@ -124,8 +124,12 @@ declare
   seed_from permit_status_enum;
   seed_to permit_status_enum;
 begin
-  insert into permit_applications (org_id, contractor_id, permit_type_id, project_title, project_address)
-  values ('20000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-00000000000a',
+  -- project_id is set explicitly (Org A's seed.sql fixture project) so this
+  -- row is never counted as an orphan by section 14's
+  -- `project_id is null` invariant check below -- see the cleanup note past
+  -- the end of this block for why we don't also DELETE it.
+  insert into permit_applications (org_id, project_id, contractor_id, permit_type_id, project_title, project_address)
+  values ('20000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-00000000000a',
           '00000000-0000-0000-0003-000000000001', 'Trigger Test Project', '1 Trigger Test St, Toronto, ON')
   returning id into new_app_id;
 
@@ -145,8 +149,16 @@ begin
 
   raise notice 'PASS: fresh permit_applications INSERT auto-seeds a NULL -> intake application_status_history row';
 
-  -- Clean up so it doesn't interfere with later global counts in this file.
-  delete from permit_applications where id = new_app_id;
+  -- No cleanup DELETE here: application_status_history is append-only
+  -- (forbid_update_delete(), section 6/7 below), and permit_applications
+  -- has an ON DELETE CASCADE FK into it, so `delete from permit_applications`
+  -- would fire the cascade, the trigger would reject it, and it would abort
+  -- this file's single outer transaction (begin;/rollback; -- see top of
+  -- file) before any later section ever ran. The whole file rolls back at
+  -- the end regardless, so this row never persists past this run; it's kept
+  -- out of section 14's orphan count by giving it a real project_id above,
+  -- and every other check in this file filters by a specific application_id
+  -- rather than counting globally, so it's otherwise inert.
 end $$;
 
 -- === 2. Check 1 (transition legality): a legal edge succeeds, an illegal one is rejected ===

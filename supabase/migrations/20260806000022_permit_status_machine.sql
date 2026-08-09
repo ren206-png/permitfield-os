@@ -560,8 +560,22 @@ grant execute on function transition_permit_status(uuid, permit_status_enum, tex
 --     pipeline `status` column. Left alone deliberately, not an oversight.
 --   - transition_permit_status() itself is SECURITY DEFINER, so it
 --     executes as the function's owner (the role that ran this migration),
---     not as `authenticated` -- this revoke does not affect its ability to
---     write permit_status. Verified empirically post-migration, not just
---     asserted; see the Gate 1.3 report SS12 for the actual command run and
---     its output.
+--     not as `authenticated` -- this part holds regardless of the defect
+--     noted below.
+--
+-- KNOWN DEFECT (Gate 1.3 review, round 3; found by actually executing
+-- supabase/tests/permit_status_machine.test.sql SS13, not by static
+-- review): the revoke below does NOT achieve the "only permit_status is
+-- locked down" claim made above. `authenticated` also holds TABLE-LEVEL
+-- UPDATE on permit_applications (20260806000011_grants.sql:15 --
+-- `grant select, insert, update, delete on permit_applications to
+-- authenticated;`). Postgres
+-- privilege checks are table-level OR column-level -- a column-level
+-- REVOKE does not subtract from a pre-existing table-level GRANT covering
+-- every column, including this one. Confirmed empirically: a direct
+-- `update permit_applications set permit_status = ...` by `authenticated`
+-- still succeeds after this migration runs; SS13 catches it and fails as
+-- designed. This approach is insufficient -- see Gate 1.3 report SS13 for
+-- root cause, the full column-privilege enumeration, and the remediation
+-- path. Do not rely on this revoke until a follow-up migration lands.
 revoke update (permit_status) on permit_applications from authenticated;
