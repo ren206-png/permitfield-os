@@ -87,3 +87,18 @@ export function isJurisdictionsEnabled(): boolean {
 export function isApplicationsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_APPLICATIONS');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.5. Gates nothing at runtime yet --
+// same "declared ahead of its consumer" pattern as every flag above: this
+// gate ships supabase/migrations/20260806000025_readiness_checklist.sql
+// (the readiness_checklist_items table, compute_readiness_score()/
+// readiness_checklist_complete(), override_readiness_check(), and the new
+// Check 5 inside transition_permit_status()) with zero UI or Server Action
+// call site. The schema, RLS, and RPCs are live regardless of this flag's
+// value, same as every other flag in this file -- the flag will gate the
+// application-layer entry point once a later phase adds one. Named for the
+// master prompt's own gate identifier ("permitfield_readiness"), same
+// naming discipline as isApplicationsEnabled/isJurisdictionsEnabled above.
+export function isReadinessEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_READINESS');
+}

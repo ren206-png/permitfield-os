@@ -126,6 +126,21 @@ export function isValidPermitStatusTransition(from: PermitStatus | null, to: Per
   return PERMIT_STATUS_TRANSITIONS[key].includes(to);
 }
 
+// *** DOES NOT MIRROR CHECK 5. *** Gate 1.5
+// (supabase/migrations/20260806000025_readiness_checklist.sql,
+// PHASE_0_FINDINGS.md SS O.2) added a stateful precondition to
+// transition_permit_status() on the internal_review -> ready_to_submit edge
+// specifically: every required readiness_checklist_items row must be
+// complete, or a readiness override must already be recorded on the
+// application. That is a live, per-row database fact (not a static
+// (from, to) edge or a static role-tier rule), so unlike Check 1/Check 2
+// above it cannot be mirrored as a pure, DB-independent function in this
+// file -- isValidPermitStatusTransition(internal_review, ready_to_submit)
+// legitimately returns true even when Check 5 would still reject the actual
+// RPC call. A future UI wanting to pre-flight Check 5 client-side needs an
+// actual query (readiness_checklist_complete()/compute_readiness_score(),
+// both in 20260806000025), not this module.
+
 // The three org_role values from lib/authz's Role union that this module
 // cares about, kept as a local, narrower alias so this file does not need to
 // import lib/authz's full Role type just to describe role-tier membership --

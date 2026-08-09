@@ -87,6 +87,23 @@ export type Action = 'create' | 'read' | 'update' | 'archive';
 // `permit_status_transitions` resource: that table is global reference data
 // like `jurisdiction_sources`/`jurisdictions`, seeded once by the migration
 // itself with no runtime writer at all, not a role-gated concept.
+//
+// Gate 1.5 adds `readiness_checklist_items`
+// (20260806000025_readiness_checklist.sql) -- given the exact same matrix
+// shape as `permit_applications`, not a fresh design: both are real,
+// citation-backed `is_org_member`-gated create/read/update with a real
+// hard-DELETE restricted to `is_org_owner` (the "archive" cell), and both
+// sit in permit_status_tier()'s 'org' tier reasoning ("the org's own work,
+// self-attestation is correct here" -- 20260806000022 L51-54, reused
+// verbatim in 20260806000025's own header comment). Deliberately NOT adding
+// a distinct role gate for "who may set reviewed_by/status" -- see that
+// migration's header comment for why this is flagged as a judgment call.
+// override_readiness_check() (the one genuinely role-gated action in this
+// gate, permit_manager-or-above) is not itself modeled as a Resource
+// action here, same reasoning `permit_status_tier()`'s role checks inside
+// transition_permit_status() were never expressed as a matrix cell either
+// -- it is a single dedicated RPC's own internal check, not a per-resource
+// CRUD permission this module's Action vocabulary is shaped to describe.
 export type Resource =
   | 'organizations'
   | 'org_members'
@@ -103,7 +120,8 @@ export type Resource =
   | 'properties'
   | 'projects'
   | 'jurisdiction_sources'
-  | 'application_status_history';
+  | 'application_status_history'
+  | 'readiness_checklist_items';
 
 type PermissionMatrix = Record<Role, Partial<Record<Resource, readonly Action[]>>>;
 
@@ -197,6 +215,10 @@ const ownerAndOrgOwnerGrants: PermissionMatrix['owner'] = {
   // SECURITY DEFINER functions) -- READ_ONLY_LOG here, same as every other
   // role in this matrix, per the Resource type's own header comment.
   application_status_history: READ_ONLY_LOG,
+  // readiness_checklist_items_delete requires is_org_owner; select/insert/
+  // update only require is_org_member (20260806000025) -- identical shape
+  // to permit_applications above.
+  readiness_checklist_items: FULL,
 };
 
 const matrix: PermissionMatrix = {
@@ -227,6 +249,7 @@ const matrix: PermissionMatrix = {
     // (20260806000022), so unlike jurisdiction_sources just above, there is no
     // real RLS distinction to grant platform_admin here.
     application_status_history: READ_ONLY_LOG,
+    readiness_checklist_items: FULL,
   },
   // Mirrors current RLS exactly (see contractors_select/insert/update,
   // permit_applications_select/insert/update, application_documents_select/
@@ -262,6 +285,11 @@ const matrix: PermissionMatrix = {
     // same way member's other entries above are.
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    // Mirrors permit_applications above: is_org_member-gated create/read/
+    // update, no archive (real hard DELETE is is_org_owner-only,
+    // 20260806000025) -- a plain member can track checklist items but not
+    // remove one outright.
+    readiness_checklist_items: ['create', 'read', 'update'],
   },
   permit_manager: {
     organizations: READ_ONLY_LOG,
@@ -285,6 +313,11 @@ const matrix: PermissionMatrix = {
     projects: FULL,
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    // Same FULL ceiling as permit_applications above -- permit_manager is
+    // also the role that clears override_readiness_check()'s own internal
+    // role gate (permit_manager or above), reinforcing that this role is
+    // meant to own readiness end-to-end, not just the checklist rows.
+    readiness_checklist_items: FULL,
   },
   permit_coordinator: {
     organizations: READ_ONLY_LOG,
@@ -302,6 +335,11 @@ const matrix: PermissionMatrix = {
     projects: ['create', 'read', 'update'],
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    // Mirrors permit_applications above: is_org_member-gated create/read/
+    // update, no archive (real hard DELETE is is_org_owner-only,
+    // 20260806000025) -- a coordinator can track checklist items but not
+    // remove one outright, same shape as member above.
+    readiness_checklist_items: ['create', 'read', 'update'],
   },
   document_reviewer: {
     organizations: READ_ONLY_LOG,
@@ -332,6 +370,10 @@ const matrix: PermissionMatrix = {
     projects: READ_ONLY_LOG,
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    // Reviewer's job is the finding-review step, not the readiness
+    // checklist -- kept read-only, same tier as taxonomies/clients/
+    // properties/projects above, not the application_documents exception.
+    readiness_checklist_items: READ_ONLY_LOG,
   },
   applicant_contractor: {
     organizations: READ_ONLY_LOG,
@@ -349,6 +391,10 @@ const matrix: PermissionMatrix = {
     projects: ['create', 'read', 'update'],
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    // Mirrors permit_applications above: the contractor filing the permit
+    // is the one actually completing checklist items day-to-day, same
+    // is_org_member-gated create/read/update, no archive.
+    readiness_checklist_items: ['create', 'read', 'update'],
   },
   // Deliberately sparse -- see the header comment above the matrix. No
   // audit_logs entry at all: a client neither reads the ledger nor performs
@@ -386,6 +432,16 @@ const matrix: PermissionMatrix = {
     // so this is product-surface reasoning, not a citation, same caveat as
     // the rest of this role.
     application_status_history: READ_ONLY_LOG,
+    // Same reasoning as application_status_history just above: a client can
+    // already read the permit_applications row itself, and seeing which
+    // readiness items are outstanding is strictly less sensitive than the
+    // application row -- it's the natural "what's left before submission"
+    // view this role's product surface would want. RLS does not distinguish
+    // client_user from any other is_org_member role either way
+    // (20260806000025 grants SELECT to `authenticated` broadly), so this is
+    // product-surface reasoning, not a citation, same caveat as the rest of
+    // this role.
+    readiness_checklist_items: READ_ONLY_LOG,
   },
   auditor_readonly: {
     organizations: READ_ONLY_LOG,
@@ -406,6 +462,7 @@ const matrix: PermissionMatrix = {
     projects: READ_ONLY_LOG,
     jurisdiction_sources: READ_ONLY_LOG,
     application_status_history: READ_ONLY_LOG,
+    readiness_checklist_items: READ_ONLY_LOG,
   },
 };
 
@@ -451,6 +508,7 @@ export const ALL_RESOURCES: readonly Resource[] = [
   'projects',
   'jurisdiction_sources',
   'application_status_history',
+  'readiness_checklist_items',
 ];
 
 export const ALL_ACTIONS: readonly Action[] = ['create', 'read', 'update', 'archive'];

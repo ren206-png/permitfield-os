@@ -98,15 +98,20 @@ describe('client_user — deliberately minimal, do not assign to real users', ()
   // two and not 'clients'/'taxonomies'. Phase 1.3 (20260806000022) added
   // 'application_status_history' -- see that same comment block for why this
   // one IS granted despite the jurisdiction_sources omission just below it.
+  // Gate 1.5 (20260806000025) added 'readiness_checklist_items' for the same
+  // reason as application_status_history: a client that can already read the
+  // permit_applications row has no reason to be blocked from seeing which
+  // readiness items are outstanding.
   const allowedResources: Resource[] = [
     'permit_applications',
     'generated_documents',
     'properties',
     'projects',
     'application_status_history',
+    'readiness_checklist_items',
   ];
 
-  it('has read access to exactly permit_applications, generated_documents, properties, projects, and application_status_history, nothing else', () => {
+  it('has read access to exactly permit_applications, generated_documents, properties, projects, application_status_history, and readiness_checklist_items, nothing else', () => {
     for (const resource of ALL_RESOURCES) {
       const expectRead = allowedResources.includes(resource);
       expect(can('client_user', 'read', resource)).toBe(expectRead);

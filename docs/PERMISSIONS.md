@@ -40,6 +40,7 @@ exists today.
 | `projects` (new, Phase 1.1) | `is_org_member` | `is_org_member` | `is_org_member` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000019` |
 | `jurisdiction_sources` (new, Phase 1.2) | `true` (any authenticated, no role/org check at all) | `is_platform_admin` | `is_platform_admin`, `with check` additionally requires `verified_by is null or verified_by = auth.uid()` | *(no policy — archival via `archived_at`, no delete path exists)* | `20260806000021` |
 | `application_status_history` (new, Phase 1.3) | `is_org_member` | *(no policy for `authenticated` — the only writers are `seed_permit_status_history()` and `transition_permit_status()`, both `security definer`)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | `20260806000022` |
+| `readiness_checklist_items` (new, Gate 1.5) | `is_org_member` | `is_org_member` | `is_org_member` | `is_org_owner` | `20260806000025` |
 
 Notable properties this table makes explicit:
 
@@ -165,6 +166,24 @@ Notable properties this table makes explicit:
   `docs/STATUS_TRANSITIONS.md`). Not modeled as a `lib/authz` `Resource`, same
   reasoning as `jurisdictions`/`authorities`: no role ever writes it, so there
   is no permission distinction to express.
+- **`permit_applications` (Gate 1.5) gains three new columns —
+  `readiness_override_at`/`readiness_override_by`/`readiness_override_reason`
+  — with NO update grant for `authenticated` at all**, same column-level
+  lockout pattern the `status` column already uses (`20260806000022`):
+  `revoke update on permit_applications from authenticated; grant update
+  (status) on permit_applications to authenticated;` from Gate 1.3 already
+  excludes any column not explicitly listed, so the three new columns are
+  closed by construction, zero additional migration statements required. The
+  one sanctioned writer is `override_readiness_check()` (`security definer`,
+  `20260806000025`), gated to `permit_manager` or above, which also inserts
+  an `audit_logs` row (`action = 'readiness_override'`) as part of the same
+  write. `transition_permit_status()` itself is also modified in this gate
+  (full `create or replace`, since plpgsql has no incremental
+  `ALTER FUNCTION ... ADD CHECK`) to add a new precondition ("Check 5") on
+  the `internal_review → ready_to_submit` edge specifically: every required
+  `readiness_checklist_items` row must be `complete`, unless a readiness
+  override is already recorded. See `docs/STATUS_TRANSITIONS.md`'s "The
+  readiness gate" section for the full mechanism.
 - Service-role (`service_role`) access is a *separate* grant layer from RLS
   (`service_role` has `BYPASSRLS` but holds no table privileges of its own —
   see `20260806000015`'s header comment) and is omitted from the table above
@@ -187,18 +206,18 @@ below straight out of this file and fails if any cell disagrees with
 Edit the code and this table together; the test is what catches it if you
 don't.
 
-| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects | jurisdiction_sources | application_status_history |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
-| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
-| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R |
-| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
-| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
-| `document_reviewer` | R | | R | R | C,R,U,A | R | R | R,U | R | C,R | R | R | R | R | R | R |
-| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
-| `client_user` | | | | R | | | | | R | | | | R | R | | R |
-| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R | R |
+| Role | organizations | org_members | contractors | permit_applications | application_documents | extractions | audits | audit_findings_review | generated_documents | audit_logs | taxonomies | clients | properties | projects | jurisdiction_sources | application_status_history | readiness_checklist_items |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
+| `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
+| `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | C,R,U,A |
+| `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
+| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R | C,R,U |
+| `document_reviewer` | R | | R | R | C,R,U,A | R | R | R,U | R | C,R | R | R | R | R | R | R | R |
+| `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R | C,R,U |
+| `client_user` | | | | R | | | | | R | | | | R | R | | R | R |
+| `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R | R | R |
 
 Notes on deliberate asymmetries vs. Table 1:
 
@@ -311,6 +330,30 @@ Notes on deliberate asymmetries vs. Table 1:
   not infer a working document-review flow from this table until that RPC
   ships — the grant exists, the write path does not.
 
+- **`readiness_checklist_items` (Gate 1.5) is given the exact same shape as
+  `permit_applications`, not a fresh design** — both are real,
+  citation-backed `is_org_member`-gated create/read/update with a real
+  hard-`DELETE` restricted to `is_org_owner` (the `A` cell above), and both
+  sit in `permit_status_tier()`'s `'org'`-tier reasoning ("the org's own
+  work, self-attestation is correct here," `20260806000022`, reused verbatim
+  in `20260806000025`'s header comment). `owner`/`org_owner`/`platform_admin`/
+  `permit_manager` hold the full `C,R,U,A` ceiling; `member`/
+  `permit_coordinator`/`applicant_contractor` hold `C,R,U` (no `A`) — the
+  role actually completing checklist items day to day should not also be
+  able to delete one outright, same reasoning `contractors`/
+  `permit_applications` already apply elsewhere in this table.
+  `document_reviewer`/`client_user`/`auditor_readonly` are `R`-only:
+  `document_reviewer`'s job is the finding-review step, not the readiness
+  checklist; `client_user`'s `R` mirrors its `application_status_history`
+  cell just above (a client can already read the `permit_applications` row,
+  and outstanding readiness items are strictly less sensitive than that
+  row); `auditor_readonly` is `R`-only everywhere, unchanged. Deliberately
+  NOT modeled as a matrix cell: `override_readiness_check()`'s own internal
+  `permit_manager`-or-above role gate — same reasoning
+  `transition_permit_status()`'s role-tier checks were never expressed as a
+  matrix cell either, since it's a single dedicated RPC's own check, not a
+  per-resource CRUD permission this table's vocabulary describes.
+
 ## Current status (read this before assigning any new role)
 
 - **Do not assign any of the 8 new `org_role` values to a real user yet.**
@@ -376,3 +419,13 @@ Notes on deliberate asymmetries vs. Table 1:
   not this one. `isDocumentsEnabled()`/`PERMITFIELD_FF_DOCUMENTS` do not
   exist in `lib/flags.ts` yet either — planned but not yet added as of this
   migration.
+- **`readiness_checklist_items` / `permit_applications.readiness_override_*`
+  (Gate 1.5) are infrastructure only, same pattern.** The table, RLS,
+  `compute_readiness_score()`, `readiness_checklist_complete()`,
+  `override_readiness_check()`, and the new Check 5 inside
+  `transition_permit_status()` all exist and are live, but nothing in `app/`
+  reads or writes any of them yet — no UI, no Server Action, no Route
+  Handler. `isReadinessEnabled()` (`lib/flags.ts`) exists ahead of any
+  consumer, same as `isApplicationsEnabled()` did in Phase 1.3. See
+  `docs/STATUS_TRANSITIONS.md`'s "The readiness gate" section for the full
+  mechanism.

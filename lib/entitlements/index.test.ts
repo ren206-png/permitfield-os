@@ -21,6 +21,22 @@ describe('can()', () => {
     const b = can('org-b', 'projects.create');
     expect(a).toBe(b);
   });
+
+  // Gate 1.5 (PHASE_0_FINDINGS.md SS O.3): 'readiness.checker'/
+  // 'readiness.override' added alongside 'projects.create' in the same
+  // DEFAULT_TIER -- same "one hardcoded tier, no orgId branching" contract
+  // as the existing key above.
+  it('grants readiness.checker and readiness.override under the default tier for any orgId', () => {
+    expect(can('20000000-0000-0000-0000-00000000000a', 'readiness.checker')).toBe(true);
+    expect(can('some-other-org-id', 'readiness.checker')).toBe(true);
+    expect(can('20000000-0000-0000-0000-00000000000a', 'readiness.override')).toBe(true);
+    expect(can('some-other-org-id', 'readiness.override')).toBe(true);
+  });
+
+  it('readiness.checker/readiness.override are not sensitive to orgId', () => {
+    expect(can('org-a', 'readiness.checker')).toBe(can('org-b', 'readiness.checker'));
+    expect(can('org-a', 'readiness.override')).toBe(can('org-b', 'readiness.override'));
+  });
 });
 
 describe('limit()', () => {

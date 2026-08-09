@@ -13,6 +13,13 @@ agree — see `lib/permit-status/transitions.test.ts`'s own header comment for
 the cross-check discipline (same pattern `lib/jurisdictions/staleness.ts`
 established in Phase 1.2 for `jurisdiction_source_effective_status()`).
 
+Extended in Gate 1.5 (flag `PERMITFIELD_FF_READINESS`) to also document the
+readiness gate (Check 5) added to `transition_permit_status()` on the
+`internal_review → ready_to_submit` edge specifically — see that section
+below. This is the same function and the same narrative doc as Phase 1.3;
+Gate 1.5 modifies it rather than introducing a parallel one
+(`PHASE_0_FINDINGS.md` §O.2).
+
 ## Why this is a second, separate column from `status`
 
 `permit_applications.status` (`application_status`) already exists
@@ -158,6 +165,53 @@ auto-advancing either would mean modifying already-shipped Phase-0-era
 route/Inngest code as an unscoped side effect of this gate. See
 `PHASE_0_FINDINGS.md` §L.3 for the full reasoning.
 
+## The readiness gate: `internal_review → ready_to_submit` (Check 5)
+
+Added in Gate 1.5 (`supabase/migrations/20260806000025_readiness_checklist.sql`,
+flag `PERMITFIELD_FF_READINESS`, `lib/flags.ts`'s `isReadinessEnabled()`;
+design decision recorded in `PHASE_0_FINDINGS.md` §O.2). Unlike Check 1/Check 2
+above, this is not a static edge-legality or role-tier rule — it is a stateful
+precondition on one specific edge:
+
+```sql
+if p_to_status = 'ready_to_submit'
+   and v_app.readiness_override_at is null
+   and not readiness_checklist_complete(p_application_id) then
+  raise exception 'readiness_incomplete: ...';
+end if;
+```
+
+`readiness_checklist_complete()` returns false if any `readiness_checklist_items`
+row for the application has `is_required = true` and `status <> 'complete'`.
+The gate is skipped entirely if `permit_applications.readiness_override_at` is
+already set — see "Readiness override" below. Checked after Check 1/Check
+2/the cross-machine gate (an illegal, unauthorized, or pipeline-blocked
+request fails for that reason first) and before the write. No other edge in
+this machine reads `readiness_checklist_items` or `readiness_override_at` —
+this is intentionally the one and only place readiness is enforced.
+
+`lib/permit-status/transitions.ts`'s `isValidPermitStatusTransition()` does
+**not** mirror this check (see that function's own comment) — it can
+correctly say `internal_review → ready_to_submit` is a legal *edge* while the
+live RPC still rejects a specific call because Check 5 fails. A future UI
+pre-flighting this transition needs an actual query
+(`readiness_checklist_complete()`/`compute_readiness_score()`, both in
+`20260806000025`), not the static TS map.
+
+### Readiness override
+
+`override_readiness_check(p_application_id, p_reason)` is the sanctioned way
+to bypass Check 5. It requires `permit_manager` or above (the same role list
+as the `submission` tier above), a free-text reason of at least 20 characters
+(this migration's judgment call — the master prompt only says "min length
+enforced"), and on success: sets `readiness_override_at` /
+`readiness_override_by` / `readiness_override_reason` on the application
+(**permanently** — nothing in this gate ever clears them) and writes an
+`audit_logs` row with `action = 'readiness_override'`. These three columns
+have no `UPDATE` grant for `authenticated` at all (same column-level lockout
+`permit_status` itself uses, see `20260806000022`'s tail) — the RPC,
+SECURITY DEFINER, is the only write path.
+
 ## Idempotency
 
 `transition_permit_status(p_application_id, p_to_status, p_reason,
@@ -200,4 +254,21 @@ or RPC in this gate writes to them.
 - No per-jurisdiction override of the transition graph (e.g. "this
   jurisdiction never uses `approved`, only `issued`") exists — the graph
   above is a single, global legal-move set for every application regardless
+  of jurisdiction.
+- (Gate 1.5) No UI reads or writes `readiness_checklist_items` or the
+  override columns anywhere in `app/`. Same "infrastructure ships ahead of
+  its first consumer" pattern as everything else in this list.
+- (Gate 1.5) No role narrower than `is_org_member` restricts who may
+  create/update a `readiness_checklist_items` row (including setting
+  `reviewed_by`/`status` on one) — only the override
+  (`override_readiness_check()`) has an explicit role gate. See
+  `20260806000025`'s own header comment for why this is a flagged judgment
+  call, not a spec citation — deliberately different from
+  `application_documents`' review columns, which shipped in Gate 1.4 with no
+  write path at all pending a follow-up RPC.
+- (Gate 1.5) `readiness_checklist_items` rows can be hard-deleted by an org
+  owner (`is_org_owner`-gated `DELETE` policy) — this is one of the explicit
+  "override abuse" bypass paths the master prompt's own QA checklist names
+  (§12 #8) and is not closed by this gate; it is narrower than the pre-Gate-
+  1.5 baseline only in that non-owner roles cannot reach it at all.
   of jurisdiction.

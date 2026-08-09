@@ -25,7 +25,20 @@
 // its own, same discipline as lib/authz) to decide whether an org may
 // create another active project.
 
-export type Entitlement = 'projects.create';
+// 'readiness.checker' / 'readiness.override' added in Gate 1.5
+// (PHASE_0_FINDINGS.md SS O.3): the master prompt's S4 spells these
+// `readiness_checker` / `readiness_override` (its literal key list), but
+// this module's one existing key (`projects.create`) already established a
+// dot-namespaced `resource.action` convention -- SS O.3 is the user's
+// explicit decision to keep extending that convention rather than adopt the
+// master prompt's literal spelling. Neither key has a call site yet: the
+// override role gate itself is enforced in SQL
+// (override_readiness_check(), 20260806000025) since that is the one thing
+// a SECURITY DEFINER RPC actually can enforce; these two keys exist so a
+// future Route Handler/Server Action wrapping that RPC (and the checklist
+// UI generally) has them ready to call, same "declared now, enforced later
+// at the call site" pattern every flag in lib/flags.ts already follows.
+export type Entitlement = 'projects.create' | 'readiness.checker' | 'readiness.override';
 export type LimitKey = 'projects.active_max';
 
 interface EntitlementTier {
@@ -38,7 +51,7 @@ interface EntitlementTier {
 // header for why.
 const DEFAULT_TIER: EntitlementTier = {
   name: 'default',
-  features: ['projects.create'],
+  features: ['projects.create', 'readiness.checker', 'readiness.override'],
   limits: {
     'projects.active_max': 50,
   },
