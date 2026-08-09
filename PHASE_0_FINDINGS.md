@@ -993,3 +993,203 @@ code; this section is the citation for why they diverge from §4's literal key n
 
 Gate 1.5 schema work is unblocked. Waiting on your literal `APPROVED: PHASE 1.5` token, per rule 0.1.1,
 before any branch is created or migration SQL is written.
+
+## P. Gate 1.6 pre-branch addendum — Requirements engine (added before any Gate 1.6 branch, per rule
+8's own "stop and ask if the spec conflicts with the repo" discipline — five real conflicts found
+before any migration is written)
+
+**Status: RESOLVED — all five design questions decided by you. See "Resolutions" at the end of this
+section. Original questions preserved unedited above it, same record-keeping shape as §N/§O.**
+
+Master prompt citation: §3.4 (Gate 1.6). Inputs: project location, property type, work type,
+occupancy/use, scope attributes, construction value, org-configurable jurisdiction rules. Outputs:
+potentially required permits, responsible jurisdiction, required documents, required forms,
+prerequisite approvals, verified fees only, verified processing estimates only, official source links,
+last verified date, warnings and unresolved questions. Hard constraints: a DB-enforced
+`verified_at`/`verified_by`/`source_id` gate before any `permit_requirement` row counts as
+official/authoritative; every engine output starts `preliminary` until an authorized `permit_manager`
+reviews it (persisted column, not a UI label); rules are data (`jurisdiction_permit_rules`), evaluated
+deterministically — same inputs, same output, asserted across 100 iterations; unknown inputs produce an
+explicit `unresolved_question`, never a guess, never a default; zero AI in the decision path this phase.
+
+### P.1 `permit_types.compliance_rules jsonb` already does part of what `jurisdiction_permit_rules` is
+specified to do — §D flagged this as an open question when it was first noticed, now actually due
+
+`permit_types.compliance_rules jsonb not null default '{}'::jsonb` (`20260806000005_permit_types_and_filings.sql:11`)
+is hand-curated, checked in application code (its own header comment; also `lib/inngest/functions/audit.ts:67,98,167`
+reads it under the explicit rule "compliance_rules is checked in application code, not by the AI", SS4.3) — a real,
+already-shipped, already-consumed rules representation. The master prompt's `jurisdiction_permit_rules` (§3.4) is a
+second, deterministic, engine-evaluated rules-as-data table for the same conceptual thing: "what does this permit
+type require." Two parallel rules representations existing side by side is exactly the drift §D warned about. This
+is rule 8 territory — not resolving it silently in either direction.
+
+Three ways to resolve it, not picking one for you:
+1. **`jurisdiction_permit_rules` supersedes `compliance_rules`**: migrate existing `compliance_rules` content into the
+   new table's shape, stop writing to the old column (leave it in place, deprecated, or drop it in a follow-up gate).
+   Cleanest long-term, but touches an already-shipped, already-consumed column and its one existing reader
+   (`lib/inngest/functions/audit.ts`).
+2. **`jurisdiction_permit_rules` wraps/supplements `compliance_rules`**: the new engine reads both — `compliance_rules`
+   stays the AI-audit-comparison input it already is, `jurisdiction_permit_rules` becomes the new deterministic
+   engine's own independent input. No migration of existing data, but two representations of "requirements" now
+   permanently coexist, and a future author has to know which one governs which code path.
+3. **They are answering different questions entirely** and this isn't actually overlap: `compliance_rules` is
+   per-`permit_type` field-validation/AI-audit-comparison data (does this specific filing look compliant), while
+   `jurisdiction_permit_rules` is used to *derive which permits/documents/approvals apply at all* — a classification
+   step that happens before a `permit_type` is even selected. Under this reading there's no real drift, just two
+   different rules tables answering two different questions with a superficially similar name.
+
+My reading, stated but not acted on: **option 3 is most consistent with §3.4's actual field list** (its inputs are
+project/property/scope attributes, not a specific permit type's field-level rules) — but I'm surfacing this rather
+than assuming it, since `compliance_rules` was never explicitly scoped against the future rules engine when it shipped.
+
+### P.2 `permit_requirement.verified_by` typing: two incompatible precedents already exist in this repo, and
+§3.4's own hard constraint favors one of them
+
+The master prompt's hard constraint for `permit_requirement` requires `verified_by IS NOT NULL` as part of a
+DB-enforced authoritative-row check (§3.4). Two different `verified_by` shapes already exist for conceptually the
+same "who verified this" fact:
+- `jurisdiction_sources.verified_by uuid references auth.users(id)` (`20260806000021_jurisdiction_sources.sql:100`),
+  paired with a DB-enforced check constraint (`jurisdiction_sources_verified_requires_reviewer`, lines 113-116) that
+  a row cannot claim `verified` without both `verified_by` and `verified_at` — the exact same shape §3.4 asks for on
+  `permit_requirement`, and that migration's own comment (lines 106-112) explicitly calls itself "the Gate-1.2-scoped
+  sibling of SS3.4's stricter `permit_requirement` constraint... this is the same shape applied one gate early."
+- `permit_types.verified_by text` (`20260806000005_permit_types_and_filings.sql:14`) — plain text, no FK, no DB-level
+  check tying it to `verified_at`, populated by application code only.
+`jurisdiction_sources` is the table `permit_requirement.source_id` will itself reference (per §O.1's resolution and
+that migration's own forward-citation), and its migration already names itself as `permit_requirement`'s precedent.
+Recommendation, stated but not acted on: `permit_requirement.verified_by uuid references auth.users(id)`, matching
+`jurisdiction_sources`, not `permit_types`. Naming it as a decision rather than silently picking one, since a reader
+could reasonably default to copying whichever of the two existing tables they saw most recently.
+
+### P.3 `readiness_checklist_items.source_requirement` and `jurisdiction_sources.source_id` are both explicit IOUs
+against `permit_requirement` — this is the gate where they come due
+
+`readiness_checklist_items.source_requirement text` (`20260806000025_readiness_checklist.sql:102`) carries the
+comment "Nullable; will be constrained to `permit_requirements(id)` in Gate 1.6" (§O.1's resolution). Separately,
+`jurisdiction_sources`'s migration comment (`20260806000021:106-112`) describes a future `permit_requirement.source_id`
+FK pointing back at `jurisdiction_sources(id)`. Gate 1.6 is where both promises must actually be kept: the
+`permit_requirements` table itself has to exist, with `source_id references jurisdiction_sources(id)`. That part is
+unambiguous and already decided by prior gates. What's still open: does this gate *also* retrofit
+`readiness_checklist_items.source_requirement` into a real `permit_requirement_id uuid references permit_requirements(id)`
+column (replacing or sitting alongside the free-text one), or does that retrofit stay deferred to whenever Gate 1.5's
+UI actually gets built? Recommendation: retrofit now, in the same migration that creates `permit_requirements` — the
+free-text column exists today specifically because the referent didn't exist yet, and that's no longer true once this
+gate ships; leaving it text-only past this point would mean shipping the exact gap §O.1 was raised to avoid, one gate
+after the referent becomes real.
+
+### P.4 §3.4's own input list (property type, work type, occupancy/use, scope attributes) has no home in the
+current schema, and the one existing candidate column is structurally singular where the engine needs several
+independent dimensions
+
+Repo-wide search confirms none of "property type," "work type," "occupancy," "occupancy/use," or "scope attribute(s)"
+exist as a column anywhere in `supabase/migrations/`. Concretely:
+- `properties` (`20260806000019:109-124`) has address fields only (`address_line1/2`, `city`, `province_code`,
+  `postal_code`, `legal_description`) — no property type.
+- `projects` (`20260806000019:143-165`) has exactly one `taxonomy_id uuid` FK into the generic `taxonomies` table
+  (`kind`/`code`/`label`), and the only seeded `kind` is `project_type` (`supabase/seed.sql:182-185`: `new_construction`,
+  `renovation`, `addition`, ...) — a loose match for "work type," but structurally a **single** taxonomy slot per
+  project. §3.4 needs several independent classification dimensions (property type, work type, occupancy/use, scope
+  attributes) evaluated together to derive applicable permits — a single `taxonomy_id` column cannot hold more than
+  one of them at once.
+- "Construction value" is already covered — `permit_applications.estimated_job_value_cents`
+  (`20260806000006_applications_and_documents.sql:27`) exists from Gate 1.0 and needs no new column.
+- "Project location" is already covered via `properties`' address fields plus `projects.property_id`.
+Three ways to resolve it, not picking one for you:
+1. Add more `taxonomy_id`-shaped columns to `projects` (e.g. `property_type_id`, `occupancy_taxonomy_id`), reusing
+   the existing `taxonomies` table with new `kind` values (`property_type`, `occupancy`) — minimal new schema,
+   consistent with the existing convention, but "scope attributes" (plural, per §3.4) doesn't obviously fit a
+   single-select taxonomy shape at all.
+2. A new `project_scope_attributes` table (one row per project, structured columns or a constrained jsonb) purpose-built
+   for the engine's actual input shape, separate from the general-purpose `taxonomies` system.
+3. Some hybrid — single-select dimensions (property type, occupancy/use) as new taxonomy kinds per option 1,
+   multi-valued "scope attributes" as their own join table or array column.
+Not acting on any of these — this determines a real chunk of Gate 1.6's own schema surface before the rules engine
+itself can be written, so it needs a decision, not an assumption.
+
+### P.5 Entitlement key naming: master-prompt spelling vs. this repo's established convention (same shape as §O.3,
+lower stakes)
+
+§4 lists the literal entitlement key `jurisdiction_requirements` for gating this gate's surface (distinct from
+`readiness_checker`/`readiness_override`, already resolved for Gate 1.5 in §O.3). Per §O.3's resolution, this repo
+uses dot-namespaced keys (`'projects.create'`, `'readiness.checker'`, `'readiness.override'`), not the master
+prompt's literal snake_case. Proposing `'requirements.engine'` for consistency with that precedent rather than the
+literal `jurisdiction_requirements` spelling, named here as a decision rather than silently picked.
+
+### Not blocked by the above, previewed for when work starts
+
+- **The `verified_at IS NOT NULL AND verified_by IS NOT NULL AND source_id IS NOT NULL` constraint itself**: no open
+  question on the mechanism — `jurisdiction_sources_verified_requires_reviewer`
+  (`20260806000021_jurisdiction_sources.sql:113-116`) is the exact check-constraint shape to reuse, just against a new
+  table and a third column.
+- **The 100-iteration determinism test**: no open question — a plain unit test asserting `evaluate(sameInputs) ===
+  evaluate(sameInputs)` (or deep-equal, since the output is a structured object) across 100 calls, same discipline as
+  the existing SQL test suite's repeat-assertion style, no new pattern needs inventing.
+- **`preliminary` as a persisted column, not a UI label**: no open question — same "the DB is the source of truth,
+  not app code" posture every prior gate's status/verification columns already follow
+  (`permit_status`, `jurisdiction_sources.verification_status`, `readiness_checklist_items.status`).
+- **A feature flag for this gate**: not yet declared in `lib/flags.ts`, consistent with every prior gate's own flag
+  landing alongside its migration, not before — `isRequirementsEngineEnabled()` (or similar), `PERMITFIELD_FF_REQUIREMENTS_ENGINE`,
+  default OFF, same shape as `isReadinessEnabled()`.
+
+### Resolutions (your decisions)
+
+**P.1 — No conflict; ship `jurisdiction_permit_rules` as specified, `compliance_rules` untouched.**
+`compliance_rules` (Gate 1.0) and `jurisdiction_permit_rules` (Gate 1.6) answer different questions:
+`compliance_rules` is a static, permit-type-bundled artifact ("what does this permit type need to comply
+with in general"); `jurisdiction_permit_rules` is runtime, jurisdiction-specific data ("in this specific
+jurisdiction, what are the actual requirements for this permit type"). Complementary, not overlapping —
+this confirms option 3 from the three laid out above. No migration of `compliance_rules`, no change to
+`lib/inngest/functions/audit.ts`'s existing read of it. Cite this resolution (§P.1) in
+`jurisdiction_permit_rules`'s migration header comment so a future reader doesn't reopen the question.
+
+**P.2 — `permit_requirement.verified_by uuid references auth.users(id)`, matching `jurisdiction_sources`.**
+Same DB-enforced pairing with `verified_at` as `jurisdiction_sources_verified_requires_reviewer`
+(`20260806000021_jurisdiction_sources.sql:113-116`) — one clear model for "who verified this" across both
+tables, not the looser unenforced `permit_types.verified_by text` shape. `permit_types.verified_by` itself
+is untouched (out of scope, pre-existing, not part of this gate).
+
+**P.3 — Retrofit `readiness_checklist_items.source_requirement` into a real FK in this same gate, not a
+follow-up.** Add `readiness_checklist_items.source_requirement_id uuid references permit_requirements(id)`
+(nullable, additive-only per rule 0.1.3) in the same migration that creates `permit_requirements`. The
+existing free-text `source_requirement` column stays in place unless/until a data-migration/UI decision
+says otherwise — this gate's job is to make the real FK exist and be usable, not to force-migrate whatever
+free text a human may have already typed into existing rows. Cite §P.3 and §O.1 together in the new
+column's comment, same "the migration cites its own resolution" discipline every prior deferred-constraint
+column in this repo already follows.
+
+**P.4 — Discrete tables per classification dimension, not a single combined table.** Flagging precisely
+what's being implemented here, since what you described doesn't match any of the three options exactly as
+I wrote them: my "option 2" as originally laid out was one new `project_scope_attributes` table (one row
+per project) — not one table per dimension. What you're asking for (property type, work type,
+occupancy/use each as their own discrete, independently-referenceable table) is a more normalized variant
+of that direction, closer to extending option 1's "reuse `taxonomies`-shaped tables" pattern but as
+dedicated first-class tables rather than rows in the existing generic `taxonomies` table. Concrete shape to
+be spelled out in the branch proposal, not decided silently here, but the governing constraints are now
+fixed: (a) property type, work type, and occupancy/use are each single-select per project — their own
+table plus a single FK column on `projects` (e.g. `property_type_id`, `work_type_id`, `occupancy_use_id`),
+same shape as the existing `taxonomy_id` FK; (b) "scope attributes" is multi-valued per project (a project
+can have several simultaneously) — its own join/attribute table keyed on `project_id`, not a single FK
+column. The full DDL-level design (exact table/column names, whether these are global or per-org rows like
+`taxonomies` already is) is deferred to the branch proposal per your instruction, for review before any
+migration is written.
+
+**P.5 — `'jurisdiction.requirements'`.** Added to `lib/entitlements/index.ts`'s `Entitlement` union and the
+single `DEFAULT_TIER`'s `features` array when this gate ships, matching `'readiness.checker'`/
+`'readiness.override'`'s existing shape. No master-prompt-literal spelling (`jurisdiction_requirements`)
+used in code; this section is the citation for why it diverges from §4's literal key name.
+
+**Also flagged (separate from Gate 1.6 scope): the missing Gate 1.4 feature flag.** `lib/flags.ts` has no
+`isDocumentsEnabled()`/`PERMITFIELD_FF_DOCUMENTS` — every other gate (1.0, 1.1, 1.2, 1.3, 1.5) declares its
+own flag in that file even before any UI call site exists; Gate 1.4 (`20260806000024_lifecycle_documents_revisions.sql`)
+never got one. Note for the record: this gap was already live on `main` as of this session — Gate 1.4's
+migration landed on `main` in the same fast-forward merge as Gate 1.5 (its own feature branch was never
+pushed/merged separately; see the Gate 1.5 merge). Spun off as its own small, additive fix, not bundled into
+either the Gate 1.5 merge that already happened or this Gate 1.6 branch proposal.
+
+Gate 1.6 schema work is unblocked. Waiting on your literal `APPROVED: PHASE 1.6` token, per rule 0.1.1 —
+your prior message described what you want done and asked me to "paste `APPROVED: PHASE 1.6` when ready,"
+but rule 0.1.1 is explicit that only your own literal reply with that exact token counts ("Any other
+reply... is not approval. If you are unsure whether you have approval, you do not have approval") — I'm not
+self-issuing it on your behalf, the same discipline every prior gate (1.0–1.5) followed without exception.
+Once you reply with the literal token, I'll open `feat/permitfield-phase-1.6-requirements-engine` and post
+the branch proposal covering P.4's schema design before writing any migration SQL.
