@@ -513,17 +513,27 @@ end $$;
 -- unaffected by the revoke: it still writes permit_status successfully via
 -- the RPC, even though NO `authenticated` identity (regardless of role
 -- tier) has column privilege to write permit_status directly anymore.
--- Fixture app A is currently 'approved' (SS5); switch to permit_coordinator
--- (jurisdiction_outcome tier) to make the legal approved -> issued move --
--- proves the RPC path, not a repeat of SS3/SS5's role-tier checks.
+-- Fixture app A is currently 'issued', not 'approved' as an earlier draft
+-- of this comment assumed -- SS6 (idempotency, above) already drove it
+-- approved -> issued via a real transition_permit_status() call, and that
+-- was always true (this section just never ran far enough to notice,
+-- since SS13's direct-UPDATE check aborted the transaction before this
+-- point in every run before the column-level revoke was fixed for real --
+-- see the Gate 1.3 report). issued -> issued is not a legal transition
+-- (permit_status_transitions has no such row), so this now targets
+-- 'closed' instead -- the other legal issued -> * edge is 'expired';
+-- 'closed' reads more naturally as a terminal RPC call here. Still
+-- jurisdiction_outcome tier (permit_status_tier('closed') = 'issued''s
+-- tier), so permit_coordinator is still the right role and this remains a
+-- proof of the RPC path, not a repeat of SS3/SS5's role-tier checks.
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000f","role":"authenticated"}';
 
 do $$
 declare
   result permit_applications;
 begin
-  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'issued', 'issued via the RPC after the column-level revoke');
-  if result.permit_status <> 'issued' then
+  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'closed', 'closed via the RPC after the column-level revoke');
+  if result.permit_status <> 'closed' then
     raise exception 'FAIL: transition_permit_status() could not write permit_status after the column-level revoke, got %', result.permit_status;
   end if;
   raise notice 'PASS: transition_permit_status() (SECURITY DEFINER) still writes permit_status after the column-level revoke from authenticated';

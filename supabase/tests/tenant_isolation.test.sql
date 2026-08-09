@@ -53,8 +53,18 @@ do $$
 declare
   updated_count int;
 begin
+  -- project_title was the original probe column; retargeted to `status`
+  -- (Gate 1.3 privilege fix -- 20260806000022) because `authenticated` no
+  -- longer holds any UPDATE grant on project_title at all (it was always
+  -- INSERT-only in practice, see the Gate 1.3 report's column-privilege
+  -- enumeration) -- an attempt against it now fails at the permission layer
+  -- before RLS is ever evaluated, which is a different thing than what this
+  -- check exists to prove. `status` is the one column `authenticated` has
+  -- a real, legitimate UPDATE grant on, so this is still a same-org write
+  -- that RLS's row-visibility filtering (not a permission wall) is what
+  -- turns into 0 affected rows.
   update permit_applications
-  set project_title = 'HACKED'
+  set status = 'submitted'
   where id = '40000000-0000-0000-0000-00000000000b';
   get diagnostics updated_count = row_count;
   if updated_count <> 0 then
