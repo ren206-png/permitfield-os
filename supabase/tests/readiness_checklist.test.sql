@@ -342,12 +342,18 @@ begin
   end;
 end $$;
 
--- 5c. Authorized role, valid reason: succeeds, stamps the three columns,
--- writes an audit_logs row.
+-- 5c. Authorized role, valid reason: succeeds, stamps the three columns.
+-- override_readiness_check() is SECURITY DEFINER so its own audit_logs
+-- write bypasses RLS regardless of caller -- but permit_manager itself is
+-- NOT in can_read_audit_logs()'s allowed role list (20260806000018: only
+-- owner/org_owner/platform_admin/auditor_readonly), so a follow-up SELECT
+-- against audit_logs run as permit_manager would be RLS-blinded to the row
+-- it just (successfully) caused to be written, producing a false failure.
+-- The write is verified separately in 5c-audit below, under a role that can
+-- actually see it.
 do $$
 declare
   result permit_applications;
-  audit_count int;
 begin
   select * into result from override_readiness_check('40000000-0000-0000-0000-000000000016', 'Client committed to filing the zoning variance separately; proceeding without it.');
 
@@ -358,6 +364,18 @@ begin
     raise exception 'FAIL: readiness_override_by = %, expected the calling permit_manager''s user id', result.readiness_override_by;
   end if;
 
+  raise notice 'PASS: override_readiness_check() succeeds for permit_manager, stamps readiness_override_*';
+end $$;
+
+-- 5c-audit. Switch to the Org A owner (who IS permitted by
+-- can_read_audit_logs()) purely to confirm the SECURITY DEFINER write from
+-- 5c actually landed -- this is a visibility-capable role, not the actor.
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
+
+do $$
+declare
+  audit_count int;
+begin
   select count(*) into audit_count
   from audit_logs
   where entity_type = 'permit_application'
@@ -367,11 +385,16 @@ begin
     raise exception 'FAIL: expected exactly 1 audit_logs row for this override, found %', audit_count;
   end if;
 
-  raise notice 'PASS: override_readiness_check() succeeds for permit_manager, stamps readiness_override_*, writes 1 audit_logs row';
+  raise notice 'PASS: override_readiness_check() wrote exactly 1 audit_logs row, visible to a can_read_audit_logs() role';
 end $$;
 
 -- 5d. Check 5 now allows ready_to_submit despite the required item still
 -- being 'pending' -- the override, not the checklist, is what satisfies it.
+-- Switch back to permit_manager to keep this the same actor that recorded
+-- the override (also confirms permit_manager, an ORG_TIER_ROLES member, can
+-- perform the ready_to_submit transition itself).
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000050","role":"authenticated"}';
+
 do $$
 declare
   result permit_applications;

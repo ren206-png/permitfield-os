@@ -145,7 +145,17 @@ begin
   raise notice 'PASS: cross-org fetch of Org A''s document and its revision history returns zero rows (IDOR-safe)';
 end $$;
 
--- anon sees nothing at all, same shape as tenant_isolation.test.sql.
+-- anon sees nothing at all, same shape as tenant_isolation.test.sql. Neither
+-- table has any GRANT to anon at all (20260806000011_grants.sql only grants
+-- anon select on permit_applications/jurisdictions) -- a role with zero
+-- table-level privileges is denied by Postgres before RLS is ever
+-- evaluated, so this does NOT fall through to an RLS-filtered empty result
+-- the way a granted-but-policy-denied role would. Same fix as
+-- e3e1fda (jurisdiction_sources.test.sql): accept either valid proof of
+-- "anon cannot read this table" (empty result or a caught
+-- insufficient_privilege exception), since which of the two mechanisms is
+-- currently in effect is an implementation detail, not the thing being
+-- proven.
 set local request.jwt.claims = '';
 set local role anon;
 
@@ -154,17 +164,27 @@ declare
   doc_count int;
   rev_count int;
 begin
-  select count(*) into doc_count from application_documents;
-  if doc_count <> 0 then
-    raise exception 'FAIL: anon role could see % application_documents rows', doc_count;
-  end if;
+  begin
+    select count(*) into doc_count from application_documents;
+    if doc_count <> 0 then
+      raise exception 'FAIL: anon role could see % application_documents rows', doc_count;
+    end if;
+    raise notice 'PASS: anon role sees zero application_documents rows';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: anon role has no table-level grant on application_documents at all (%)', sqlerrm;
+  end;
 
-  select count(*) into rev_count from document_revisions;
-  if rev_count <> 0 then
-    raise exception 'FAIL: anon role could see % document_revisions rows', rev_count;
-  end if;
-
-  raise notice 'PASS: anon role sees zero application_documents/document_revisions rows';
+  begin
+    select count(*) into rev_count from document_revisions;
+    if rev_count <> 0 then
+      raise exception 'FAIL: anon role could see % document_revisions rows', rev_count;
+    end if;
+    raise notice 'PASS: anon role sees zero document_revisions rows';
+  exception
+    when insufficient_privilege then
+      raise notice 'PASS: anon role has no table-level grant on document_revisions at all (%)', sqlerrm;
+  end;
 end $$;
 
 set local role authenticated;
