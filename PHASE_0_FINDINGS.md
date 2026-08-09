@@ -818,3 +818,45 @@ written (same discipline as §L.5): the exact new/altered column list, `document
 replacement archive-RLS policy text, and the feature-flag name.
 
 Zero code written, zero migrations written for Gate 1.4.
+
+## N. Unresolved: document review authorization model
+
+**Status: OPEN — flagged by you, not yet decided. Does not block the Gate 1.4 migration itself (see
+scoping note below), but must be resolved before any review-write functionality ships.**
+
+`supabase/migrations/20260806000024_lifecycle_documents_revisions.sql` adds `status`, `reviewed_by`,
+`reviewed_at`, and `rejection_reason` to `application_documents`, per §3.6's field list. That migration
+ships exactly two `SECURITY DEFINER` RPCs — `replace_application_document()` and
+`archive_application_document()` — and deliberately does **not** add a third RPC to write the review
+columns, because who is allowed to review a document is genuinely ambiguous in the matrix as it stands
+today:
+
+- `docs/PERMISSIONS.md`'s Table 2 and `lib/authz/index.ts`'s matrix both give `document_reviewer` exactly
+  `['create', 'read', 'archive']` on `application_documents` — **no `update`** — despite `document_reviewer`
+  being the one role literally named for reviewing documents.
+- `permit_coordinator` has `['create', 'read', 'update']` — has `update`, no `archive` — closer to what a
+  review action needs permission-shape-wise, but is not the role named for review.
+- No role/resource combination in the current matrix cleanly maps to "may set `status`/`reviewed_by`/
+  `reviewed_at`/`rejection_reason` on `application_documents`."
+
+So the review columns ship this gate as schema-only — same "exists, zero call sites yet" shape
+`permit_status` shipped under in Gate 1.3 (`20260806000022`) — and this is a real, cited gap, not an
+oversight silently left out.
+
+**The two paths, as you framed them:**
+
+1. Update `docs/PERMISSIONS.md`/`lib/authz/index.ts` to grant `document_reviewer` (and/or another role)
+   `update` on `application_documents`, with explicit rationale for exactly which role(s) and why, then add
+   a `review_application_document()` RPC — mirroring `replace_application_document()`'s and
+   `archive_application_document()`'s shape — in a follow-up gate.
+2. Review happens through a different mechanism entirely (not yet defined) — e.g. folded into
+   `audit_findings_review`'s existing review flow instead of a new document-level review action, or some
+   other shape you have in mind.
+
+**Scoping note:** this ambiguity does not block `20260806000024` as written — that migration adds no
+review-write path for anyone, so there is no permission decision embedded in it to get wrong. It blocks
+whatever gate/PR next tries to make `status`/`reviewed_by`/`reviewed_at`/`rejection_reason` actually
+writable.
+
+Zero decision made here. Waiting on you to pick a path (or specify a third one) before any
+review-write RPC or matrix change is written.
