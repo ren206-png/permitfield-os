@@ -140,8 +140,9 @@ Notable properties this table makes explicit:
   member," and enforced inside the function body rather than via RLS, since
   a single `is_org_member`-gated policy cannot express a role-specific rule
   the way an in-function role check can. See `PHASE_0_FINDINGS.md` §N for a
-  related, still-open question this same migration deliberately left
-  unresolved (who, if anyone, can write the review columns it also added).
+  related question this same migration deliberately left unresolved at the
+  time (who can write the review columns it also added) — now resolved:
+  `document_reviewer`, per the Table 2 notes below.
 - **`audit_logs` is the first table in this schema whose SELECT policy is
   narrower than plain `is_org_member`.** Every other table in this list uses
   org membership as the entire read boundary; `audit_logs` additionally
@@ -194,7 +195,7 @@ don't.
 | `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
 | `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R |
 | `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
-| `document_reviewer` | R | | R | R | C,R,A | R | R | R,U | R | C,R | R | R | R | R | R | R |
+| `document_reviewer` | R | | R | R | C,R,U,A | R | R | R,U | R | C,R | R | R | R | R | R | R |
 | `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R |
 | `client_user` | | | | R | | | | | R | | | | R | R | | R |
 | `auditor_readonly` | R | R | R | R | R | R | R | R | R | C,R | R | R | R | R | R | R |
@@ -274,16 +275,25 @@ Notes on deliberate asymmetries vs. Table 1:
   draws no distinction), reasoned in `lib/authz/index.ts`'s `client_user`
   comment: a client that can already read `permit_applications` has no
   reason to be blocked from that same application's status trail.
-- **`application_documents` (Gate 1.4) — every role's cell above is
-  unchanged, and that's deliberate.** `20260806000024` added `status`/
-  `reviewed_by`/`reviewed_at`/`rejection_reason` columns but shipped **no
-  RPC that writes them** (see `PHASE_0_FINDINGS.md` §N), so there is
-  nothing yet for any role's `update` grant on this resource to mean
-  differently than it already did. `archive` now maps to a real, enforced
-  mechanism (`archive_application_document()`, see Table 1's notes) for
-  exactly the roles already holding it in this table — Gate 1.4 makes what
-  Table 2 already claimed actually true at the DB layer; it does not expand
-  any role's grant.
+- **`application_documents` (Gate 1.4) — every role's cell is unchanged
+  EXCEPT `document_reviewer`, which gains `U`.** `20260806000024` added
+  `status`/`reviewed_by`/`reviewed_at`/`rejection_reason` columns but
+  shipped **no RPC that writes them yet** (see `PHASE_0_FINDINGS.md` §N).
+  §N's ambiguity is now resolved (user decision, Path 1): `document_reviewer`
+  — the role literally named for reviewing documents — previously had
+  `C,R,A` with no `U`, which was a contradictory reading (able to see and
+  archive a document but not mark it reviewed). `document_reviewer` now
+  carries `C,R,U,A` here and in `lib/authz/index.ts`'s matrix; every other
+  role's `application_documents` cell is untouched. This `U` grant ships
+  ahead of its RPC, same "matrix says yes before the write path exists"
+  shape `permit_status`/`transition_permit_status()` had between Gate 1.3's
+  schema and its RPC — `review_application_document()` is planned for a
+  follow-up gate (1.4.1), not this one, so there is still no route or RPC
+  in this repo that actually exercises this grant. `archive` maps to a
+  real, enforced mechanism (`archive_application_document()`, see Table 1's
+  notes) for exactly the roles already holding it in this table — Gate 1.4
+  makes what Table 2 already claimed actually true at the DB layer for
+  `archive`; it does not expand any role's `archive` grant.
 - **`document_revisions` (new, Gate 1.4) is not modeled as a `lib/authz`
   `Resource`**, same reasoning as `permit_status_transitions`: it has no
   independent write path for any role at all (both its writers are
@@ -292,12 +302,14 @@ Notes on deliberate asymmetries vs. Table 1:
   own read boundary exactly (`is_org_member`, two-hop join) — any role that
   can read a document's current state can read its full revision history,
   and vice versa; nothing narrows one without the other.
-- **Open: who may write `application_documents.status`/`reviewed_by`/
-  `reviewed_at`/`rejection_reason` is undecided.** `document_reviewer` — the
-  role literally named for this — has `C,R,A` above, no `U`, and (as just
-  noted) no RPC exists yet regardless of role. See `PHASE_0_FINDINGS.md` §N
-  for the two candidate resolutions under consideration. Do not infer a
-  document-review workflow from this table until that question is resolved.
+- **Resolved: who may write `application_documents.status`/`reviewed_by`/
+  `reviewed_at`/`rejection_reason`.** `PHASE_0_FINDINGS.md` §N is decided:
+  `document_reviewer` holds `U` on `application_documents` as of this
+  update (see bullet above) — that role, and only that role, is the
+  intended writer of the review columns. No RPC enforces this yet; that is
+  `review_application_document()`, scoped to Gate 1.4.1, not this gate. Do
+  not infer a working document-review flow from this table until that RPC
+  ships — the grant exists, the write path does not.
 
 ## Current status (read this before assigning any new role)
 
@@ -357,7 +369,10 @@ Notes on deliberate asymmetries vs. Table 1:
   `replace_application_document()` or `archive_application_document()` yet;
   no download route exists yet (`can()`'s first real call site, per
   `PHASE_0_FINDINGS.md` §M.3, is still pending); and no route or RPC writes
-  `status`/`reviewed_by`/`reviewed_at`/`rejection_reason` at all (§N,
-  unresolved). `isDocumentsEnabled()`/`PERMITFIELD_FF_DOCUMENTS` do not exist
-  in `lib/flags.ts` yet either — planned but not yet added as of this
+  `status`/`reviewed_by`/`reviewed_at`/`rejection_reason` at all yet — §N's
+  authorization question is resolved (`document_reviewer` holds `U` on
+  `application_documents`, see Table 2 notes above), but its RPC,
+  `review_application_document()`, is scoped to a follow-up gate (1.4.1),
+  not this one. `isDocumentsEnabled()`/`PERMITFIELD_FF_DOCUMENTS` do not
+  exist in `lib/flags.ts` yet either — planned but not yet added as of this
   migration.

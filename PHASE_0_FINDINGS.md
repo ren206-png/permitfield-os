@@ -819,10 +819,10 @@ replacement archive-RLS policy text, and the feature-flag name.
 
 Zero code written, zero migrations written for Gate 1.4.
 
-## N. Unresolved: document review authorization model
+## N. Document review authorization model
 
-**Status: OPEN — flagged by you, not yet decided. Does not block the Gate 1.4 migration itself (see
-scoping note below), but must be resolved before any review-write functionality ships.**
+**Status: RESOLVED (Path 1 chosen by you) — see "Resolution" below. Original finding preserved
+unedited for the record; does not block the Gate 1.4 migration itself (see scoping note below).**
 
 `supabase/migrations/20260806000024_lifecycle_documents_revisions.sql` adds `status`, `reviewed_by`,
 `reviewed_at`, and `rejection_reason` to `application_documents`, per §3.6's field list. That migration
@@ -860,3 +860,18 @@ writable.
 
 Zero decision made here. Waiting on you to pick a path (or specify a third one) before any
 review-write RPC or matrix change is written.
+
+**Resolution (your decision): Path 1.** `document_reviewer` with `C,R,A` and no `U` was itself a
+contradictory reading — the role literally named for reviewing documents could see and archive one
+but not mark it reviewed. `docs/PERMISSIONS.md`'s Table 2 and `lib/authz/index.ts`'s matrix are updated:
+`document_reviewer` now holds `['create', 'read', 'update', 'archive']` on `application_documents`, with
+an inline comment in `lib/authz/index.ts` citing this section. No other role's `application_documents`
+cell changed.
+
+This resolves the *authorization* question only. The RPC (`review_application_document()`, writing
+`status`/`reviewed_by`/`reviewed_at`/`rejection_reason`, mirroring `replace_application_document()`'s and
+`archive_application_document()`'s shape) is explicitly **not** part of Gate 1.4 — it is scoped to a
+small follow-up gate, **1.4.1**. Gate 1.4 itself ships schema + the archive path + this permissions
+change, same "grant exists ahead of its RPC" shape `permit_status` shipped under between Gate 1.3's
+schema and `transition_permit_status()`. Until 1.4.1 lands, `document_reviewer`'s new `U` grant has no
+route or RPC that exercises it — do not infer a working review flow from the matrix alone.

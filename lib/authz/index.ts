@@ -307,15 +307,25 @@ const matrix: PermissionMatrix = {
     organizations: READ_ONLY_LOG,
     contractors: READ_ONLY_LOG,
     permit_applications: READ_ONLY_LOG,
-    application_documents: ['create', 'read', 'archive'],
+    // 'update' added per PHASE_0_FINDINGS.md SS N's resolution (Path 1,
+    // decided by the user): document_reviewer with C,R,A but no U was
+    // contradictory -- the role literally named for reviewing documents
+    // could see and archive them but not mark one reviewed. Enables
+    // reviewing (status/rejection_reason); the actual write path
+    // (review_application_document()) is a follow-up gate, 1.4.1 -- this
+    // grant exists ahead of that RPC, same "matrix says yes before the RPC
+    // exists" shape permit_status's transition_permit_status() shipped
+    // under in Gate 1.3.
+    application_documents: ['create', 'read', 'update', 'archive'],
     extractions: READ_ONLY_LOG,
     audits: READ_ONLY_LOG,
     audit_findings_review: REVIEW,
     generated_documents: READ_ONLY_LOG,
     audit_logs: SELF_LOG,
     // Reviewer's job is the finding-review step, not project intake -- kept
-    // read-only across all four new resources, same tier as
-    // contractors/permit_applications above.
+    // read-only across the other three new resources, same tier as
+    // contractors/permit_applications above. application_documents is now
+    // the one exception (see comment above).
     taxonomies: READ_ONLY_LOG,
     clients: READ_ONLY_LOG,
     properties: READ_ONLY_LOG,
