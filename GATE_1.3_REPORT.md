@@ -1,34 +1,43 @@
 # GATE 1.3 REPORT — Permit Applications Status State Machine
 
 Branch: `feat/permitfield-phase-1.3-permit-status-machine`
-Commits covered: `6077d9f` (original), `b00a89e` (Gate 1.3 review round 2),
-`66b882d` (round 3 — first real execution, found the column-privilege
-defect), plus the round-4 fix described in §7/§9 below (privilege model
-corrected, verified, and about to be committed alongside this report
-update).
+Commits covered: originally `6077d9f`/`b00a89e`/`66b882d`/`862fde5` (rounds
+1–4, in that order); this branch was then **rebased onto `main`** (round 4b,
+below), which rewrote every commit hash — the current tip as of this report
+is `6536d2b` (round 4's privilege fix, same content as `862fde5` before the
+rebase), sitting on top of `d0e49ac`/`ca3dbda`/`548bead` (rounds 1–3,
+rewritten) and `main`'s `f9015da`/`e3e1fda`/`4adb1fc` (the three pre-existing
+test-file fixes this branch picked up via the rebase), plus the round-4b
+report-correction commit described in §7/§9/§10 below (about to be committed
+alongside this update).
 This is the first `§6 GATE <n> REPORT` written in this repo. Per explicit
 instruction, Gates 1.0–1.2 are **not** retroactively documented here or
 anywhere else — this report covers Gate 1.3 only.
 
-**Framing, stated up front, updated from round 3:** round 3's execution (the
-first time this branch's SQL had ever actually been run, against a real
-Postgres instance under RLS) revealed a privilege-bypass defect in the
-column-level lockout approach — a column-level `REVOKE` layered on top of a
-pre-existing table-level `GRANT`, which is a no-op in Postgres's privilege
-model. That defect was root-caused, documented, and reported without being
-silently patched (round 3's framing: "Gate 1.3 discovering a failure static
-review missed"). This round (4) implements and verifies the actual fix —
-`REVOKE` table-level `UPDATE` from `authenticated` entirely, then `GRANT` it
-back only on the one column with a legitimate direct-write call site
-(`status`) — and re-ran the full local test suite twice against a freshly
-reset database to confirm both the fix and its side effects. The gate is now
-closing clean on its own scope: all 14 sections of
-`permit_status_machine.test.sql` pass, and the one pre-existing file the fix
-touched incidentally (`tenant_isolation.test.sql`) was found regressed,
-root-caused, fixed with the user's exact specification, and re-verified to
-pass all 8 of its checks. Three other pre-existing files remain failing on
-causes unrelated to this gate (§7) — explicitly out of scope, not silently
-left out of this report.
+**Framing, stated up front, updated from round 3, then again after the
+round-4b rebase:** round 3's execution (the first time this branch's SQL had
+ever actually been run, against a real Postgres instance under RLS) revealed
+a privilege-bypass defect in the column-level lockout approach — a
+column-level `REVOKE` layered on top of a pre-existing table-level `GRANT`,
+which is a no-op in Postgres's privilege model. That defect was root-caused,
+documented, and reported without being silently patched (round 3's framing:
+"Gate 1.3 discovering a failure static review missed"). Round 4 implements
+and verifies the actual fix — `REVOKE` table-level `UPDATE` from
+`authenticated` entirely, then `GRANT` it back only on the one column with a
+legitimate direct-write call site (`status`). Round 4 also found and fixed a
+real regression the fix caused in `tenant_isolation.test.sql` (not a Gate
+1.3 file). After round 4's commit was pushed, CI ran for the first time on
+this branch and failed — not on anything Gate 1.3 touched, but because three
+other pre-existing `supabase/tests/*.test.sql` files (previously documented
+here as "out of scope, unrelated") had already been fixed on `main` by three
+commits made after this branch diverged, and this branch hadn't picked them
+up yet. **Round 4b**: rebased this branch onto `main` to pick up those
+fixes, and in doing so discovered that one of this report's own earlier
+findings was itself wrong — the `taxonomy_id` "cross-tenant isolation gap"
+was a test-harness false positive, not a real schema defect (full retraction
+in §7/§9/§10). The gate now closes with **all five
+`supabase/tests/*.test.sql` files passing** (zero known SQL test failures on
+this branch), not just the two files Gate 1.3 itself touched.
 
 ---
 
@@ -280,17 +289,50 @@ regardless).
   RLS proof, legitimate column"), which was implemented and re-verified: all
   8 checks now **PASS** against the freshly reset database, round-4 privilege
   fix included.
-- `audit_logs.test.sql`, `jurisdiction_sources.test.sql` — both still fail immediately on a literal fixture typo (`raised_at` is not a real `auth.users` column). Pre-existing, unrelated to this gate, unchanged by any round-4 fix. Per instruction, **not fixed here** — already in scope for `prep/never-executed-test-fixes`, to be addressed there.
-- `lifecycle_intake.test.sql` — still a genuine, real FAIL, unchanged by any round-4 fix: `org A project accepted a taxonomy_id belonging to org B`. `projects.taxonomy_id` has no composite `(org_id, taxonomy_id)` FK, unlike `contractor_id`/`client_id`/`property_id` on the same table, which do and correctly reject cross-org references. **Discovered but out-of-scope for Gate 1.3** — a real cross-tenant isolation gap in migration `20260806000019`, from an earlier gate. Per instruction, flagged here so it isn't forgotten, to be opened as its own gate with a composite-FK design, test coverage, and a data audit for any already-existing bad rows.
 
-**Full-suite final state (round 4, this report), all five files re-run
-against one freshly reset database in sequence:** `tenant_isolation` 8/8
-PASS, `permit_status_machine` 14/14 PASS, `audit_logs` and
-`jurisdiction_sources` still fail on the pre-existing `raised_at` typo
-(unchanged, out of scope), `lifecycle_intake` still fails on the pre-existing
-`taxonomy_id` gap (unchanged, out of scope). No file regressed further and
-no new failure was introduced anywhere outside `tenant_isolation`, which was
-found and fixed as described above.
+**Round-4b update: this branch was rebased onto `main`**, which had, in the
+interim, picked up three commits (`4adb1fc`, `e3e1fda`, `f9015da`) fixing the
+exact defects in `audit_logs.test.sql`, `jurisdiction_sources.test.sql`, and
+`lifecycle_intake.test.sql` that earlier drafts of this report described as
+"pre-existing, out of scope." Post-rebase, all three now pass:
+
+- `audit_logs.test.sql`, `jurisdiction_sources.test.sql` — the `raised_at`
+  fixture typo (not a real `auth.users` column) is fixed on `main`
+  (`4adb1fc`); `jurisdiction_sources.test.sql` also had two assertions fixed
+  (`e3e1fda`, `f9015da`) that wrongly expected a silent zero-row/zero-affected
+  result where Postgres actually denies at the permission layer before RLS
+  runs (no table-level grant at all for `anon`/no DELETE grant for
+  `authenticated`) — both now accept either valid proof. **PASS**, both files.
+- `lifecycle_intake.test.sql` — **PASS**, including the `taxonomy_id`
+  cross-org check. **Retraction:** earlier drafts of this report (§7/§9/§10,
+  as originally written) stated `projects.taxonomy_id` had "no composite
+  `(org_id, taxonomy_id)` FK" and called this "a real cross-tenant isolation
+  gap in migration `20260806000019`... deserves its own gate." **This was
+  wrong.** The composite FK has always existed —
+  `supabase/migrations/20260806000019_lifecycle_intake_properties_clients_taxonomies.sql:164`:
+  `foreign key (org_id, taxonomy_id) references taxonomies (org_id, id)`,
+  identical in shape to `contractor_id`/`client_id`/`property_id`'s FKs on the
+  same table. The apparent "FAIL" was a test-harness defect fixed by `main`'s
+  `4adb1fc`: the test looked up org B's `taxonomy_id` *after* switching to
+  org A's JWT claims, so RLS silently returned `NULL` for that lookup, and
+  under `MATCH SIMPLE` a `NULL` in a composite FK column exempts the whole
+  constraint from enforcement — the insert "succeeding" proved nothing about
+  the schema, only that the test's own lookup had already failed silently.
+  Verified directly: ran `main`'s corrected version of this file against this
+  branch's schema (which had not changed) and got "PASS: cross-org
+  taxonomy_id on projects rejected by composite FK" before the rebase was
+  even done, then again after the rebase with the file now natively part of
+  this branch. **Earlier testing appeared to show a cross-tenant `taxonomy_id`
+  gap; this was a test-harness defect, not a schema defect. The composite FK
+  is correctly implemented. Retracted** — no follow-up gate is needed for
+  this; it should not have been opened as a finding in the first place.
+
+**Full-suite final state (post-rebase, this report), all five files re-run
+against one freshly reset database in sequence:** `audit_logs` 9/9 PASS,
+`jurisdiction_sources` 15/15 PASS, `lifecycle_intake` 13/13 PASS (retraction
+above), `permit_status_machine` 14/14 PASS, `tenant_isolation` 8/8 PASS —
+**all five files pass, zero known failures remaining** in
+`supabase/tests/*.test.sql` as of this branch, post-rebase.
 
 **`lib/permit-status/transitions.test.ts`** (vitest, no DB): part of the 249
 passing tests below.
@@ -317,13 +359,15 @@ fixes applied but not yet committed at time of running:
 - **`supabase/migrations_blocked/20260806000023b` is unapplied by design**, waiting on `createApplicationAction` being updated to supply `project_id` before the `NOT NULL` step can be promoted into `supabase/migrations/`. Not part of this gate's live schema.
 - **Round-4 update: `backfill_orphaned_application_projects()`'s test coverage ran and passed this session** (§7 check 14) — round 3 left this unverified because check 13's transaction abort blocked it; round 4's privilege fix unblocked it, and both the 2-orphan and 11-orphan safety-valve cases now execute and pass, recorded in this report from an actual run, not the earlier unreported round-2 ad hoc pass.
 - Three bugs fixed in round 2 (commit `b00a89e`, before this report) are execution-verified only indirectly: the NOT NULL split and seed.sql project_id fix are directly confirmed (§7 — `db reset` completes without error). The idempotency `ON CONFLICT` fix and the optimistic-concurrency `40001` guard are confirmed only via check 5's sequential pass and code review, not via genuine concurrent load (see the bullet above).
+- **Retraction, cross-referenced from §7:** earlier drafts of this report listed a `projects.taxonomy_id` cross-tenant isolation gap as a real, confirmed defect requiring its own future gate. That was wrong — see §7's "Round-4b update" for the full retraction. Nothing further is owed on this item; it is not carried forward as an open task.
 
 ## 10. Known limitations and risks
 
 - **The column-level lockout gap (§6/§7 check 13) is fixed as of round 4** — no longer a live risk on this branch. Kept here as a historical note: through round 3, any `authenticated` org member could bypass every rule `transition_permit_status()` enforces via a raw UPDATE; round 4's revoke/grant fix (§6) closes that path at the privilege layer, verified both directly (`information_schema`) and via the test suite.
 - **The pipeline `status` column shares the same underlying privilege architecture** as `permit_status` did before round 4 — it now has an *intentional* column-level `UPDATE` grant (the round-4 fix's re-grant target), and it has a real, in-use direct-UPDATE call site (`submit`/`confirm-review` routes), but nothing validates that the caller updating `status` holds the right role for that specific transition (e.g. nothing stops a plain `member` from directly setting `status = 'submitted'` outside the normal submit flow, the way `transition_permit_status()` enforces role tiers for `permit_status`). Out of scope for this gate — flagged for awareness, not a Gate 1.3 defect since it predates this gate and nothing in this gate weakened it further; the round-4 fix only made this column's grant *narrower* (column-level instead of table-level), not role-aware.
 - **`main` does not yet contain `PHASE_0_FINDINGS.md` at the same content/location as this branch** (surfaced incidentally while diffing this branch against `main` for this report) — not investigated further, out of scope for a Gate 1.3 report; noting it so it isn't lost.
-- This report and every commit on this branch (`b00a89e`, `66b882d`, and the round-4 commit this report is bundled with) are, as of this report being written, **still on a single local machine with no remote** — but that is about to change: the next step after this report and commit land is creating a GitHub remote and pushing this branch, per instruction, which is where CI actually runs this suite end-to-end for the first time. Until that push happens, the branch's only redundancy remains the (intact, not yet dropped) `stash@{0}` plus local commit history — per standing instruction, `stash@{0}` is not to be dropped until the branch exists on a remote.
+- **Retraction, cross-referenced from §7:** see §7's "Round-4b update" and §9's retraction bullet above — the `taxonomy_id` cross-tenant gap previously listed here as a known limitation/risk was a test-harness false positive, not a real risk. Removed from this section; not carried forward.
+- **Superseded, round-4b:** an earlier draft of this bullet said the branch was "still on a single local machine with no remote." That is no longer accurate — `origin` (`https://github.com/ren206-png/permitfield-os`) already existed with `main` pushed before this gate's work began, the round-4 commit was pushed to a feature branch on it, and this branch has since been rebased onto `main` (picking up three unrelated pre-existing-bug fixes, §7) and is being re-pushed. `stash@{0}`'s local-only redundancy caveat no longer applies now that commits exist on a remote; it is safe to consider dropping per the original standing instruction ("once the branch has been pushed somewhere off this machine"), though it has not been dropped as part of this report.
 
 ## 11. Adversarial self-check
 
