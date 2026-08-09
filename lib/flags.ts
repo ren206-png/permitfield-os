@@ -102,3 +102,21 @@ export function isApplicationsEnabled(): boolean {
 export function isReadinessEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_READINESS');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.6. Gates nothing at runtime yet --
+// same "declared ahead of its consumer" pattern as every flag above: this
+// gate ships supabase/migrations/20260806000026_permit_requirements_engine.sql
+// (permit_requirements, jurisdiction_permit_rules, project_permit_requirements,
+// project_taxonomy_selections, and the readiness_checklist_items.
+// source_requirement_id retrofit) with zero UI, Server Action, or evaluation
+// RPC call site -- the deterministic evaluation function itself is explicitly
+// deferred to a follow-up commit on this same branch (see that migration's
+// header comment). The schema, RLS, and grants are live regardless of this
+// flag's value, same as every other flag in this file -- the flag will gate
+// the application-layer entry point (and the evaluation RPC's call site) once
+// they exist. Named for the master prompt's own gate identifier
+// ("permitfield_requirements"), same naming discipline as isReadinessEnabled/
+// isApplicationsEnabled above.
+export function isRequirementsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_REQUIREMENTS');
+}
