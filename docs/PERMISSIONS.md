@@ -27,7 +27,8 @@ exists today.
 | `org_members` | `is_org_member` | `is_org_owner` | `is_org_owner` | `is_org_owner` | `20260806000002` |
 | `contractors` | `is_org_member` | `is_org_member` | `is_org_member` | `is_org_owner` | `20260806000003` |
 | `permit_applications` | `is_org_member` | `is_org_member` | `is_org_member` | `is_org_owner` | `20260806000006` |
-| `application_documents` | `is_org_member` (via parent application) | `is_org_member` (via parent) | *(no policy — uploads are immutable)* | `is_org_member` (via parent — **not owner-restricted**) | `20260806000006` |
+| `application_documents` | `is_org_member` (via parent application) | `is_org_member` (via parent) | *(no policy for `authenticated` — mutations only via `replace_application_document()`/`archive_application_document()`, both `security definer`; Gate 1.4)* | *(no policy — hard delete removed in Gate 1.4; archival only via `archive_application_document()`)* | `20260806000006`, `20260806000024` |
+| `document_revisions` (new, Gate 1.4) | `is_org_member` (via `application_documents` → parent application, two-hop join) | *(no policy for `authenticated` — only writers are the `seed_document_revision()` trigger and `replace_application_document()`, both `security definer`)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | *(none — append-only, `forbid_update_delete()` trigger-enforced)* | `20260806000024` |
 | `extractions` | `is_org_member` (via parent) | *(no policy for `authenticated`; `service_role` only, `20260806000015`)* | *(none — append-only, trigger-enforced)* | *(none — append-only, trigger-enforced)* | `20260806000007` |
 | `audits` | `is_org_member` (via parent) | *(`service_role` only)* | *(none — append-only)* | *(none — append-only)* | `20260806000009` |
 | `audit_findings` | `is_org_member` (via parent) | *(`service_role` only)* | `is_org_member`, but a trigger further restricts the update to `review_status`/`reviewed_by`/`reviewed_at` only (`audit_findings_restrict_update_trigger`) | *(none — `forbid_delete()` trigger)* | `20260806000009` |
@@ -122,11 +123,25 @@ Notable properties this table makes explicit:
   The 8 new `org_role` values added in Phase 1.0 are legal to store in
   `org_members.role` but do not change a single query result anywhere in this
   schema yet.
-- **`application_documents` DELETE is not owner-restricted**, unlike
-  `contractors`/`permit_applications`. Any org member can delete any document
-  in their org today. This asymmetry is pre-existing (predates Phase 1.0) and
-  is called out here rather than silently "fixed", since fixing it is a
-  behavior change this phase's additive-only discipline does not authorize.
+- **`application_documents` DELETE was not owner-restricted — CLOSED in Gate
+  1.4.** Previously any org member could delete any document in their org;
+  this asymmetry was pre-existing (predates Phase 1.0) and was called out
+  here rather than silently "fixed," since fixing it was a behavior change
+  Phase 1.0's additive-only discipline did not authorize at the time.
+  `20260806000024_lifecycle_documents_revisions.sql` removes the raw
+  `application_documents_delete` policy and revokes the table-level `DELETE`
+  grant from `authenticated` entirely — hard delete is no longer a reachable
+  path for anyone, at any role. The replacement, `archive_application_document()`
+  (`security definer`), gates archival to the roles holding `archive` on
+  `application_documents` in Table 2 below (`owner`, `org_owner`,
+  `platform_admin`, `member`, `permit_manager`, `document_reviewer`,
+  `applicant_contractor` — notably **not** `permit_coordinator`, which has
+  `update` but not `archive` on this resource) — narrower than "any org
+  member," and enforced inside the function body rather than via RLS, since
+  a single `is_org_member`-gated policy cannot express a role-specific rule
+  the way an in-function role check can. See `PHASE_0_FINDINGS.md` §N for a
+  related, still-open question this same migration deliberately left
+  unresolved (who, if anyone, can write the review columns it also added).
 - **`audit_logs` is the first table in this schema whose SELECT policy is
   narrower than plain `is_org_member`.** Every other table in this list uses
   org membership as the entire read boundary; `audit_logs` additionally
@@ -187,14 +202,24 @@ don't.
 Notes on deliberate asymmetries vs. Table 1:
 
 - `Action` here is `'create' | 'read' | 'update' | 'archive'` — **not**
-  `'delete'**. This repo's destructive-action convention is soft/archival, so
+  `'delete'`. This repo's destructive-action convention is soft/archival, so
   the target model names the action `archive` even though the *current* DB
-  layer (Table 1) performs real hard deletes for `contractors`,
-  `permit_applications`, and `application_documents`. Wiring `can()`'s
-  `archive` check into a route in a later phase does not, by itself,
-  soft-delete anything — the underlying DELETE statements would need their
-  own migration to add an `archived_at` column, which does not exist yet
-  (confirmed absent repo-wide during the Phase 0 audit).
+  layer (Table 1) still performs real hard deletes for `contractors` and
+  `permit_applications`. Wiring `can()`'s `archive` check into a route for
+  either of those two does not, by itself, soft-delete anything — the
+  underlying DELETE statements would need their own migration to add an
+  `archived_at` column, which does not exist yet for either table (confirmed
+  absent during the Phase 0 audit, still true as of Gate 1.4).
+  **`application_documents` no longer belongs in that group, as of Gate
+  1.4** (`20260806000024`): it now has a real `archived_at`/`archived_by`
+  pair and a real, enforced archive-only path (`archive_application_document()`;
+  hard DELETE removed entirely — see Table 1 above and its note on this
+  table). This is the first resource in this document where Table 2's
+  `archive` action and Table 1's actual enforcement mechanism agree in
+  *shape* (soft-delete, role-gated) — though `can()` itself still has no
+  call site anywhere in the app (see "Current status" below); the RPC
+  enforces its own role list directly in SQL, independent of and not wired
+  to `lib/authz/index.ts`'s matrix.
 - `owner`/`org_owner`/`member`/`applicant_contractor` rows above are
   citation-backed against Table 1 (see `lib/authz/index.ts`'s inline
   comments citing migration line numbers) — they are meant to *equal*
@@ -249,6 +274,30 @@ Notes on deliberate asymmetries vs. Table 1:
   draws no distinction), reasoned in `lib/authz/index.ts`'s `client_user`
   comment: a client that can already read `permit_applications` has no
   reason to be blocked from that same application's status trail.
+- **`application_documents` (Gate 1.4) — every role's cell above is
+  unchanged, and that's deliberate.** `20260806000024` added `status`/
+  `reviewed_by`/`reviewed_at`/`rejection_reason` columns but shipped **no
+  RPC that writes them** (see `PHASE_0_FINDINGS.md` §N), so there is
+  nothing yet for any role's `update` grant on this resource to mean
+  differently than it already did. `archive` now maps to a real, enforced
+  mechanism (`archive_application_document()`, see Table 1's notes) for
+  exactly the roles already holding it in this table — Gate 1.4 makes what
+  Table 2 already claimed actually true at the DB layer; it does not expand
+  any role's grant.
+- **`document_revisions` (new, Gate 1.4) is not modeled as a `lib/authz`
+  `Resource`**, same reasoning as `permit_status_transitions`: it has no
+  independent write path for any role at all (both its writers are
+  `security definer`), so there is no permission distinction left for a
+  matrix cell to express. Its SELECT visibility follows `application_documents`'
+  own read boundary exactly (`is_org_member`, two-hop join) — any role that
+  can read a document's current state can read its full revision history,
+  and vice versa; nothing narrows one without the other.
+- **Open: who may write `application_documents.status`/`reviewed_by`/
+  `reviewed_at`/`rejection_reason` is undecided.** `document_reviewer` — the
+  role literally named for this — has `C,R,A` above, no `U`, and (as just
+  noted) no RPC exists yet regardless of role. See `PHASE_0_FINDINGS.md` §N
+  for the two candidate resolutions under consideration. Do not infer a
+  document-review workflow from this table until that question is resolved.
 
 ## Current status (read this before assigning any new role)
 
@@ -298,3 +347,17 @@ Notes on deliberate asymmetries vs. Table 1:
   exists ahead of any consumer, same as `isJurisdictionsEnabled()` did in
   Phase 1.2. See `docs/STATUS_TRANSITIONS.md` for the full transition graph
   and role-tier model this gate introduces.
+- **`document_revisions` and the new `application_documents` columns (Gate
+  1.4, `20260806000024`) are partial infrastructure — not the same "zero
+  consumers" state as the bullets above.** `application_documents` itself is
+  not new and already has a real consumer (`app/api/documents/route.ts`,
+  the upload route, unchanged by this migration and still working via the
+  pre-existing INSERT policy — plus `lib/inngest/functions/{extract,audit}.ts`,
+  also unchanged). What's new and still unconsumed: no route calls
+  `replace_application_document()` or `archive_application_document()` yet;
+  no download route exists yet (`can()`'s first real call site, per
+  `PHASE_0_FINDINGS.md` §M.3, is still pending); and no route or RPC writes
+  `status`/`reviewed_by`/`reviewed_at`/`rejection_reason` at all (§N,
+  unresolved). `isDocumentsEnabled()`/`PERMITFIELD_FF_DOCUMENTS` do not exist
+  in `lib/flags.ts` yet either — planned but not yet added as of this
+  migration.
