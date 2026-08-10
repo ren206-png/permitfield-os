@@ -1368,3 +1368,117 @@ site required this branch.
 Gate 1.6 deferred work is unblocked. Waiting on your literal `APPROVED: PHASE 1.6 DEFERRED WORK` token, per
 rule 0.1.1, before opening the branch and writing the additive `evaluation_run_id` migration, the evaluator
 RPC, the review RPC, the determinism test, and the entitlement wiring.
+
+## R. Gate 1.6 deferred-work branch addendum — the matching algorithm itself (added after §Q's approval,
+before any code on `feat/permitfield-phase-1.6-requirements-evaluator`, per rule 8 and your explicit
+instruction to flag conflicts in a new section before writing code)
+
+**Status: one open item (R.1) needs your confirmation before the RPC is written; R.2-R.4 are proceeding as
+stated unless you object, same "not blocked" treatment §P/§Q gave their own low-stakes items.**
+
+§Q deliberately deferred "the exact matching algorithm" to this point (§Q's own "Not blocked by the above"
+note: "algorithm-level detail properly scoped to the branch proposal, once Q.1-Q.4's schema questions are
+resolved"). Re-reading the shipped schema (`20260806000026`, now on `main`) while designing
+`match_permit_requirements(...)` surfaced one real conflict between two reasonable designs and the
+already-shipped CHECK constraint — flagging it rather than picking silently, since it determines actual
+plpgsql behavior before any of it is written.
+
+### R.1 — unresolved rows must be project/dimension-level, not per-catalog-row, because the shipped CHECK
+constraint forbids an unresolved row from referencing which `permit_requirement`/`jurisdiction_permit_rules`
+row was indeterminate
+
+Two candidate designs for handling a project with *some but not all* classification inputs set:
+
+**Design A (per-catalog-row indeterminate tracking)**: for each candidate `permit_requirements` row (in the
+project's jurisdiction), evaluate its `jurisdiction_permit_rules`. A rule's dimension is a definite mismatch
+if the rule specifies a code and the project's selection disagrees; a definite match if every specified
+dimension agrees; *indeterminate* if a rule specifies a dimension the project hasn't set at all (not "no
+value" — genuinely unanswered) and no other dimension is a definite mismatch. A permit_requirement with at
+least one indeterminate rule and no definite match becomes its own unresolved row, naming which requirement
+and which rule couldn't be resolved. This is the most precise design and avoids ever forcing a user to fill
+in a classification dimension that no rule in their jurisdiction actually cares about.
+
+**Design A does not fit the shipped schema.** `project_permit_requirements_matched_or_unresolved`
+(`20260806000026:384-387`) requires an unresolved row to carry **neither** `permit_requirement_id` **nor**
+`jurisdiction_permit_rule_id` — only `unresolved_reason text`. There is no column on an unresolved row to
+record *which* catalog requirement or rule was indeterminate. Loosening that CHECK constraint now (to allow
+an unresolved row to also carry `permit_requirement_id`) is possible as a follow-up migration, but it would
+be revising an already-merged constraint's meaning, not a pure addition, four days after telling you it was
+"correct" and committing it — I'm not doing that silently.
+
+**Design B (project/dimension-level unresolved rows, fits the shipped schema as-is)**: before evaluating any
+rule, determine which of the project's classification dimensions (`jurisdiction_id` on `properties`,
+`property_type`/`work_type`/`occupancy_use` via `project_taxonomy_selections`, `construction_value_cents` via
+Q.1's new column) are unset. Scope the check to only the dimensions actually referenced by at least one
+non-archived `jurisdiction_permit_rules` row under a `permit_requirements` row in the project's jurisdiction
+(no `jurisdiction_id` means this scoping itself can't run — see below). For each such unset-but-relevant
+dimension, insert exactly one unresolved row (`unresolved_reason` naming the dimension, e.g.
+`'construction_value_not_set'`, `'work_type_not_selected'`), independent of which specific catalog rows
+reference it. `jurisdiction_id` itself is a harder gate than the other four: without it, the evaluator cannot
+even select which `permit_requirements` rows are in scope, so a missing `properties.jurisdiction_id` short-
+circuits the whole run to a single `unresolved_reason = 'jurisdiction_not_set'` row and nothing else runs.
+Once all *relevant* dimensions are set, rule matching proceeds as normal definite-match/definite-mismatch
+logic (no indeterminate case can occur, since every dimension a candidate rule cares about is now known) —
+a `permit_requirements` row with zero matching rules is simply omitted (§3.4's "no rule found is a valid,
+visible output," at the project level, not force-tracked per catalog row).
+
+My recommendation: **Design B**, since it's the only one that doesn't require touching the already-shipped
+constraint, and it still avoids forcing irrelevant fields (the "scoped to dimensions actually referenced"
+qualifier). The trade-off you're accepting versus Design A: less precision (a project blocked on, say,
+`work_type_not_selected` won't be told *which specific permits* that would have unblocked — just that the
+dimension itself is outstanding). Flagging this trade-off explicitly rather than assuming it's acceptable.
+
+### R.2 — tie-break when multiple rules under the same `permit_requirement_id` all definitely match
+
+Record `priority desc, created_at asc, id asc` — highest `priority` integer wins (more specific rules are
+expected to carry a higher number; `default 0` is the least specific), ties broken deterministically by
+insertion order then id, so the 100-iteration determinism test has a single well-defined answer regardless
+of row-scan order. Proceeding on this unless you object — no existing precedent to derive it from, but it's
+a one-line ORDER BY, cheap to change later.
+
+### R.3 — `warnings` jsonb: populated when a matched requirement isn't `verified`
+
+§3.4: "verified fees only, verified processing estimates only." A matched row whose `permit_requirements.verification_status
+<> 'verified'` gets a `warnings` entry (e.g. `{"code": "unverified_requirement", "message": "Fee and
+processing estimates for this requirement have not been verified; contact the jurisdiction directly."}`) —
+`fee_cents`/`processing_estimate_*` are still joinable/readable by a caller, but the warning is the signal
+not to render them as authoritative. Proceeding unless you object.
+
+### R.4 — `evaluation_inputs` snapshot shape
+
+`{"jurisdiction_id": ..., "property_type_code": ..., "work_type_code": ..., "occupancy_use_code": ...,
+"scope_attribute_codes": [...], "construction_value_cents": ...}` — one flat object, codes not ids (matches
+`jurisdiction_permit_rules`' own choice to reference `taxonomies.code`, per that migration's own comment,
+`20260806000026:270-279`). Proceeding unless you object.
+
+### Not blocked by the above
+
+- **`evaluate_project_permit_requirements(p_project_id)`'s own role gate**: none needed at the DB layer for
+  *running* an evaluation (unlike the review RPC) — §3.4 doesn't restrict who can trigger a (re-)evaluation,
+  only who can review its output. `SECURITY DEFINER` still required (RLS on `project_permit_requirements` has
+  no INSERT policy for `authenticated`), but the function itself only needs an `is_org_member(org_id)` check
+  before writing, same shape as every other org-scoped write path.
+- **`evaluation_run_id` generation**: `gen_random_uuid()` called once at the top of
+  `evaluate_project_permit_requirements`, reused for every row that run inserts — not a per-row default,
+  so a single call to the wrapper always produces one traceable batch.
+
+### Resolutions (your decisions)
+
+**R.1 — Design B, approved.** Project/dimension-level unresolved rows (`'jurisdiction_not_set'`,
+`'property_type_not_selected'`, `'work_type_not_selected'`, `'occupancy_use_not_selected'`,
+`'construction_value_not_set'`), scoped to dimensions actually referenced by a candidate rule in the
+project's jurisdiction; `jurisdiction_id` unset short-circuits to a single `'jurisdiction_not_set'` row.
+Reopening `project_permit_requirements_matched_or_unresolved` (already reviewed and merged) to support
+Design A's per-catalog-row precision is explicitly rejected — the precision loss ("work_type not yet
+selected" vs. "work_type not yet selected, which would unblock permits X and Y") is accepted as acceptable,
+not nice-to-have-but-required. No constraint changes to the shipped schema.
+
+**R.2-R.4 — approved as stated.** `priority desc, created_at asc, id asc` tie-break; `warnings` populated for
+matched-but-unverified requirements; `evaluation_inputs` as the flat code-keyed snapshot described above.
+
+Gate 1.6 deferred work's design surface is now fully resolved (§Q + §R). Proceeding to open
+`feat/permitfield-phase-1.6-requirements-evaluator` and write the `evaluation_run_id` migration (plus Q.1's
+`projects.estimated_construction_value_cents` and Q.2's `properties.jurisdiction_id`, both prerequisites the
+evaluator reads directly), `match_permit_requirements`/`evaluate_project_permit_requirements`,
+`review_project_permit_requirement`, the determinism test, and the entitlement wiring. Migration SQL shown
+for review before it's run against the local stack, per your standing instruction.
