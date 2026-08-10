@@ -1193,3 +1193,178 @@ reply... is not approval. If you are unsure whether you have approval, you do no
 self-issuing it on your behalf, the same discipline every prior gate (1.0–1.5) followed without exception.
 Once you reply with the literal token, I'll open `feat/permitfield-phase-1.6-requirements-engine` and post
 the branch proposal covering P.4's schema design before writing any migration SQL.
+
+## Q. Gate 1.6 deferred-work pre-branch addendum — evaluator RPC, review RPC, determinism test,
+entitlement wiring (added before any follow-up branch, per rule 8; `20260806000026_permit_requirements_engine.sql`
+and `lib/flags.ts`'s `isRequirementsEnabled()` are already committed and merged to `main`)
+
+**Status: OPEN — six items below, two of which are corrections to §P's own resolved findings, not new
+design surface. Flagging that distinction explicitly, since rule 8 applies equally to "a decision this
+repo already made was wrong" as to "a decision hasn't been made yet."**
+
+Master prompt citation: same §3.4 as §P. §P resolved and shipped the schema. What's left, per §P's own
+"Not blocked by the above" preview and the master prompt's own list of hard constraints: the deterministic
+evaluation function itself, the human review step §3.4 requires (`preliminary` must be flippable by an
+authorized reviewer), the 100-iteration determinism test, and the entitlement wiring §P.5 already named but
+did not add to `lib/entitlements/index.ts`.
+
+### Q.1 — correction to §P.4: "construction value is already covered" was wrong; `projects` has no
+construction-value column reachable before the engine runs
+
+§P.4's original text (line 1094-1095, written before this gate's branch existed) reads: *""Construction
+value" is already covered — `permit_applications.estimated_job_value_cents`
+(`20260806000006_applications_and_documents.sql:27`) exists from Gate 1.0 and needs no new column."* This
+was accepted without objection through the whole Gate 1.6 schema design and the merge to `main`. Re-checking
+it against §3.4's own input list now that the schema exists: `permit_applications.estimated_job_value_cents`
+lives on a row that requires `permit_type_id uuid not null references permit_types(id)`
+(`20260806000006:21`) — i.e. a `permit_applications` row cannot exist until a specific permit type has
+already been chosen. But §3.4's construction-value input is supposed to feed the engine that *determines*
+which permit types apply in the first place — that's the whole point of the gate. Using
+`estimated_job_value_cents` as an evaluator input is circular: it doesn't exist yet at the point the
+evaluator needs to read it. Confirmed via `grep -n
+"value_cents\|construction_value\|job_value" supabase/migrations/*.sql` that no other candidate column
+exists anywhere — not on `projects`, not on `properties`.
+
+Proposed, not decided: add `projects.estimated_construction_value_cents bigint check
+(estimated_construction_value_cents >= 0)`, nullable, additive, same float-free convention as
+`permit_applications.estimated_job_value_cents` (`lib/money/cents.ts`). Nullable because a project can exist
+before a value estimate is entered — an unset value becomes an `unresolved_question` at evaluation time
+(§3.4's own "unknown inputs produce an explicit unresolved_question, never a guess" constraint), not a
+default of 0.
+
+### Q.2 — new gap: no `jurisdiction_id` linkage from `properties`/`projects` to `jurisdictions`
+
+Repo-wide grep across every migration confirms `jurisdiction_id` is referenced only by `authorities`,
+`permit_types`, `jurisdiction_code_chunks`, and `jurisdiction_sources` — never by `properties` or
+`projects`. The only existing path from a project to a `jurisdictions` row is
+`permit_applications.permit_type_id → permit_types.jurisdiction_id`, which has the same circularity problem
+as Q.1: it requires a `permit_applications` row, which requires a `permit_type_id`, which is the evaluator's
+*output*, not an available input. Without some `jurisdiction_id` reachable pre-application, the evaluator
+cannot deterministically scope which `jurisdiction_permit_rules` rows even apply to a given project — "which
+jurisdiction is this" is itself one of §3.4's required outputs ("responsible jurisdiction"), but the rules
+lookup needs it as an input first to filter `permit_requirements.jurisdiction_id`.
+
+I considered and provisionally reject fuzzy-matching `properties.city`/`province_code` (free text) against
+`jurisdictions.municipality`/`province_code` (also free text, no normalization anywhere in the schema) —
+that's a guess dressed up as a lookup, and violates §3.4's own "never guess, never default" constraint the
+same way an unset construction value would.
+
+Proposed, not decided: add `properties.jurisdiction_id uuid references jurisdictions(id)`, nullable,
+additive. Human-selected (e.g. a dropdown scoped by `province_code`), not inferred from address text. The
+evaluator treats a null value as an explicit `unresolved_question` ("jurisdiction not yet confirmed for this
+property") rather than guessing. Placed on `properties` rather than `projects` since a jurisdiction is a
+property-level fact (a property doesn't move between projects), consistent with how `properties` already
+owns the other location fields the engine needs (§P.4's "project location is already covered" claim, which
+this addendum does *not* dispute — that one still holds).
+
+### Q.3 — evaluate-RPC write semantics: append-only vs. replace
+
+Not addressed by §P at all — the schema supports either, since `project_permit_requirements` has no
+`evaluation_run_id` or similar column today. Two options:
+1. **Append-only**: every call to `evaluate_project_permit_requirements(p_project_id)` inserts a fresh batch
+   of rows, stamped with a new `evaluation_run_id uuid` generated by the RPC (not a column default, so the
+   RPC controls exactly which rows belong to which run). "Latest results" = latest `evaluation_run_id` per
+   project. Already-reviewed rows (`reviewed_by`/`reviewed_at` set) are never touched by a later run — they
+   become immutable historical decisions, and a new run simply produces new unreviewed rows alongside them.
+2. **Replace-prior-unreviewed**: a new run deletes or archives rows from the same project that were never
+   reviewed, then inserts fresh ones — no `evaluation_run_id` needed, but "why did this row disappear"
+   becomes harder to answer later without a run identifier, and it's a second table (beyond `audit_logs`)
+   where a delete-like operation needs to be reasoned about.
+My reading, stated but not acted on: **append-only with `evaluation_run_id`**, matching the
+`application_status_history`/`audit_logs` append-only-ledger convention this repo already uses everywhere
+else a "what happened, in order" record matters (`20260806000022:271-278`, `20260806000018:35-38`). This
+needs a small additive migration of its own (new nullable-no, `evaluation_run_id uuid not null` column plus
+an index) before the RPC can be written, since the current schema has no such column.
+
+### Q.4 — a review RPC is required by §3.4, not yet named or scoped
+
+§3.4's hard constraint — "every engine output starts `preliminary` until an authorized `permit_manager`
+reviews it (persisted column, not a UI label)" — is already enforced at the schema level
+(`project_permit_requirements.preliminary boolean not null default true`,
+`reviewed_by`/`reviewed_at` paired via the `project_permit_requirements_reviewed_pair` check constraint),
+but there is currently no sanctioned write path to flip it: `authenticated` has no INSERT/UPDATE grant on
+`project_permit_requirements` at all (by design, per this migration's own "does NOT do" section). A review
+RPC is required, not optional, to make the column reachable. Proposed shape, modeled directly on
+`override_readiness_check()` (`20260806000025:267-...`): `SECURITY DEFINER`, explicit org-membership +
+role check as its first statements (same `permit_status_tier()`-derived role list — owner, org_owner,
+platform_admin, permit_manager — `20260806000022:244-262`), sets `reviewed_by = auth.uid()`, `reviewed_at =
+now()`, `preliminary = false`, and writes an `audit_logs` row (same pattern `override_readiness_check()`
+follows). Name proposed, not decided: `review_project_permit_requirement(p_id uuid)`.
+
+### Q.5 — determinism test shape/location
+
+§P's own "Not blocked by the above" section already called this "no open question" in the abstract (a
+100-iteration same-input-same-output assertion), but didn't fix *where* it lives. Since the matching logic
+is specified to run in SQL/plpgsql (§3.4: "zero AI in the decision path," rules are data evaluated
+deterministically) rather than TypeScript, I'm proposing a new
+`supabase/tests/permit_requirements_engine.test.sql`, consistent with every other piece of DB-enforced logic
+in this repo being tested via the existing `supabase/tests/*.test.sql` + `scripts/run-sql-tests.sh`
+convention (7 files today, all wrapped in `begin; ... rollback;`) rather than introducing a new
+vitest/TypeScript test path for this one gate. Also proposing the deterministic core be split into a pure
+function the test calls directly — e.g. `match_permit_requirements(...)` (stateless, no writes) — separate
+from a thin `evaluate_project_permit_requirements(p_project_id)` wrapper that gathers a project's live
+inputs and persists results via Q.3's write semantics. This split isn't required by §3.4, but it's what
+makes "assert identical output across 100 iterations" cheap to write and fast to run (no need to re-insert a
+whole project's worth of rows per iteration, just call the pure function 100 times with the same arguments).
+
+### Q.6 — entitlement wiring: mechanical, already named in §P.5, not yet executed
+
+No new question here — §P.5 already resolved the key name (`'jurisdiction.requirements'`) before this
+gate's schema shipped, but `lib/entitlements/index.ts`'s `Entitlement` union (currently `'projects.create' |
+'readiness.checker' | 'readiness.override'`, line 41) and `DEFAULT_TIER.features` (line 54) were never
+updated — there's no call site yet, same "declared ahead of its consumer" posture as every flag in
+`lib/flags.ts`. Naming it here only so it's tracked as part of this branch's scope rather than silently
+dropped a second time (it was already named once, in §P.5, and not yet done).
+
+### Not blocked by the above, previewed for when work starts
+
+- **`match_permit_requirements`'s exact matching algorithm** (how `jurisdiction_permit_rules.priority`
+  breaks ties when multiple rules match the same `permit_requirement_id`, how `required_scope_attribute_codes`
+  ALL-must-match is evaluated against a project's `project_taxonomy_selections` rows of `kind =
+  'scope_attribute'`, how a `permit_requirement` with zero matching rules surfaces as
+  `unresolved_reason`) is deliberately not designed in this addendum — it's algorithm-level detail properly
+  scoped to the branch proposal, once Q.1-Q.4's schema questions are resolved, not a conflict-check item.
+- **RLS for the new `evaluation_run_id` column and the review RPC's grants**: no open question — same
+  `is_org_member(org_id)` / `SECURITY DEFINER` shapes already used throughout this schema, just applied to
+  one more column and one more function.
+
+### Resolutions (your decisions)
+
+**Q.1 — `projects.estimated_construction_value_cents bigint`, nullable, additive.** Unset value is an
+explicit `unresolved_question` at evaluation time, never a default of 0. Confirms the circularity diagnosis:
+`permit_applications.estimated_job_value_cents` is downstream of `permit_type_id`, which is exactly what the
+evaluator exists to determine, so it cannot serve as the evaluator's own input.
+
+**Q.2 — `properties.jurisdiction_id uuid references jurisdictions(id)`, nullable, additive.** Human-selected
+only; fuzzy-matching `city`/`province_code` free text against `jurisdictions.municipality`/`province_code`
+free text is rejected as a guess dressed up as a lookup, same as Q.1's reasoning. Unset value is an explicit
+`unresolved_question`, not an inference from address text.
+
+**Q.3 — append-only, with a new `project_permit_requirements.evaluation_run_id uuid not null` column** (no
+table default; the RPC generates and stamps one value per call). Matches the `audit_logs`/
+`application_status_history` ledger convention already used everywhere else in this schema for "what
+happened, in order." Already-reviewed rows are never touched by a later run. This requires its own small
+additive migration (new column + supporting index) ahead of the evaluator RPC itself, since
+`20260806000026` shipped without it.
+
+**Q.4 — `review_project_permit_requirement(p_id uuid)`, modeled directly on `override_readiness_check()`.**
+`SECURITY DEFINER`; explicit org-membership + role check as its first statements (same
+`permit_status_tier()`-derived role list — owner, org_owner, platform_admin, permit_manager); sets
+`reviewed_by = auth.uid()`, `reviewed_at = now()`, `preliminary = false`; writes an `audit_logs` row, same
+pattern `override_readiness_check()` already follows.
+
+**Q.5 — proceed as proposed.** New `supabase/tests/permit_requirements_engine.test.sql`, same
+`begin;...rollback;` convention as the existing seven files, run via `scripts/run-sql-tests.sh`. Split a
+pure `match_permit_requirements(...)` function (stateless, no writes) that the 100-iteration test calls
+directly, separate from the `evaluate_project_permit_requirements(p_project_id)` wrapper that gathers a
+project's live inputs and persists results per Q.3's write semantics.
+
+**Q.6 — proceed as proposed.** `'jurisdiction.requirements'` added to `lib/entitlements/index.ts`'s
+`Entitlement` union and `DEFAULT_TIER.features`, matching §P.5's already-resolved key name. No new call
+site required this branch.
+
+**Branch name — confirmed: `feat/permitfield-phase-1.6-requirements-evaluator`.**
+
+Gate 1.6 deferred work is unblocked. Waiting on your literal `APPROVED: PHASE 1.6 DEFERRED WORK` token, per
+rule 0.1.1, before opening the branch and writing the additive `evaluation_run_id` migration, the evaluator
+RPC, the review RPC, the determinism test, and the entitlement wiring.
