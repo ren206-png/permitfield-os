@@ -38,7 +38,23 @@
 // future Route Handler/Server Action wrapping that RPC (and the checklist
 // UI generally) has them ready to call, same "declared now, enforced later
 // at the call site" pattern every flag in lib/flags.ts already follows.
-export type Entitlement = 'projects.create' | 'readiness.checker' | 'readiness.override';
+// 'jurisdiction.requirements' added in Gate 1.6's deferred work
+// (PHASE_0_FINDINGS.md SS P.5, confirmed unchanged in SS Q.6): the master
+// prompt's S4 spells this `jurisdiction_requirements` (its literal key
+// list), same divergence SS O.3 already established for
+// `readiness_checker`/`readiness_override` above -- kept dot-namespaced for
+// consistency rather than mixing spelling conventions within this file. No
+// call site yet: neither evaluate_project_permit_requirements() nor
+// review_project_permit_requirement() (20260806000027) enforce role gates
+// via this module -- the review RPC's permit_manager+ check is done in SQL,
+// same "the DB enforces what a DB-layer RPC actually can enforce" reasoning
+// SS O.3's readiness keys already established. This key exists so a future
+// Route Handler/Server Action wrapping either RPC has it ready to call.
+export type Entitlement =
+  | 'projects.create'
+  | 'readiness.checker'
+  | 'readiness.override'
+  | 'jurisdiction.requirements';
 export type LimitKey = 'projects.active_max';
 
 interface EntitlementTier {
@@ -51,7 +67,7 @@ interface EntitlementTier {
 // header for why.
 const DEFAULT_TIER: EntitlementTier = {
   name: 'default',
-  features: ['projects.create', 'readiness.checker', 'readiness.override'],
+  features: ['projects.create', 'readiness.checker', 'readiness.override', 'jurisdiction.requirements'],
   limits: {
     'projects.active_max': 50,
   },

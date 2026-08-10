@@ -37,6 +37,18 @@ describe('can()', () => {
     expect(can('org-a', 'readiness.checker')).toBe(can('org-b', 'readiness.checker'));
     expect(can('org-a', 'readiness.override')).toBe(can('org-b', 'readiness.override'));
   });
+
+  // Gate 1.6 deferred work (PHASE_0_FINDINGS.md SS Q.6): 'jurisdiction.requirements'
+  // added alongside the existing keys in the same DEFAULT_TIER -- same
+  // "one hardcoded tier, no orgId branching" contract as every key above.
+  it('grants jurisdiction.requirements under the default tier for any orgId', () => {
+    expect(can('20000000-0000-0000-0000-00000000000a', 'jurisdiction.requirements')).toBe(true);
+    expect(can('some-other-org-id', 'jurisdiction.requirements')).toBe(true);
+  });
+
+  it('jurisdiction.requirements is not sensitive to orgId', () => {
+    expect(can('org-a', 'jurisdiction.requirements')).toBe(can('org-b', 'jurisdiction.requirements'));
+  });
 });
 
 describe('limit()', () => {
