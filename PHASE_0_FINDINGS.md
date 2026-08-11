@@ -1482,3 +1482,124 @@ Gate 1.6 deferred work's design surface is now fully resolved (§Q + §R). Proce
 evaluator reads directly), `match_permit_requirements`/`evaluate_project_permit_requirements`,
 `review_project_permit_requirement`, the determinism test, and the entitlement wiring. Migration SQL shown
 for review before it's run against the local stack, per your standing instruction.
+
+## S. Gate 1.7 pre-branch addendum — Dashboard query layer (added before any Gate 1.7 branch, per rule 8 and
+your explicit instruction to flag conflicts in §S before writing code)
+
+**Status: two open items (S.1 panel set, S.2 role visibility) need your decision before any query or
+migration is written. Nothing else in §3.8 is ambiguous.**
+
+### S.1 — "Panels per the brief": no such brief exists in this repository
+
+§3.8's full text, verbatim:
+
+> Panels per the brief. Real queries only — no mock data, no placeholder counts, not even temporarily.
+> Every panel implements four states: loading, empty, error, permission-denied. Every query is org-scoped
+> at the DB layer. Aggregations must not N+1; state the query count per dashboard load in the phase report.
+
+That's the entire section — one paragraph, no panel list. Every other "per the brief" gate in this same
+document resolves its own reference by immediately inlining the actual field list in the same subsection —
+e.g. §3.1 spells out the project intake fields, §3.7 (quoted above, previous section) spells out the
+checklist-item fields verbatim ("required/optional, responsible party, due date, completion status,
+reviewer, review timestamp, rejection reason, related document, source requirement, last verified date").
+§3.8 is the one exception: it names "the brief" and then supplies zero content from it.
+
+I checked every plausible in-repo location for that content before flagging this as a conflict rather than
+just proceeding on a guess:
+- `docs/PERMITFIELD_OS_EXPANSION_MASTER_PROMPT.md` itself — no panel/KPI/metric/widget list anywhere outside
+  §3.8's one paragraph.
+- `PHASE_0_FINDINGS_ORIGINAL_MISSION.md` — read in full (180 lines) and grepped for
+  `panel|KPI|metric|widget|chart|overview|summary card`; this file is Phase 0's own environment/workspace
+  audit (documents that `~/Desktop` isn't a git repo, flags an unrelated leaked PAT in a different project's
+  `.git/config`, records the decision to build greenfield at `permitfield-os`) — it is not a product/UI brief
+  and contains no dashboard content. The only grep hits were incidental and unrelated (a physical-building
+  "panel work" reference; an unrelated AI-audit "citation-validity-rate metric" in this repo's own README).
+- `PHASE_0_FINDINGS.md` (this file, §A–§R) — no panel list; only forward-looking mentions of "dashboard" as
+  a future gate name.
+- `README.md` — no panel/KPI content.
+
+There is no external brief file attached to this engagement either. I'm treating this the same way I treated
+R.1's constraint conflict: naming it explicitly rather than inventing panel content and presenting it as if
+it came from a source that doesn't exist here.
+
+**Proposed resolution — a concrete candidate panel set, grounded only in tables/columns that already exist
+and are already queryable, so nothing here requires new schema:**
+
+1. **Project status distribution** — count of `projects` grouped by `status` (`draft`/`active`/`on_hold`/
+   `completed`/`archived`), org-scoped.
+2. **Permit pipeline** — count of `permit_applications` grouped by `permit_status` (the 16-value enum,
+   intake → ... → issued/expired/closed), org-scoped.
+3. **Readiness scores** — for active applications, `compute_readiness_score(application_id)` results
+   (this function already exists and is the only sanctioned way to get a score — §3.7's "no cached
+   denormalized number that can drift" rule applies here too, so this panel calls the same RPC rather than
+   reading any cached value).
+4. **Requirements engine outcomes** — counts from `project_permit_requirements` split into matched /
+   unresolved / has-warnings, org-scoped, reusing the table Gate 1.6 just shipped.
+5. **Document review status** — count of `application_documents` grouped by `status` (`pending`/`approved`/
+   `rejected`), excluding archived (`archived_at is null`), org-scoped.
+
+This is a recommendation, not a decision I'm making unilaterally — same pattern as R.1's Design A/B fork.
+Approve, amend (add/remove/reorder panels), or replace it outright with panel content from wherever "the
+brief" actually is, if you have it outside this repo.
+
+### S.2 — role visibility: which of the 8 `org_role` values should see which panels?
+
+Nothing in the schema currently branches dashboard-style aggregate reads on role beyond blanket
+`is_org_member(org_id)` gating (the same check every other domain table's RLS policy uses). The current
+`org_role` enum (`20260806000018`) has legacy `owner`/`member` plus 8 additively-added values:
+`platform_admin`, `org_owner`, `permit_manager`, `permit_coordinator`, `document_reviewer`,
+`applicant_contractor`, `client_user`, `auditor_readonly`. §3.8 says nothing about restricting panels by
+role, and no precedent elsewhere in the master prompt establishes a general "read visibility" tiering for
+aggregate/reporting data the way §3.7 did for the specific `readiness_override` action.
+
+Two options, not picking either silently:
+- **(a) Uniform visibility** — every org member (any of the 8 roles, or legacy `owner`/`member`) sees every
+  panel, gated only by `is_org_member(org_id)`, same as `readiness_checklist_items`/
+  `project_permit_requirements` reads today. Simplest, matches "nothing in §3.8 says otherwise."
+  My recommendation, absent a reason to withhold aggregate counts from any member role — none of the five
+  proposed panels expose anything a member with read access to the underlying tables couldn't already
+  compute themselves from those tables' existing RLS-gated rows.
+- **(b) Role-scoped visibility** — e.g. `client_user`/`applicant_contractor` see only their own
+  project(s)' data or a reduced panel subset, `auditor_readonly` sees everything read-only, etc. This would
+  be new authorization surface not implied by anything currently in `lib/authz` or the RLS policies, and
+  would need its own design pass (which panels, which roles, denied vs. filtered) before any query is
+  written.
+
+Also noting, as a related but separate fact (not a Gate-1.7 blocker, flagging for awareness): `is_org_owner()`
+(`20260806000002`) still only recognizes the literal `'owner'` value, not `'org_owner'` — the newer role
+values are schema-only until `lib/authz` is taught about them. This predates Gate 1.7 and isn't something
+I'm proposing to fix as part of this gate unless you want it folded in.
+
+### Not blocked by the above
+
+- **Four states (loading/empty/error/permission-denied) and N+1 avoidance**: unambiguous, no conflict,
+  proceeding as literally stated regardless of how S.1/S.2 resolve.
+- **Org-scoping at the DB layer**: every one of the five proposed panels reads from a table that already has
+  RLS org-scoping; no new RLS policy design needed for option S.2(a). Option S.2(b) would need new policies.
+- **`analytics` entitlement key** (§4's list): not yet wired anywhere in `lib/entitlements`. Gate 1.7 is the
+  natural place to add it, gating the dashboard route itself the same way `jurisdiction.requirements`/
+  `readiness.checker`/`readiness.override` gate their respective gates — proceeding on this regardless of
+  S.1/S.2's outcome.
+
+Requesting your decision on S.1 (approve the five-panel set, amend it, or supply the actual brief content)
+and S.2 (uniform vs. role-scoped visibility) before any branch, migration, or query is written. Once
+resolved, proceeding under the same `APPROVED: PHASE 1.7`-style literal token convention as every prior gate.
+
+### Resolutions (your decisions)
+
+**S.1 — approved as stated.** The five-panel set (project status distribution, permit pipeline, readiness
+scores via `compute_readiness_score()`, requirements-engine matched/unresolved/warnings, document review
+status) stands as the panel content for Gate 1.7, in place of the missing external "brief." No amendment.
+
+**S.2 — approved as stated: uniform visibility.** All org members, any of the 8 `org_role` values (plus
+legacy `owner`/`member`), see every panel, gated only by `is_org_member(org_id)` — no per-role filtering or
+denial for Gate 1.7. If a later gate needs role-scoped dashboard views, that's an explicit override to design
+then, not something Gate 1.7 is building preemptively.
+
+Gate 1.7's design surface is now fully resolved (§S). Waiting on your literal `APPROVED: PHASE 1.7` token,
+per rule 0.1.1 — your prior message described both decisions and asked me to "paste `APPROVED: PHASE 1.7`
+when ready," but rule 0.1.1 is explicit that only your own literal reply with that exact token counts ("Any
+other reply... is not approval. If you are unsure whether you have approval, you do not have approval") —
+I'm not self-issuing it on your behalf, same discipline every prior gate (1.0–1.6) followed without
+exception. Once you reply with the literal token, I'll open `feat/permitfield-phase-1.7-dashboard` and post
+the five query/migration proposals for review before running anything.
