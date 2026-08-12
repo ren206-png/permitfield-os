@@ -120,3 +120,22 @@ export function isReadinessEnabled(): boolean {
 export function isRequirementsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_REQUIREMENTS');
 }
+
+// Lifecycle & Compliance Expansion, Phase 1.7. Gates nothing at runtime yet --
+// same "declared ahead of its consumer" pattern as every flag above: this
+// gate ships supabase/migrations/20260806000028_dashboard_queries.sql (five
+// dashboard_*() SQL functions -- project status counts, permit pipeline
+// counts, readiness score buckets, requirements-engine summary, document
+// review counts) with zero UI, Route Handler, or Server Component call site
+// -- the user explicitly scoped this gate to "the dashboard query layer"
+// (PHASE_0_FINDINGS.md SS S), not the panels themselves. The schema, RLS
+// (inherited from each underlying table -- none of the five functions is
+// SECURITY DEFINER), and grants are live regardless of this flag's value,
+// same as every other flag in this file -- the flag will gate the
+// application-layer entry point once a later phase adds the actual
+// dashboard route. Named for the master prompt's own gate identifier
+// ("permitfield_dashboard"), same naming discipline as isRequirementsEnabled/
+// isReadinessEnabled above.
+export function isDashboardEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_DASHBOARD');
+}

@@ -50,11 +50,22 @@
 // same "the DB enforces what a DB-layer RPC actually can enforce" reasoning
 // SS O.3's readiness keys already established. This key exists so a future
 // Route Handler/Server Action wrapping either RPC has it ready to call.
+// 'analytics' added in Gate 1.7 (PHASE_0_FINDINGS.md SS S): the master
+// prompt's S4 spells this key literally `analytics` already (no
+// underscore-vs-dot divergence to resolve here, unlike the three keys
+// above). No call site yet: the five dashboard_*() SQL functions
+// (20260806000028) enforce no entitlement of their own (same "the DB
+// enforces what RLS can enforce, the call site enforces the rest" split
+// every prior key here follows) -- this key exists so the future dashboard
+// Route Handler/Server Component gates the whole panel set on one
+// can(orgId, 'analytics') check before calling any of them, consistent with
+// SS S's documented "permission-denied without a query issued" contract.
 export type Entitlement =
   | 'projects.create'
   | 'readiness.checker'
   | 'readiness.override'
-  | 'jurisdiction.requirements';
+  | 'jurisdiction.requirements'
+  | 'analytics';
 export type LimitKey = 'projects.active_max';
 
 interface EntitlementTier {
@@ -67,7 +78,13 @@ interface EntitlementTier {
 // header for why.
 const DEFAULT_TIER: EntitlementTier = {
   name: 'default',
-  features: ['projects.create', 'readiness.checker', 'readiness.override', 'jurisdiction.requirements'],
+  features: [
+    'projects.create',
+    'readiness.checker',
+    'readiness.override',
+    'jurisdiction.requirements',
+    'analytics',
+  ],
   limits: {
     'projects.active_max': 50,
   },

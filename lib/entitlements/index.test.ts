@@ -49,6 +49,18 @@ describe('can()', () => {
   it('jurisdiction.requirements is not sensitive to orgId', () => {
     expect(can('org-a', 'jurisdiction.requirements')).toBe(can('org-b', 'jurisdiction.requirements'));
   });
+
+  // Gate 1.7 (PHASE_0_FINDINGS.md SS S): 'analytics' added alongside the
+  // existing keys in the same DEFAULT_TIER -- same "one hardcoded tier, no
+  // orgId branching" contract as every key above.
+  it('grants analytics under the default tier for any orgId', () => {
+    expect(can('20000000-0000-0000-0000-00000000000a', 'analytics')).toBe(true);
+    expect(can('some-other-org-id', 'analytics')).toBe(true);
+  });
+
+  it('analytics is not sensitive to orgId', () => {
+    expect(can('org-a', 'analytics')).toBe(can('org-b', 'analytics'));
+  });
 });
 
 describe('limit()', () => {
