@@ -75,6 +75,57 @@ end $$;
 
 -- application_documents is joined through permit_applications, not org-scoped
 -- directly -- prove the join-based policy holds too.
+--
+-- GATE_2_0_FINDINGS.md SS E.3 flagged this block as vacuous in its original
+-- form: it asserted a 0-row result for org B's application_id, but no
+-- application_documents row for org B existed anywhere in this file or in
+-- seed.sql, so the 0-row result proved nothing about RLS -- it would have
+-- passed identically with application_documents_select deleted entirely.
+-- Fixed by seeding a real org B row first, with a control check proving it
+-- exists before org A's owner's RLS context is ever engaged for the read
+-- below -- same discipline dashboard_queries.test.sql's own Part 1 control
+-- check applies.
+--
+-- NOTE on how the fixture is inserted: the original draft of this fix used
+-- `set local role service_role;` for this insert, mirroring the technique
+-- this file already uses two blocks down for the audits/audit_findings
+-- fixture. That failed here with "permission denied for table
+-- application_documents" -- 20260806000015_service_role_grants.sql grants
+-- service_role only `select, update` on this table, deliberately, not
+-- `insert` (see that migration's own header comment: it's a scoped grant,
+-- not a blanket one, and no prior migration grants it either). Adding the
+-- missing grant would fix it but requires a migration, which is out of
+-- scope for this change. So this control uses org B's own owner under
+-- `authenticated` instead -- a legitimate same-org insert, RLS *engaged*
+-- rather than bypassed, but WITH CHECK correctly allows it because it's org
+-- B's own application. That's a materially different control than "RLS not
+-- yet engaged": it proves the row is real by showing RLS's own INSERT policy
+-- accepts it for the rightful owner, not by bypassing RLS. It still fully
+-- defeats the original vacuousness problem (a real org B row now exists
+-- prior to org A's read), which is the property this block exists to
+-- restore.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000b","role":"authenticated"}';
+
+do $$
+declare
+  control_count int;
+begin
+  insert into application_documents (application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
+  values ('40000000-0000-0000-0000-00000000000b', 'orgB/test.pdf', 'test.pdf', 'application/pdf', 1000,
+          repeat('b', 64), 'other');
+
+  select count(*) into control_count
+  from application_documents
+  where application_id = '40000000-0000-0000-0000-00000000000b';
+  if control_count <> 1 then
+    raise exception 'FAIL (control): expected 1 application_documents row for org B''s application under org B''s own RLS context (just inserted it), got % -- the later 0-row assertion under org A''s RLS context would prove nothing without this row existing', control_count;
+  end if;
+  raise notice 'PASS (control): org B''s own owner can see org B''s freshly-inserted application_documents row (count=1) -- the later 0-row result under org A''s RLS context is therefore RLS actively blocking a real match, not an empty match to begin with.';
+end $$;
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
+
 do $$
 declare
   doc_count int;
@@ -89,7 +140,7 @@ begin
   if doc_count <> 0 then
     raise exception 'FAIL: org A owner could see org B''s application_documents';
   end if;
-  raise notice 'PASS: application_documents join-based isolation holds';
+  raise notice 'PASS: application_documents join-based isolation holds (control-verified above: a real org B row exists, and RLS -- not fixture absence -- is what hides it from org A)';
 end $$;
 
 -- audits/audit_findings are joined through permit_applications too (not
