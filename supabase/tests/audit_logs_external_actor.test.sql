@@ -146,11 +146,18 @@ end $$;
 
 -- Adjacent coverage, not in §6's literal list but the same constraint-
 -- verification discipline: audit_logs_external_actor_label_requires_id
--- rejects a label with no id to attach to.
+-- rejects a label with no id to attach to. Must populate actor_user_id/
+-- actor_role (internal-actor branch) here so the row satisfies
+-- audit_logs_actor_exactly_one_populated on its own -- that constraint is
+-- checked in definition order before this one, so leaving actor_user_id/
+-- actor_role null (as an earlier version of this block did) trips it
+-- first and never actually exercises audit_logs_external_actor_label_requires_id
+-- at all.
 do $$
 begin
-  insert into audit_logs (id, org_id, action, entity_type, external_actor_id, external_actor_label)
+  insert into audit_logs (id, org_id, actor_user_id, actor_role, action, entity_type, external_actor_id, external_actor_label)
   values ('51000000-0000-0000-0000-00000000000d', '20000000-0000-0000-0000-00000000000a',
+          '10000000-0000-0000-0000-00000000000a', 'owner',
           'test.label_without_id', 'permit_applications', null, 'Orphan Label, No Id');
   raise exception 'FAIL: external_actor_label without external_actor_id succeeded despite audit_logs_external_actor_label_requires_id';
 exception
