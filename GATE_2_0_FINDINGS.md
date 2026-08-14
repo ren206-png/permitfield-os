@@ -542,3 +542,70 @@ should be treated as required fixes/preconditions before or during 2.1, not foll
 migration needs its own extension statement, and the second project needs to exist before that
 migration can run against it. H.6–H.8 are adjacent findings, none blocking, surfaced because they
 were discovered doing this check, not because they were the object of it.
+
+## §I. Gate 2.1 pre-branch conflict check — sub-phase 2.2 (`audit_logs` migration), added before any
+2.2 branch, mirroring §H's own convention
+
+2.1's two commits (`docs: Gate 2.0 client-portal spec...` / `feat(db): Gate 2.0 sub-phase 2.1...`)
+are now on `feat/permitfield-phase-2.1-client-portal-schema`, not pushed. Before moving to 2.2
+(`GATE_2_0_SPEC.md` §4/§6: `alter column ... drop not null` + `add column external_actor_id` +
+`add column external_actor_label` + the `audit_logs_actor_exactly_one_populated` /
+`audit_logs_external_actor_label_requires_id` CHECKs on the main project's `audit_logs` table), this
+section checks §4's claims against the live repo the same way §H checked §2's.
+
+**I.1 — §4's cited current schema is byte-accurate.** Re-read `20260806000018_lifecycle_rbac_roles_and_audit_log.sql`
+directly: the `create table audit_logs (...)` block matches §4's quoted version column-for-column
+(`actor_user_id uuid not null references auth.users(id)`, `actor_role org_role not null`, no other
+NOT NULL columns besides `org_id`/`action`/`entity_type`). Grepped every migration for `audit_logs`
+across the full `supabase/migrations/` directory: only `20260806000018` touches its DDL (`create
+table`, indexes, RLS, triggers, grants) — `20260806000019/21/22/24/25/27` reference it only in
+comments or as an INSERT target, never `ALTER TABLE`. §4's "current schema... unchanged since" claim
+holds exactly.
+
+**I.2 — The "every existing row already satisfies the new CHECK" claim is provably true, not just
+plausible.** `actor_user_id` is `not null` *today*, before this migration runs — no live row could
+possibly violate a CHECK that only newly permits a second, alternate branch. This holds regardless
+of what data exists in any environment; it does not depend on inspecting live rows (which this
+environment can't do — no reachable Postgres instance, same limitation as §H).
+
+**I.3 — Real gap: §4 undercounts `audit_logs`'s existing write paths, though the gap doesn't break
+anything.** §4's guarantee-table row for "write-path integrity" names exactly two paths —
+`authenticated` self-attributed insert (`audit_logs_insert` policy) and `service_role` (future
+bridge layer, bypasses RLS). Grepping actual `insert into audit_logs` call sites found a third,
+already-live path §4 never mentions: two `security definer` SQL functions —
+`override_readiness_check()` (`20260806000025_readiness_checklist.sql` L306–315) and
+`review_project_permit_requirement()` (`20260806000027_permit_requirements_evaluator.sql`
+L431–439) — insert directly, running as the function owner (not as `authenticated`, so
+`audit_logs_insert`'s policy is not what authorizes these writes at all). Both always pass a
+resolved `auth.uid()` and a non-null `v_role` for `actor_user_id`/`actor_role`, so neither write
+can ever land in a state the new CHECK would reject — this is not a data-integrity conflict, the
+migration is still safe to apply as written. It is a documentation-completeness gap in §4 itself:
+the guarantee table's two-path framing was incomplete before this check, now corrected here rather
+than carried forward silently into 2.2's implementation.
+
+**I.4 — Real, pre-existing conflict: `docs/PERMISSIONS.md`'s "zero call sites" claim for
+`writeAuditLog()` is already false, independent of anything Gate 2.0 does.** §4's closing paragraph
+says this gate "changes `docs/PERMISSIONS.md`'s... claim that `writeAuditLog()` has zero call
+sites" and that this gate's own delivery report must be the one to update it. That premise assumes
+the claim is accurate today. It is not: `app/(app)/projects/new/actions.ts` (Phase 1.1's
+`createProjectAction`, L9 imports `writeAuditLog`, L155 calls it with `actorUserId`/`actorRole`
+always populated from `requireOrgContext()`) is a real, live call site, confirmed by direct file
+read — yet `docs/PERMISSIONS.md`'s "Current status" section (L387–389) still reads: *"`lib/audit/log.ts`'s
+`writeAuditLog()` is infrastructure only. No existing route calls it... it has no writers in this
+codebase yet."* This is the same class of drift `GATE_2_0_FINDINGS.md` §0.1 already corrected for a
+different claim in this same file — stale documentation, not a schema or migration risk. It does
+not block 2.2 (the migration itself is unaffected either way), but 2.2's delivery report should not
+frame itself as "the first thing to falsify this claim" — the claim is already falsified, by
+unrelated Phase 1.1 work, and the report should say so plainly rather than repeating §4's now-dated
+framing.
+
+**I.5 — No naming collisions.** Grepped the full repo for `external_actor_id`, `external_actor_label`,
+`audit_logs_actor_exactly_one_populated`, `audit_logs_external_actor_label_requires_id`: zero hits
+outside `GATE_2_0_SPEC.md` itself. Clean to implement exactly as named.
+
+**Conclusion.** Nothing above blocks 2.2 as scoped. I.1/I.2/I.5 confirm §4's schema-level claims
+hold exactly against the live repo. I.3 and I.4 are both real findings but neither is a migration
+risk — I.3 is a documentation-completeness gap in §4 itself (an incomplete write-path list, now
+corrected here), and I.4 is a pre-existing, unrelated docs-drift bug that 2.2's delivery report
+should correct accurately rather than inherit §4's assumption about it. §7's TTL/role-tier/
+rate-limiting items remain out of 2.2's dependency path — none of them touch `audit_logs`'s schema.
