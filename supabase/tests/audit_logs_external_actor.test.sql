@@ -45,27 +45,38 @@ declare
   control_count int;
 begin
   -- Illegal shape 1: neither actor populated (actor_user_id/actor_role AND
-  -- external_actor_id all null).
+  -- external_actor_id all null). Uses ...e (not ...a) so this control row's
+  -- id never collides with Step 4's assert-step inserts below -- audit_logs
+  -- is append-only (forbid_update_delete(), 20260806000018) and blocks
+  -- DELETE for every role including the table owner running this test, so
+  -- these control rows cannot be cleared mid-transaction and must persist
+  -- (harmlessly, under this file's own final `rollback;`) alongside the
+  -- assert-step rows rather than reusing their ids.
   insert into audit_logs (id, org_id, actor_user_id, actor_role, action, entity_type, external_actor_id)
-  values ('51000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-00000000000a',
+  values ('51000000-0000-0000-0000-00000000000e', '20000000-0000-0000-0000-00000000000a',
           null, null, 'test.control_neither_actor', 'permit_applications', null);
 
   -- Illegal shape 2: both actor kinds populated at once.
   insert into audit_logs (id, org_id, actor_user_id, actor_role, action, entity_type, external_actor_id)
-  values ('51000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-00000000000a',
+  values ('51000000-0000-0000-0000-00000000000f', '20000000-0000-0000-0000-00000000000a',
           '10000000-0000-0000-0000-00000000000a', 'owner', 'test.control_both_actors', 'permit_applications',
           'client_access_tokens:test-token-id');
 
   select count(*) into control_count
   from audit_logs
-  where id in ('51000000-0000-0000-0000-00000000000a', '51000000-0000-0000-0000-00000000000b');
+  where id in ('51000000-0000-0000-0000-00000000000e', '51000000-0000-0000-0000-00000000000f');
   if control_count <> 2 then
     raise exception 'FAIL (control): expected both illegal-shape rows to insert with audit_logs_actor_exactly_one_populated absent, got % -- the later rejection assertions would prove nothing without this control', control_count;
   end if;
   raise notice 'PASS (control): both "neither actor" and "both actors" rows insert successfully with audit_logs_actor_exactly_one_populated absent (count=2).';
 
-  -- Clear the control rows before restoring the constraint.
-  delete from audit_logs where id in ('51000000-0000-0000-0000-00000000000a', '51000000-0000-0000-0000-00000000000b');
+  -- No cleanup here: audit_logs is append-only (forbid_update_delete()
+  -- blocks DELETE for every role, including the table owner running this
+  -- test), so these control rows simply persist until this file's final
+  -- `rollback;` discards them -- the same cleanup-by-rollback-only
+  -- convention audit_logs.test.sql and dashboard_queries.test.sql already
+  -- use, and why the control-step ids above (...e/...f) are distinct from
+  -- the assert-step ids below (...a/...b) rather than reused.
 end $$;
 
 -- Step 3: restore the constraint exactly as the migration defines it.
