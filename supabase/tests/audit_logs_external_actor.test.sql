@@ -40,44 +40,50 @@ alter table audit_logs drop constraint audit_logs_actor_exactly_one_populated;
 -- Step 2 (control): with the constraint absent, both illegal shapes
 -- succeed -- proving the later rejection is the constraint actively
 -- blocking a reachable state, not some unrelated failure.
+--
+-- These control rows must be gone before Step 3 restores the constraint --
+-- `alter table ... add constraint` validates every existing row, so if
+-- these two illegal-shape rows were still present it would fail there
+-- instead of at Step 4's inserts, proving nothing. But audit_logs is
+-- append-only (forbid_update_delete(), 20260806000018) and blocks both
+-- UPDATE and DELETE for every role, including the table owner running this
+-- test -- an earlier version of this file tried a DELETE cleanup here and
+-- CI correctly rejected it. The fix is SAVEPOINT/ROLLBACK TO SAVEPOINT:
+-- transaction control, not DML, so the trigger never fires, and the two
+-- rows are gone by the time Step 3 runs -- letting them keep the same ids
+-- (...a/...b) Step 4 reuses below, since nothing persists past the
+-- rollback to savepoint.
+savepoint before_control_rows;
+
 do $$
 declare
   control_count int;
 begin
   -- Illegal shape 1: neither actor populated (actor_user_id/actor_role AND
-  -- external_actor_id all null). Uses ...e (not ...a) so this control row's
-  -- id never collides with Step 4's assert-step inserts below -- audit_logs
-  -- is append-only (forbid_update_delete(), 20260806000018) and blocks
-  -- DELETE for every role including the table owner running this test, so
-  -- these control rows cannot be cleared mid-transaction and must persist
-  -- (harmlessly, under this file's own final `rollback;`) alongside the
-  -- assert-step rows rather than reusing their ids.
+  -- external_actor_id all null).
   insert into audit_logs (id, org_id, actor_user_id, actor_role, action, entity_type, external_actor_id)
-  values ('51000000-0000-0000-0000-00000000000e', '20000000-0000-0000-0000-00000000000a',
+  values ('51000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-00000000000a',
           null, null, 'test.control_neither_actor', 'permit_applications', null);
 
   -- Illegal shape 2: both actor kinds populated at once.
   insert into audit_logs (id, org_id, actor_user_id, actor_role, action, entity_type, external_actor_id)
-  values ('51000000-0000-0000-0000-00000000000f', '20000000-0000-0000-0000-00000000000a',
+  values ('51000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-00000000000a',
           '10000000-0000-0000-0000-00000000000a', 'owner', 'test.control_both_actors', 'permit_applications',
           'client_access_tokens:test-token-id');
 
   select count(*) into control_count
   from audit_logs
-  where id in ('51000000-0000-0000-0000-00000000000e', '51000000-0000-0000-0000-00000000000f');
+  where id in ('51000000-0000-0000-0000-00000000000a', '51000000-0000-0000-0000-00000000000b');
   if control_count <> 2 then
     raise exception 'FAIL (control): expected both illegal-shape rows to insert with audit_logs_actor_exactly_one_populated absent, got % -- the later rejection assertions would prove nothing without this control', control_count;
   end if;
   raise notice 'PASS (control): both "neither actor" and "both actors" rows insert successfully with audit_logs_actor_exactly_one_populated absent (count=2).';
-
-  -- No cleanup here: audit_logs is append-only (forbid_update_delete()
-  -- blocks DELETE for every role, including the table owner running this
-  -- test), so these control rows simply persist until this file's final
-  -- `rollback;` discards them -- the same cleanup-by-rollback-only
-  -- convention audit_logs.test.sql and dashboard_queries.test.sql already
-  -- use, and why the control-step ids above (...e/...f) are distinct from
-  -- the assert-step ids below (...a/...b) rather than reused.
 end $$;
+
+-- Undo the control inserts via transaction control (not DELETE) so the
+-- append-only trigger never fires, leaving the table clean before Step 3
+-- restores the constraint.
+rollback to savepoint before_control_rows;
 
 -- Step 3: restore the constraint exactly as the migration defines it.
 alter table audit_logs add constraint audit_logs_actor_exactly_one_populated
