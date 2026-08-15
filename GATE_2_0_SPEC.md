@@ -442,12 +442,40 @@ specific, narrow, hand-written projection.
 
 | Operation | Inputs | Authorization check | Columns/fields returned |
 |---|---|---|---|
-| `resolveToken` | raw token string | Hash lookup finds a row; `status = 'active'`; `expires_at > now()` | `applicationId`, `orgName`, `propertyAddressSummary` (city/province only), `recipientName` — enough to render "Welcome, Jane — viewing your application for 123 Main St." No internal ids beyond `applicationId` (needed by the client app for subsequent calls). |
-| `getApplicationSummary` | token | Same as `resolveToken`, plus live re-check against the main project that `application_id` still exists (see §2's design-constraint note) | `permitStatus`, `projectTitle`, full property address, `statusHistory` (from `application_status_history`: `to_status`, `created_at` only — not `changed_by`, which is an internal actor id with no meaning to a client) |
+| `resolveToken` | raw token string | Hash lookup finds a row; `status = 'active'`; `expires_at > now()` | `applicationId`, `orgName`, `propertyAddressSummary` (see K.4 resolution below — a bridge-computed prefix of `permit_applications.project_address`, not a city/province decomposition), `recipientName` — enough to render "Welcome, Jane — viewing your application for 123 Main St." No internal ids beyond `applicationId` (needed by the client app for subsequent calls). |
+| `getApplicationSummary` | token | Same as `resolveToken`, plus live re-check against the main project that `application_id` still exists (see §2's design-constraint note) | `permitStatus`, `projectTitle`, full property address (`permit_applications.project_address`, verbatim — see K.4 resolution below), `statusHistory` (from `application_status_history`: `to_status`, `created_at` only — not `changed_by`, which is an internal actor id with no meaning to a client) |
 | `getReadinessChecklist` | token | Same as `getApplicationSummary` | Array of `{ title, isRequired, status }` from `readiness_checklist_items`, scoped to the token's `application_id` |
 | `listDocuments` | token | Same as `getApplicationSummary` | Array of `{ id, originalFilename, docKind, status, uploadedAt }` from `application_documents`. Deliberately excludes `storage_path` (never handed to client-tier code — see `getDocumentDownloadUrl` below) and `sha256`/`byte_size` (internal integrity metadata, no client-facing purpose) |
 | `getDocumentDownloadUrl` | token, `documentId` | Same as above, plus `documentId` must belong to this token's `application_id` and the document must not be archived | A single short-TTL (≤15 min, matching the existing convention cited in the master prompt §3.6/Phase 0 §M) signed URL. Nothing else. |
 | `uploadDocument` | token, file bytes, `docKind` | Same scope check as `listDocuments`; MIME/size validated via the existing `lib/storage/documents.ts` (`isAllowedMimeType`, `MAX_FILE_SIZE_BYTES`) — reused directly, not reimplemented, since the bridge layer is PermitField's own backend code with access to both projects' credentials, not a separate deployable artifact | No data returned beyond `{ documentId, status: 'pending' }` — a bare acknowledgment, not the full row |
+
+### K.4 resolution: `propertyAddressSummary` and "full property address" sourcing
+
+`GATE_2_0_FINDINGS.md` §K.4 (extended to a second call site by §L.2) found
+this table internally inconsistent — `resolveToken`'s own cell called
+`propertyAddressSummary` "(city/province only)" while its own illustrative
+rendering ("...viewing your application for 123 Main St") is street-level —
+and found that neither reading has a clean, always-reachable schema source:
+the only structured city/province split
+(`properties.city`/`properties.province_code`) is reachable only via
+`permit_applications.project_id -> projects.property_id -> properties`, and
+`project_id` is deliberately, permanently nullable
+(`supabase/migrations_blocked/20260806000023b`'s own header) — a live,
+currently-open code path (`createApplicationAction`,
+`app/(app)/applications/new/actions.ts`) inserts `project_address` without
+ever setting `project_id`, so a `properties` join is not guaranteed to exist
+for every token-eligible application.
+
+Resolved here, before 2.4 writes the query, per K.4's own recommendation:
+both fields read `permit_applications.project_address` — a single, always-
+present, `not null` free-text column — never the `properties` join.
+`getApplicationSummary`'s "full property address" is that column, verbatim,
+unparsed. `resolveToken`'s `propertyAddressSummary` is a bridge-computed
+prefix of the same column (the text up to and including the first comma, or
+the whole string if it contains none), not a city/province decomposition —
+the table's own parenthetical above is corrected to say so, and the
+illustrative "123 Main St" rendering is kept as-is, since a street-level
+prefix is what that example actually shows.
 
 Everything above is read-scoped to a single `application_id` baked into
 the token itself — there is no operation that accepts an arbitrary
