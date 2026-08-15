@@ -45,6 +45,14 @@
 #     against both real local stacks together, the one thing neither SQL
 #     suite alone can prove (each only ever talks to its own project).
 #
+#     Both jobs pin Node 22 (not 20) as of that same sub-phase: `npm run
+#     test:live` is this repo's first CI step to actually construct a real
+#     supabase-js client, and supabase-js's realtime-js dependency requires
+#     native WebSocket, unavailable on Node 20 (see the sql-tests job's
+#     setup-node step for the full failure this fixes -- caught by this
+#     branch's own first CI run, not by local verification, since local
+#     dev already ran Node 22+).
+#
 # Kept as two jobs (not one) so a Postgres/Docker flake in sql-tests never
 # blocks the fast, infra-free build-and-test signal from reporting -- and
 # vice versa.
@@ -66,9 +74,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22, not 20 -- see the sql-tests job's setup-node step for why
+      # (this job doesn't itself construct a real supabase-js client today,
+      # but is kept in lockstep so this job's Node version can never silently
+      # diverge from the one the live-Supabase test suite actually needs).
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
@@ -84,9 +96,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22, not 20: `npm run test:live` (added below, sub-phase 2.4)
+      # constructs a real supabase-js client via
+      # lib/supabase/client-portal-service-client.ts, and supabase-js's
+      # realtime-js dependency eagerly instantiates a RealtimeClient in the
+      # SupabaseClient constructor -- which throws ("Node.js detected but
+      # native WebSocket not found") on Node 20, since native WebSocket
+      # wasn't stable in Node's global scope until Node 22. This was latent
+      # in lib/supabase/service-client.ts's identical pattern too (nothing
+      # before this job's own `npm run test:live` step ever actually
+      # constructed a live supabase-js client under CI's Node version), and
+      # was caught by this branch's own first CI run.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # scripts/run-sql-tests.sh (npm run test:sql) itself only needs
