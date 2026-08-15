@@ -609,3 +609,80 @@ risk — I.3 is a documentation-completeness gap in §4 itself (an incomplete wr
 corrected here), and I.4 is a pre-existing, unrelated docs-drift bug that 2.2's delivery report
 should correct accurately rather than inherit §4's assumption about it. §7's TTL/role-tier/
 rate-limiting items remain out of 2.2's dependency path — none of them touch `audit_logs`'s schema.
+
+## §J. Gate 2.2 pre-branch conflict check — sub-phase 2.3 (`application_documents` `service_role`
+grant), added before any 2.3 branch, mirroring §H/§I's own convention
+
+2.2's own commit is merged to `main` (fast-forward, verified by tip-hash comparison). Before moving
+to 2.3 (`GATE_2_0_SPEC.md` §5/§6: `grant insert on application_documents to service_role;`), this
+section checks §5's claims against the live repo the same way §H checked §2 and §I checked §4. No
+code, schema, migration, or component change was made to produce this section either.
+
+**J.1 — §5's central claim is confirmed accurate as of current HEAD (`2a76f49`): `service_role`
+still has only `select, update` on `application_documents`, no `insert`.** Re-read
+`20260806000015_service_role_grants.sql` directly: `grant select, update on application_documents
+to service_role;`, unchanged since H.2 first flagged this. Grepped every migration from
+`20260806000016` through the current tip for any statement touching a grant on
+`application_documents`: none exists. `20260806000022`, `20260806000025`, `20260806000026`, and
+`20260806000028` all reference `application_documents` (an FK column, a comment, an FK column, and
+a read-only aggregate function respectively) but none issues `GRANT`/`REVOKE` against it. H.2's
+finding is still exactly correct today, not stale — the gap §5 is written to close is still open,
+unpatched, and 2.3's proposed migration is the first thing in this repo's history that would close
+it.
+
+**J.2 — `20260806000024_lifecycle_documents_revisions.sql` (merged well after §5 was presumably
+drafted) restructured this table's write paths substantially, but its own header comment
+explicitly reconfirms the exact grant §5 depends on, rather than silently invalidating it.** That
+migration (a) drops `application_documents_delete` and revokes `authenticated`'s table-level
+`DELETE`, replacing hard delete with the SECURITY DEFINER `archive_application_document()` RPC; (b)
+adds a SECURITY DEFINER `replace_application_document()` RPC as the only sanctioned post-upload
+UPDATE path; (c) adds an `AFTER INSERT` trigger, `application_documents_seed_revision`, that seeds
+a `document_revisions` row via the SECURITY DEFINER `seed_document_revision()` function on every
+row insert, regardless of which role performed the INSERT. None of this touches INSERT itself —
+line 151's comment states the initial-upload path is still "the existing
+`application_documents_insert` RLS policy (`app/api/documents/route.ts`, unchanged by this
+migration)," and lines 427–433 close with an explicit statement that `service_role` is "unaffected
+by this migration. It keeps its existing `select, update on application_documents` grant
+(`20260806000015`)... since neither the columns they touch nor that grant were altered here." This
+is not a conflict with §5 — it is the exact fact §5 asserts, independently corroborated by a
+migration §5's own text doesn't cite. Worth recording as positive confirmation rather than a gap.
+
+**J.3 — One real, non-blocking documentation-completeness gap: §5 doesn't mention that a
+`service_role` INSERT will also fire `application_documents_seed_revision`, seeding a
+`document_revisions` row automatically.** This is very likely the desired behavior for
+`uploadDocument` (2.5) — a portal-originated upload should have the same revision history as an
+`authenticated`-originated one — but §5's text, written before `20260806000024` presumably, doesn't
+account for it, and 2.5's implementation should not treat the resulting `document_revisions` row as
+a surprise. Related: `application_documents.uploaded_by` and `document_revisions.uploaded_by` both
+default to/accept `auth.uid()`, which resolves to `NULL` for a `service_role` caller with no
+Supabase Auth session context (exactly the client-portal bridge layer's situation, per §3 — there is
+no `auth.users` row for an external token-holding recipient in project 1 at all). Both columns are
+nullable with no NOT NULL constraint added by `20260806000024` (confirmed by direct read of the
+`alter table`/`create table` blocks), so this does not fail — but it is worth 2.5's delivery report
+noting explicitly, the same way I.4 flagged a claim worth stating plainly rather than leaving
+implicit.
+
+**J.4 — §5's Inngest-caller claim re-grep-confirmed against current file contents, not just
+recalled.** `lib/inngest/functions/extract.ts`: `.from('application_documents')` appears at L47
+(`.select('id, storage_path, original_filename, mime_type')`) and L102
+(`.update({ text_layer_chars: ... })`) — select and update only.
+`lib/inngest/functions/audit.ts`: `.from('application_documents')` appears once, L88
+(`.select('doc_kind')`) — select only. Neither file calls `.insert()` against this table anywhere.
+§5's "neither gains any new capability it uses" claim holds exactly.
+
+**J.5 — §5's `lib/storage/documents.ts` reuse claim holds.** `isAllowedMimeType` (line 23) and
+`MAX_FILE_SIZE_BYTES` (line 7) are both still exported under those exact names, confirmed by direct
+read. `uploadDocument` (2.5, not this sub-phase) can reuse them as §5 describes without any rename.
+
+**J.6 — No naming collisions.** The literal grant statement `grant insert on application_documents
+to service_role;` does not exist anywhere in `supabase/migrations/` today (confirmed by grep across
+the full directory) — 2.3 is additive, not a duplicate of an already-applied grant.
+
+**Conclusion.** Nothing above blocks 2.3 as scoped. J.1 reconfirms H.2's gap is still live and still
+exactly what 2.3's single GRANT statement closes. J.4–J.6 confirm §5's supporting claims (Inngest
+caller scope, `lib/storage/documents.ts` exports, no naming collision) hold exactly against the
+current repo. J.2 is not a conflict — `20260806000024`, merged independently of this gate, already
+corroborates §5's "no existing behavior changes for any existing caller" claim in its own words. J.3
+is the only real gap found, and it is a documentation-completeness note for 2.5's delivery report
+(the automatic `document_revisions` seed row and null `uploaded_by` on portal-originated uploads),
+not a blocker for 2.3's narrow grant change itself.
