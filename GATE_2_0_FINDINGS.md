@@ -1182,3 +1182,257 @@ resolved as of this section:
 Both are now visible in this document's own text (their closure blockquotes above), not just
 resolved in a chat transcript — that visibility, plus the actual resolution, is this update's
 deliverable.
+
+## §O. Gate 2.0 sub-phase 2.6 pre-branch conflict check — staff-facing token issuance/revocation
+(`GATE_2_0_SPEC.md` §7 item 2), added before any 2.6 implementation branch, mirroring §H–§M's own
+convention, with §N's two rules applied from the start rather than retrofitted later
+
+Sub-phase numbering: `GATE_2_0_SPEC.md` §6's table stops at 2.5. Neither that file nor this one
+previously assigned a number to issuance/revocation — `grep -n "2\.6\|2\.7"` across both returns
+nothing. **2.6** is used here as the natural next number in the existing sequence, proposed, not
+retroactively declared authoritative — the same way this document has always named a sub-phase
+before its branch exists (§H names 2.1 before 2.1 was ever branched). No code, schema, migration,
+or component exists for it. No branch opened. `AGENTS.md` untouched.
+
+**§N rule 2, applied up front:** every item in `GATE_2_0_SPEC.md` §7 was re-read in full before
+writing anything below, not just the one item (#2) this sub-phase owns — the rule §M's own omission
+made necessary. Current state of all five, reconfirmed against the live file
+(`GATE_2_0_SPEC.md:873-940`): #1 (token TTL) and #2 (issuance/revocation UI + role gate) are both
+picked up by this sub-phase (O.4 and this section as a whole, respectively). #3 (rate limiting) is
+explicitly not this sub-phase's to fix, but is reassigned an owner below (O.7) rather than left
+unassigned for a fourth consecutive sub-phase. #4 (second-project infrastructure) remains the
+user's own stated responsibility, unchanged, not touched by this check. #5 (staff-facing
+`client_access_log` read path) remains open with no owner — genuinely out of scope for issuance/
+revocation, which writes to `token_lifecycle_events` and `client_access_tokens`, not
+`client_access_log`, and is left exactly as §7 already states it, not silently expanded into this
+sub-phase's mandate. Separately, §H–§N's own sixteen action-naming findings are all closed as of
+this document's own §N text (fifteen executed, one — M.4(b) — a process finding closed by §N's
+existence) — reconfirmed by re-reading §N's count above rather than assumed from memory, so there is
+no additional open item from H–N for this check to inherit.
+
+**O.1 — the `is_org_owner()` gap, laid out rather than resolved.** Confirmed directly:
+`is_org_owner()` (`supabase/migrations/20260806000002_organizations_and_members.sql:43-54`) checks
+`role = 'owner'` literally — the original two-value `org_role` enum's only elevated tier. The eight
+additive values from Phase 1.0 (`platform_admin`, `org_owner`, `permit_manager`,
+`permit_coordinator`, `document_reviewer`, `applicant_contractor`, `client_user`,
+`auditor_readonly` — `supabase/migrations/20260806000018_lifecycle_rbac_roles_and_audit_log.sql:26-33`)
+are invisible to it. `GATE_2_0_SPEC.md`'s own transition matrix already names the intended tier for
+revocation as "owner/`org_owner`/`platform_admin` tier, mirroring who can manage `org_members`
+today" (`GATE_2_0_SPEC.md:96`) — a three-role set `is_org_owner()` cannot express, since it
+recognizes exactly one of the three. This is not a new discovery: Phase 0 §S.2 flagged the identical
+gap for Gate 1.7's dashboard, and declined to fix it there ("isn't something I'm proposing to fix as
+part of this gate unless you want it folded in" — `PHASE_0_FINDINGS.md:1568-1571`). It reached 2.6
+unfixed, the same way it reached 1.7 unfixed — S.2 was never folded in anywhere between.
+
+Two options, per the instruction not to pick:
+
+- **(a) Fix `is_org_owner()` itself** — widen its `where` clause to `role in ('owner', 'org_owner')`
+  (leaving `platform_admin` to a separate check, per option (b)'s precedent below, since
+  `platform_admin` is a cross-org staff role, not an org-owner-tier role). This is the smallest
+  diff, but per `supabase/migrations/20260806000021_jurisdiction_sources.sql:26-32`'s own explicit
+  reasoning for *not* doing this when the identical gap was found for `platform_admin`: widening
+  `is_org_owner()` "would have been a *behavior change* to every table `is_org_owner()` already
+  gates, which is not additive" — it is currently used by `organizations_update`, `org_members_*`,
+  `contractors_delete`, `permit_applications_delete`, `taxonomies_*`, and `readiness_checklist_items`
+  delete (`supabase/migrations/20260806000002_organizations_and_members.sql:92-111`,
+  `20260806000006_applications_and_documents.sql:73`,
+  `20260806000019_lifecycle_intake_properties_clients_taxonomies.sql:197-202`,
+  `20260806000025_readiness_checklist.sql:147`). Every org that has assigned any real user the
+  `org_owner` role today would see that user's permissions silently expand across all six tables the
+  moment this migration ships — additive to the schema, but not additive in *behavior*, which is the
+  master prompt's own stricter bar (`docs/PERMITFIELD_OS_EXPANSION_MASTER_PROMPT.md:19`: "You may not
+  drop, rename, or retype anything that exists" is necessary but not sufficient here — this option
+  changes what an existing, already-assignable role value *does*, which the RLS-authoring precedent
+  above already treated as out of bounds once before).
+- **(b) Work around it, following the precedent already in this repo** — write a new, narrow,
+  purpose-built check for this sub-phase's own authorization, the same shape
+  `can_read_audit_logs()` used: `role in ('owner', 'org_owner', 'platform_admin')` inlined directly
+  (`supabase/migrations/20260806000018_lifecycle_rbac_roles_and_audit_log.sql:78-97`), or
+  `is_platform_admin()`'s narrower single-role precedent
+  (`supabase/migrations/20260806000021_jurisdiction_sources.sql:123-126`, which explicitly chose "a
+  new, narrow, org-agnostic sibling" over "widening `is_org_owner()`'s definition"). This changes
+  nothing about any existing table's behavior — `is_org_owner()` itself is untouched, so every
+  policy that already depends on it keeps depending on exactly what it depended on yesterday. The
+  cost is one more small function in a codebase that already has two of them for the identical
+  reason. One implementation note carried over from the precedent: if this sub-phase's migration
+  also needs to reference role values added in that same migration, the function must be `language
+  plpgsql`, not `sql` — `20260806000018`'s own comment on `can_read_audit_logs()` explains why
+  (`...references enum values added by an ALTER TYPE in this same migration, which are not visible
+  to the SQL parser until commit`); this does not apply here, since all eight new role values were
+  already committed in `20260806000018` and are visible to a plain `language sql` function today —
+  noted only so 2.6 doesn't need to rediscover it.
+
+Not picking here, consistent with O.1's own framing and §H–§N's convention throughout this document.
+**Owning sub-phase: 2.6** (the decision, whichever way it goes, must be made before 2.6's migration
+is written — this is a precondition, not a deferred item).
+
+**O.2 — where issuance/revocation code should live: extend `lib/bridge/client-portal.ts`, or a
+separate staff-facing module.** Confirmed by direct read of both the module and the lint rule:
+`lib/bridge/client-portal.ts`'s own header states it is "the ONLY module in this repo permitted to
+hold both projects' service-role credentials side by side" (`lib/bridge/client-portal.ts:9-10`), and
+`eslint.config.mjs`'s `no-restricted-imports` rule enforces this by `ignores` list containing exactly
+two files: `lib/bridge/client-portal.ts` and `lib/bridge/client-portal.live.test.ts`
+(`eslint.config.mjs:26`) — no third file may import
+`lib/supabase/client-portal-service-client.ts` today. Issuance necessarily writes to project 2
+(`client_access_tokens`), so whatever function performs it needs that same credential, one way or
+another.
+
+Two options, laid out rather than picked:
+
+- **(a) Extend `lib/bridge/client-portal.ts` itself** with two new, non-exported-to-client-portal
+  functions (`issueToken`, `revokeToken` or similar). No lint rule change needed — the file is
+  already on the allow-list. Costs a re-read of `GATE_2_0_SPEC.md` §3's own framing, though: §3
+  calls the six operations there "the complete, enumerated set of operations the client-portal
+  surface may invoke" (`GATE_2_0_SPEC.md:475-476`) and §1's own transition matrix already
+  anticipated this exact tension, describing issuance as happening "via the bridge layer's issuance
+  operation (not enumerated in §3's client-facing operation set — this is a staff-facing operation,
+  invoked from the main app, not from the client portal)" (`GATE_2_0_SPEC.md:94`). §3's "complete,
+  enumerated set" claim is scoped to what "the client-portal surface may invoke," not to the file's
+  contents as a whole, so adding staff-only exports would not contradict that sentence literally —
+  but it would mean the file's docstring ("the entire enumerated operation set §3 defines" —
+  `lib/bridge/client-portal.ts:11-13`) becomes incomplete the moment issuance/revocation land in it,
+  and would need updating in the same commit to keep saying something true.
+- **(b) A separate staff-facing module** (e.g. `lib/bridge/client-portal-admin.ts`), authorized
+  against project 1 (`is_org_owner()`/O.1's resolution) rather than a project-2 token, and given its
+  own line in `eslint.config.mjs`'s `ignores` list so it too may import
+  `lib/supabase/client-portal-service-client.ts`. This keeps `lib/bridge/client-portal.ts`'s own
+  docstring accurate without editing it, and gives the "client-facing, token-authorized" vs.
+  "staff-facing, org-membership-authorized" distinction a hard file boundary matching the actual
+  authorization-model difference between the two — but widens the lint rule's allow-list to three
+  files instead of two, one more surface for the structural-enforcement mechanism
+  (`GATE_2_0_SPEC.md:557-643`) to cover, and duplicates the "only this file may hold both projects'
+  credentials" framing across two files' docstrings instead of one.
+
+Not picking here. **Owning sub-phase: 2.6.**
+
+**O.3 — the `SELECT ... FOR UPDATE` issuance sequence, verified against the schema as it stands
+today, not just the spec text.** `GATE_2_0_SPEC.md:106-155` specifies a three-step transaction
+(lock any existing active row, determine its true terminal state, insert the new row) plus explicit
+handling of Postgres `23505` for the first-issuance race, where no prior row exists for the lock to
+serialize against. Verified live: `supabase-client-portal/supabase/migrations/20260814000001_client_portal_token_schema.sql:20-70`
+matches the spec's schema exactly — `expires_at timestamptz not null` (no default, confirmed below
+in O.4), the same exactly-one-representation `revoked_by_*` CHECK, and the partial unique index
+(`client_access_tokens_one_active_per_recipient`) all present and unchanged since 2.1. **No
+issuance code exists anywhere to check the sequence against** — confirmed by grep
+(`grep -n "issue\|revoke" lib/bridge/client-portal.ts` returns only read-path references to
+already-issued tokens' *states*, e.g. `token_revoked`/`token_superseded` denial details, never a
+write), and the 2.1 live test file
+(`supabase-client-portal/supabase/tests/client_portal_token_lifecycle.test.sql`) exercises the
+schema via raw `insert into client_access_tokens` statements, not through any issuance function —
+there is no `23505`-handling test anywhere in this repo today. §1's design is sound against the
+live schema (nothing here contradicts it), but it is entirely unimplemented and entirely untested —
+this sub-phase is not verifying an existing implementation, it is building the first one. **Owning
+sub-phase: 2.6**, both the `FOR UPDATE` sequence itself and its two required tests (re-issuance path
+exercising the lock; first-issuance path exercising the `23505` catch-and-reselect, per
+`GATE_2_0_SPEC.md:143-155`'s own instruction not to surface the raw constraint error).
+
+**O.4 — TTL, confirmed unresolved at both the "what value" and "where enforced" layers.**
+`expires_at timestamptz not null` (`supabase-client-portal/supabase/migrations/20260814000001_client_portal_token_schema.sql:51`,
+matching `GATE_2_0_SPEC.md:239`) has no `DEFAULT` — any INSERT must supply a value explicitly or
+fail the NOT NULL constraint. `GATE_2_0_SPEC.md` §7 item 1 states the 14-day figure was "not derived
+from any product requirement read during this spec's research" and needed "a real decision, not
+this document's guess" (`GATE_2_0_SPEC.md:881-884`), and its own status tag already assigns this to
+"whichever future sub-phase first implements token issuance" (`GATE_2_0_SPEC.md:891`) — that is
+this sub-phase. The scoping prompt's own instruction states 7 days, not 14 — a different number from
+§1's proposed default, stated here as a plain fact, not reconciled or picked by this document: §1
+proposed 14, the user's own instruction for this sub-phase says 7. **Owning sub-phase: 2.6** — set
+`expires_at := now() + interval '7 days'` explicitly inside the issuance function itself (per the
+scoping prompt's "set explicitly at issuance, not only as a column default" — a `DEFAULT` on the
+column would apply even to a hypothetical future direct-INSERT bypassing the issuance function
+entirely, which is exactly the kind of un-auditable path §1's whole design tries to avoid), and
+correct `GATE_2_0_SPEC.md` §7 item 1's status tag from "Unassigned, deferred" to closed, in the same
+commit, once 7 days is confirmed as the actual value to ship (not assumed here from the prompt text
+alone without that confirmation appearing in this sub-phase's own delivery report).
+
+**O.5 — revocation, both paths verified expressible against the live schema.** Per-token revoke
+(`UPDATE client_access_tokens SET status = 'revoked', revoked_at = now(), revoked_by_org_user_id =
+:staff_id WHERE id = :token_id AND status = 'active'`) and per-recipient revoke (same SET clause,
+`WHERE recipient_email = :email AND application_id = :app_id AND status = 'active'`) are both
+ordinary, single-table UPDATEs against columns that exist today
+(`supabase-client-portal/supabase/migrations/20260814000001_client_portal_token_schema.sql:48-70`).
+The partial unique index does not interact with either path in a way that blocks them: revoking
+moves a row's `status` away from `'active'`, which *vacates* the index's uniqueness slot rather than
+contending with it — the index only ever prevents a second row from *entering* the `'active'` state
+for the same recipient+application, never prevents an existing `'active'` row from leaving it. The
+per-recipient path's `WHERE` clause matches at most one row by construction (the same index
+guarantees at most one `'active'` row per recipient+application pair exists to match), so no
+`LIMIT`/loop is needed to keep it single-row despite superficially reading like a bulk update. Both
+paths must also write a `token_lifecycle_events` row per §1's matrix (`GATE_2_0_SPEC.md:96`) — this
+is O.5's design boundary; O.6 covers what else, if anything, must be written alongside it. **Owning
+sub-phase: 2.6.**
+
+**O.6 — audit trail: `token_lifecycle_events` alone, or `audit_logs` too, and the "first call site"
+framing this check found already inaccurate before 2.6 even starts.** Two separable questions:
+
+*What `token_lifecycle_events` records.* Not unresolved: `triggered_by_org_user_id`/
+`triggered_by_system` already exist as an exactly-one-representation pair
+(`GATE_2_0_SPEC.md:276-282`, matching the live migration), the identical shape `client_access_tokens.
+revoked_by_*` already uses and `audit_logs`' own `actor_user_id`/`external_actor_id` pair mirrors.
+The scoping prompt describes this as "unresolved" — checked directly, it is not: the schema already
+has a fully-specified answer, applied consistently, and this sub-phase's job is to populate it (
+`triggered_by_org_user_id := staff_id, triggered_by_system := false` for every transition this
+sub-phase triggers), not to design it.
+
+*Whether `audit_logs` also gets a row.* This is the genuinely open half. Issuance and revocation are
+staff mutations authorized against project 1 (`org_members`, per O.1) — the same actor shape as
+every other owner-tier write in this codebase (`org_members` insert/update/delete, `project.created`,
+etc.), all of which are internal-actor actions. `writeAuditLog()`'s internal-actor branch exists
+specifically for this shape (`actorUserId`/`actorRole`, `lib/audit/log.ts:74` onward). Whether 2.6
+should call it is not decided anywhere in `GATE_2_0_SPEC.md` — §4's design covers *why* the
+external-actor branch exists (client-triggered actions with no `auth.users` row) but says nothing
+about which internal staff actions in this codebase are expected to call `writeAuditLog()` at all,
+versus relying on `token_lifecycle_events` alone for this specific mutation. Two readings, not
+picked: (a) issuance/revocation are exactly the kind of sensitive, external-facing-consequence staff
+action `audit_logs` exists to capture (revoking a client's access is not meaningfully different from
+`org_members` role changes, which are `FULL`-permission owner-tier actions today, just not yet
+routed through `writeAuditLog()` either — see below), so 2.6 should call it; or (b)
+`token_lifecycle_events` is already the complete, purpose-built ledger for this exact class of event
+(`GATE_2_0_SPEC.md:269` — "Every lifecycle transition from §1's matrix, one row each"), and a
+parallel `audit_logs` row would duplicate it without adding information, the same reasoning §4 used
+to keep `client_access_log` and `audit_logs` separate rather than merged.
+
+*The "first call site" framing.* While checking this, found that `GATE_2_0_SPEC.md` §6's own
+sub-phase table still describes 2.5 as building "first real call site for `writeAuditLog()`"
+(`GATE_2_0_SPEC.md:871`). This is false as written, and has been since before 2.5 began:
+`app/(app)/projects/new/actions.ts:155-163` (Gate 1.1, `project.created`) calls `writeAuditLog()`
+with the internal-actor shape, predating 2.5 entirely. `docs/PERMISSIONS.md` itself already carries
+the correct count and says so explicitly: "`writeAuditLog()` has two real call sites, one internal
+and one external... This section previously claimed 'no writers in this codebase yet,' which was
+already stale before 2.5 began" (`docs/PERMISSIONS.md:387-397`). `GATE_2_0_SPEC.md` §6 was never
+corrected to match — a small, self-contained doc inaccuracy, same shape as K.3, not caught by any of
+§H–§N because §6 is outside those sections' scope (they check §H onward, not the original §1–§7
+body). If O.6's (a) reading is chosen and 2.6 becomes a third `writeAuditLog()` call site, any
+report describing it should say "third," not repeat this document's own "first"/"second" drift.
+**Owning sub-phase: 2.6** for the (a)/(b) decision itself; **owning sub-phase: 2.6 or a dedicated
+doc-correction commit, whichever lands first** for correcting `GATE_2_0_SPEC.md:871`'s stale "first
+real call site" text, the same "fold it into the same commit or a follow-up, your call, but don't
+let it roll forward" framing this document's own §N used for J.3/K.3.
+
+**O.7 — rate limiting, reassigned an owner rather than left unassigned for a fourth sub-phase.**
+`GATE_2_0_SPEC.md` §7 item 3's current status tag already names its owner as "whichever future
+sub-phase first exposes `resolveToken` (or `uploadDocument`) behind a live, reachable route"
+(`GATE_2_0_SPEC.md:911-915`) — issuance/revocation (2.6) does not do this: it is staff-facing,
+invoked from the main app's own authenticated routes, not a new public/unauthenticated surface
+(§1's transition matrix, `GATE_2_0_SPEC.md:94`, is explicit that issuance is "invoked from the main
+app, not from the client portal"). The sub-phase that *does* first expose a client-facing operation
+behind a real route — necessarily the one after this one, since 2.1–2.6 as scoped so far build
+schema and bridge-layer functions with zero route call sites throughout (`GATE_2_0_FINDINGS.md`
+§M.4(a)/§N, reconfirmed unchanged: `grep -rln "bridge/client-portal" app/` still returns zero) — is
+the correct owner, and already was per §7's own existing text. **Owning sub-phase: 2.7 (proposed,
+same "next number in sequence, not yet branched" status as 2.6 itself)** — restated explicitly here,
+per the scoping prompt's instruction, rather than left implicit in §7's pre-existing text alone,
+so a reader of *this* section does not need to cross-reference `GATE_2_0_SPEC.md` §7 to find the
+owner. No change to §7's own text was needed to produce this restatement — it already said the same
+thing.
+
+---
+
+Six items (O.1, O.2, O.4, O.5, O.6's audit-logs question, O.6's doc-correction) carry an explicit
+"Owning sub-phase: 2.6" tag at the moment they were written, per §N rule 1. One (O.7) is reassigned
+to 2.7, explicitly, rather than left to drift the way §7 item 3 itself had already drifted across
+2.1–2.5 before this check restated it. §N rule 2 was applied at this section's own opening, not
+retrofitted after the fact — every one of §7's five items and all of §H–§N's own findings were
+re-read before O.1 was drafted, not just the one item (#2) nominally in scope.
+
+Read-only. No code, migration, or component was written to produce this section. `AGENTS.md` is
+unchanged. Report before committing, per standing convention — this section is that report.
