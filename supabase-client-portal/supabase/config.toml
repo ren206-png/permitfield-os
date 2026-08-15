@@ -9,8 +9,12 @@
 #
 # This file is a local-dev/CI scaffold only (GATE_2_0_FINDINGS.md §H.5): no
 # actual cloud Supabase project has been provisioned for this. Ports below
-# are offset +100 from ../supabase/config.toml's so both stacks can run
-# concurrently on one machine without colliding.
+# are offset +100 from ../../supabase/config.toml's (project 1's config, at
+# the repo root's supabase/ directory -- this file moved one level deeper,
+# to supabase-client-portal/supabase/config.toml, because the Supabase CLI
+# requires config.toml under a directory literally named supabase/ to
+# discover it at all) so both stacks can run concurrently on one machine
+# without colliding.
 #
 # For detailed configuration reference documentation, visit:
 # https://supabase.com/docs/guides/local-development/cli/config

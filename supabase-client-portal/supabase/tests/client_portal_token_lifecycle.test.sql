@@ -9,7 +9,7 @@
 -- just one layer down (schema written and reasoned about, but never
 -- proven to behave as reasoned).
 --
--- This project has no seed.sql (supabase-client-portal/config.toml
+-- This project has no seed.sql (supabase-client-portal/supabase/config.toml
 -- [db.seed] enabled = false) -- fixtures are created inline, same reason
 -- GATE_2_0_FINDINGS.md SS H.5 gives: this is sub-phase 2.1's first schema,
 -- there is no shared fixture set yet to reuse.
