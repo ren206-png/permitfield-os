@@ -45,6 +45,19 @@
 #     against both real local stacks together, the one thing neither SQL
 #     suite alone can prove (each only ever talks to its own project).
 #
+#     Sub-phase 2.6 adds a second file to that same `npm run test:live` step
+#     (lib/bridge/client-portal-admin.live.test.ts) and, with it, one new env
+#     var below: NEXT_PUBLIC_SUPABASE_ANON_KEY. That file is this repo's
+#     first live test to actually sign in as a real user (via
+#     signInWithPassword(), see its own header) to get session-scoped
+#     clients for exercising issueToken/revokeToken's authorization checks
+#     end to end -- every live test before it only ever used service-role
+#     clients. The value below is the Supabase CLI's fixed, publicly
+#     documented local-dev anon demo key -- identical for every local
+#     project regardless of port, not a secret, matching the same value
+#     already committed in .env.local's own comment, same as the
+#     service-role keys already present in this step.
+#
 #     Both jobs pin Node 22 (not 20) as of that same sub-phase: `npm run
 #     test:live` is this repo's first CI step to actually construct a real
 #     supabase-js client, and supabase-js's realtime-js dependency requires
@@ -179,9 +192,21 @@ jobs:
       - run: npm run test:live
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
           CLIENT_PORTAL_SUPABASE_URL: http://127.0.0.1:54421
           CLIENT_PORTAL_SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          # Sub-phase 2.6: lib/bridge/client-portal-admin.live.test.ts's
+          # first-issuance 23505 race test needs a raw Postgres connection
+          # (via the `pg` package) to force two genuinely concurrent
+          # transactions through issue_client_access_token() -- PostgREST
+          # calls alone can't guarantee tight enough concurrency (see that
+          # test's own header). This is project 2's local DB port (54422,
+          # the "+1" API-to-DB offset from CLIENT_PORTAL_SUPABASE_URL's
+          # 54421 above) with the Supabase CLI's fixed local-dev superuser
+          # credentials -- not a secret, same publicly documented demo
+          # values as the keys above.
+          CLIENT_PORTAL_DB_URL: postgresql://postgres:postgres@127.0.0.1:54422/postgres
           PERMITFIELD_FF_CLIENT_PORTAL: 'true'
 
       # Best-effort cleanup; the runner is thrown away after the job

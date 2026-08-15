@@ -74,7 +74,7 @@ exists as a result of this document. `AGENTS.md` was not read or acted on.
 |---|---|
 | Server-side stored/validated tokens, not stateless JWTs | The bearer credential in the magic-link URL is a high-entropy random string generated at issue time. The database stores only `token_hash` (a salted hash of it). Validating a request means: look up the hash, confirm `status = 'active'` and `expires_at > now()`. There is no self-contained signed payload a client could forge or replay without a DB round trip — every use requires a live lookup, which is also what makes instant revocation possible (a stateless JWT cannot be revoked before its own expiry without an external denylist, which is just this table by another name). |
 | Instant revocation, per-token and per-recipient | `client_access_tokens.status` transitions to `'revoked'` via a direct `UPDATE ... WHERE id = :token_id` (per-token) or `UPDATE ... WHERE recipient_email = :email AND application_id = :app_id AND status = 'active'` (per-recipient, since the partial-unique-active-token constraint below guarantees at most one row matches). Both are synchronous, take effect on the next lookup — no cache, no propagation delay. |
-| Short expiry, explicit re-issue path | `expires_at` set at issue time (see §1's transition matrix — proposed default 14 days, chosen to match a realistic permit-review cycle rather than the main project's session `jwt_expiry` config, which governs a wholly different session type and is not reused here). Re-issue is not a mutation of the existing row — it is a new INSERT that atomically supersedes the old one (see transition matrix). |
+| Short expiry, explicit re-issue path | `expires_at` set at issue time (see §1's transition matrix — 7 days, chosen to match a realistic permit-review cycle rather than the main project's session `jwt_expiry` config, which governs a wholly different session type and is not reused here. This section originally proposed 14 days as a placeholder pending a real decision — GATE_2_0_FINDINGS.md §7 item 1 recorded that decision as still open; sub-phase 2.6 closed it at 7, set explicitly at issuance time in `issue_client_access_token()`, never a column DEFAULT — and this text is corrected to match rather than left to silently disagree with the shipped code). Re-issue is not a mutation of the existing row — it is a new INSERT that atomically supersedes the old one (see transition matrix). |
 | One token per recipient | Enforced by a **partial unique index**, not application logic: `unique (recipient_email, application_id) where status = 'active'`. At most one *active* token can exist for a given recipient+application pair at the database layer — re-issuing requires the old row to leave `'active'` status first (superseded/revoked), inside the same transaction. |
 | Every access logged with token identity | `client_access_log` (§2) is an append-only ledger, one row per bridge-layer invocation, always carrying `token_id`. This is deliberately a *separate* ledger from the main project's `audit_logs` — see §4's reasoning for why those two ledgers have different scope and are not merged. |
 
@@ -93,7 +93,7 @@ transitions.)
 |---|---|---|---|
 | *(none)* | `issued` → `active` | New token created for a recipient+application pair with no existing active row | Org staff, via the bridge layer's issuance operation (not enumerated in §3's client-facing operation set — this is a staff-facing operation, invoked from the main app, not from the client portal) |
 | `active` | `expired` | `expires_at` passes | System — evaluated lazily at lookup time (`expires_at > now()` in the validation query), not by a scheduled job. No cron exists in this repo (`GATE_2_0_FINDINGS.md`'s own note on `jurisdiction_sources`' staleness applies the identical reasoning here: computed at read time, not written). A row can sit with `status = 'active'` past its `expires_at` until the next access attempt evaluates it — this is safe because every authorization check re-derives validity from `expires_at`, never trusts `status` alone for the active case. |
-| `active` | `revoked` | Explicit staff action ("revoke this link") or org offboarding (bulk revoke by `org_id`) | Org staff (owner/`org_owner`/`platform_admin` tier, mirroring who can manage `org_members` today) via the bridge layer's staff-facing revocation operation. Never the recipient — there is no client account to self-serve a revoke from, by design (no client accounts in this gate). |
+| `active` | `revoked` | Explicit staff action ("revoke this link") or org offboarding (bulk revoke by `org_id`) | Org staff via the bridge layer's staff-facing revocation operation. Tier decided in sub-phase 2.6 (`GATE_2_0_FINDINGS.md` §O.1): `owner`/`org_owner`/`permit_manager` — deliberately wider than issuance's own `owner`/`org_owner` tier (a `permit_manager` may need to shut off a client's access without also being trusted to mint new access). This corrects this row's own earlier text, which named `platform_admin` (a cross-org staff role never actually wired to org-scoped revocation) instead of `permit_manager`. Never the recipient — there is no client account to self-serve a revoke from, by design (no client accounts in this gate). |
 | `active` | `superseded` | A new token is issued for the same recipient+application pair before the old one expired or was revoked | System, as part of the atomic re-issue transaction — the old row's status flips to `superseded` in the same transaction that inserts the new `active` row, which is what lets the partial unique index hold without a race. |
 | `expired` / `revoked` / `superseded` | *(none — terminal)* | — | No transition leaves any of these three states. Re-access always requires a brand-new `issued` row, never a resurrection of an old one. This is deliberate: it keeps `client_access_log` rows permanently attributable to the exact token-state-window they occurred in, with no ambiguity about whether a given row happened while the token was legitimately active. |
 
@@ -477,6 +477,24 @@ surface may invoke. It is the security boundary itself, not a general
 data API — no operation here is a passthrough query; each one is a
 specific, narrow, hand-written projection.
 
+**Two modules, not one (added sub-phase 2.6).** Everything in this
+section describes `lib/bridge/client-portal.ts` — the client-facing
+module, authorized by possession of a valid project-2 token. Sub-phase
+2.6 (`GATE_2_0_FINDINGS.md` §O.2, decided) added a second, separate
+module, `lib/bridge/client-portal-admin.ts`, for the staff-facing
+operations §1's transition matrix always described as out of this
+section's scope (`issueToken`/`revokeToken` — "invoked from the main app,
+not from the client portal"): authorized by project-1 org membership, not
+a token, via the two narrow checks in `GATE_2_0_FINDINGS.md` §O.1's
+resolution. The split exists so `lib/bridge/client-portal.ts`'s own
+docstring claim — that it holds "the entire enumerated operation set §3
+defines" — stays literally true for the set §3 actually describes,
+rather than silently becoming incomplete the moment a structurally
+different, staff-facing operation landed in the same file. Both modules
+share the identical import-boundary lint mechanism described below (each
+gets its own `eslint.config.mjs` allow-list entry), since both hold the
+same project-2 service-role credential.
+
 | Operation | Inputs | Authorization check | Columns/fields returned |
 |---|---|---|---|
 | `resolveToken` | raw token string | Hash lookup finds a row; `status = 'active'`; `expires_at > now()` | `applicationId`, `orgName`, `propertyAddressSummary` (see K.4 resolution below — a bridge-computed prefix of `permit_applications.project_address`, not a city/province decomposition), `recipientName` — enough to render "Welcome, Jane — viewing your application for 123 Main St." No internal ids beyond `applicationId` (needed by the client app for subsequent calls). |
@@ -848,7 +866,7 @@ unchanged; the bridge layer computes it the same way `buildStoragePath()`
 already does, since it has legitimate access to both `orgId` and
 `applicationId` post-authorization-check.
 
-## §6. Sub-phase sequencing 2.1–2.5
+## §6. Sub-phase sequencing 2.1–2.6
 
 Test discipline for every isolation/authorization assertion below: control-
 then-assert, matching `dashboard_queries.test.sql` Part 1's pattern (fixture
@@ -868,7 +886,8 @@ still in the tree.)
 | **2.2** | Main-project `audit_logs` migration (§4): nullable `actor_user_id`/`actor_role`, new `external_actor_id`/`external_actor_label` columns, exactly-one-populated CHECK | Touches one existing table, additive-only (`alter column drop not null` + `add column` + `add constraint`). Every existing row already satisfies the new CHECK (verified by construction, not assumed — the migration should include a post-add `select count(*) from audit_logs where not (...)` sanity assertion returning 0 before commit, same discipline `20260806000024`'s own constraints use). No RLS policy changes. | Control-then-assert on the CHECK specifically: (a) control — with the constraint dropped, insert a row with both `actor_user_id` and `external_actor_id` null, and a row with both populated; confirm both succeed. (b) assert — restore the constraint, repeat both inserts, confirm both are rejected by name (`audit_logs_actor_exactly_one_populated` in the error text), not just "some check_violation." (c) confirm a normal internal-actor insert (only `actor_user_id` populated) still succeeds unchanged — this is the regression check proving the migration didn't silently break the existing, only-ever-used path. |
 | **2.3** | `grant insert on application_documents to service_role` (§5) | Single GRANT, additive. No RLS change. Inngest extract/audit functions unaffected (grep-reconfirmed: `select`/`update` only). | Control-then-assert, inverted from the usual shape since this is a new capability, not a restriction: control = as `service_role`, attempt an INSERT into `application_documents` *before* this migration applies (or inside a transaction with the grant rolled back), confirm it fails with `permission denied` — proving the gap was real, not assumed. Assert = with the grant applied, the identical insert succeeds. Additionally confirm `service_role`'s pre-existing `select`/`update` capability on this table is unchanged (regression check). |
 | **2.4** | Bridge layer module (`lib/bridge/client-portal.ts`) implementing the five read operations from §3; new feature flag (`PERMITFIELD_FF_CLIENT_PORTAL`, default off, `lib/flags.ts`) | New code path only — no existing route or Server Action modified. Off by default per the master prompt's global flag rule. | (a) Per-operation authorization: a valid, active token succeeds; the same token after being moved to `expired`/`revoked`/`superseded` fails — control-then-assert directly analogous to `tenant_isolation.test.sql`'s cross-tenant shape, but scoped to token state instead of org membership (control = the same token succeeds *before* the state change; assert = it fails *after*, proving the state check is what's blocking it, not some unrelated failure). (b) Cross-application scope: a valid token for application A cannot retrieve data for application B, even if `application_id` were somehow supplied — since no operation accepts one as a parameter (§3), this is proven by confirming the operation signatures themselves carry no such parameter, not by a runtime probe against a nonexistent input. (c) The structural-enforcement mechanism (§3) is itself tested: a CI-run check (lint rule execution, or a grep-based test asserting the second-project service-role client constructor has exactly one importer in the repo) — the mechanism must be verified to actually fire, not just documented as existing. |
-| **2.5** | `uploadDocument` operation; first real call site for `writeAuditLog()` (§4) | Depends on 2.2 (schema) and 2.3 (grant) both being live. New code path, flag-gated same as 2.4. `docs/PERMISSIONS.md`'s "Current status" section must be updated in this sub-phase's delivery report to remove the "zero call sites" claim for `writeAuditLog()` — leaving it stale would repeat exactly the kind of drift §0.1 flagged in `GATE_2_0_FINDINGS.md` itself. | (a) MIME/size rejection reuses `lib/storage/documents.ts` — a disallowed MIME type or oversized file is rejected before any DB write, proven by a fixture upload attempt of each kind. (b) A successful upload produces exactly one `application_documents` row (via the now-granted `service_role` INSERT) **and** exactly one `audit_logs` row with `external_actor_id` populated and `actor_user_id` null — control-then-assert reusing 2.2's constraint-drop/restore technique, but asserted against a real bridge-written row this time, not a synthetic fixture, closing the loop between the schema test (2.2) and the code that actually exercises it. (c) Confirm the five read operations from 2.4 still write zero `audit_logs` rows when exercised — a regression check proving §4's "reads go in `client_access_log` only" decision holds in the implemented code, not just in this document. |
+| **2.5** | `uploadDocument` operation; first call site for `writeAuditLog()`'s EXTERNAL-actor shape specifically (§4) — corrected here: this row previously called it "first real call site" unqualified, which was already false when written (`app/(app)/projects/new/actions.ts`'s `project.created` write, Phase 1.1, is the actual first call site, internal-actor shape) — see `GATE_2_0_FINDINGS.md` §O.6, which caught this drift surviving even after `docs/PERMISSIONS.md` itself was corrected | Depends on 2.2 (schema) and 2.3 (grant) both being live. New code path, flag-gated same as 2.4. `docs/PERMISSIONS.md`'s "Current status" section must be updated in this sub-phase's delivery report to remove the "zero call sites" claim for `writeAuditLog()` — leaving it stale would repeat exactly the kind of drift §0.1 flagged in `GATE_2_0_FINDINGS.md` itself. | (a) MIME/size rejection reuses `lib/storage/documents.ts` — a disallowed MIME type or oversized file is rejected before any DB write, proven by a fixture upload attempt of each kind. (b) A successful upload produces exactly one `application_documents` row (via the now-granted `service_role` INSERT) **and** exactly one `audit_logs` row with `external_actor_id` populated and `actor_user_id` null — control-then-assert reusing 2.2's constraint-drop/restore technique, but asserted against a real bridge-written row this time, not a synthetic fixture, closing the loop between the schema test (2.2) and the code that actually exercises it. (c) Confirm the five read operations from 2.4 still write zero `audit_logs` rows when exercised — a regression check proving §4's "reads go in `client_access_log` only" decision holds in the implemented code, not just in this document. |
+| **2.6** | Staff-facing `issueToken`/`revokeToken` (`lib/bridge/client-portal-admin.ts`, §3's "two modules" note); two narrow authorization RPCs (`can_issue_client_access_token`, `can_revoke_client_access_token`); third `writeAuditLog()` call site (internal-actor shape) | Depends on 2.1 (schema) being live. New module, new project-1 migration (RPC functions only, no existing table/policy touched), new project-2 migration (two RPC functions wrapping the §1 FOR UPDATE issuance sequence and both revocation paths — no existing table/policy touched there either). Still no reachable route: this sub-phase adds callable functions, not a Server Action or page (§O.7 confirmed the first sub-phase to expose a reachable route is 2.7, not this one). | (a) Per-operation role-tier admission/refusal, control-then-assert: each of the two authorization RPCs proven to admit its intended tier and refuse everything else, including the asymmetric case — `permit_manager` can revoke but cannot issue. (b) The first-issuance `23505` race resolves per §1's own handling — caught, re-selected, the winning row's identity returned — never a raw constraint error surfaced to the caller. (c) Both revocation paths (per-token, per-recipient) each produce exactly one `revoked` status transition and one `token_lifecycle_events` row. (d) A revoked token fails `resolveToken` on its very next call — closing the loop between this sub-phase's write path and 2.4's read path. |
 
 ## §7. Explicitly undecided
 
@@ -883,12 +902,11 @@ did not distinguish them:
   read during this spec's research; it needs a real decision, not this
   document's guess, before 2.1 ships.
 
-  > **Status — Unassigned, deferred.** No sub-phase in the §6 table (2.1–2.5) implements token
-  > *issuance* logic — 2.1 is schema only, 2.2–2.5 build the bridge layer's read/write operations
-  > against tokens already assumed to exist. This item also missed a deadline this document set for
-  > itself ("before 2.1 ships," never met) — that is a different, worse state than "never assigned,"
-  > and is recorded as such rather than folded into the same bucket as the items below that were never
-  > given a deadline at all. Owner: whichever future sub-phase first implements token issuance.
+  > **Status — Closed, sub-phase 2.6.** Decided at 7 days (not this document's original 14-day
+  > guess), set explicitly at issuance time in `issue_client_access_token()`
+  > (`supabase-client-portal/supabase/migrations/20260815000002_...`), never a column DEFAULT. This
+  > item did miss the deadline this document originally set for itself ("before 2.1 ships") — recorded
+  > here rather than erased, since a late close is still a different history than "on time."
 
 - **Staff-facing issuance/revocation UI and its own role gate** — §1's
   matrix names "org staff" as the trigger for issuance/revocation but does
@@ -897,10 +915,14 @@ did not distinguish them:
   that's a product decision for whoever scopes 2.1, not inferable from
   anything read here.
 
-  > **Status — Unassigned, deferred.** Same reasoning as the TTL item above: no sub-phase in 2.1–2.5
-  > scopes any UI or route work at all (§6's table is schema/grants/bridge-module operations only).
-  > Never given a deadline the way TTL was, so this is "never assigned," not "missed." Owner:
-  > whichever future sub-phase first builds a staff-facing route for issuance/revocation.
+  > **Status — Split by sub-phase 2.6, one half closed, one half still open.** The role-gate half is
+  > closed: `GATE_2_0_FINDINGS.md` §O.1 decided two narrow, purpose-built tiers rather than widening
+  > `is_org_owner()` — `owner`/`org_owner` for issuance, `owner`/`org_owner`/`permit_manager` for
+  > revocation — implemented as `can_issue_client_access_token()`/`can_revoke_client_access_token()`.
+  > The UI half remains open: 2.6 built the callable module (`issueToken`/`revokeToken`) and its own
+  > tests, but wired no route, Server Action, or page to it (confirmed by §O.7: 2.6 exposes no new
+  > reachable route, 2.7 is the first sub-phase that does). Owner for the remaining UI work: whichever
+  > future sub-phase first builds a staff-facing route calling these functions.
 
 - **Rate limiting / abuse handling on token validation itself** (e.g.
   repeated invalid-token lookups against `resolveToken`) is not designed

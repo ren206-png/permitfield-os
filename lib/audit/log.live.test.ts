@@ -37,29 +37,39 @@ const ORG_A_OWNER_USER_ID = '10000000-0000-0000-0000-00000000000a';
 
 const main = createServiceClient();
 
-async function fetchRow(id: string) {
-  const { data, error } = await main.from('audit_logs').select('*').eq('id', id).single();
+// Gate 2.0 sub-phase 2.6: writeAuditLog() no longer returns the new row's id
+// (lib/audit/log.ts's own header explains why -- `.select('id')` turned the
+// insert into an INSERT...RETURNING, and Postgres applies the table's SELECT
+// policy to RETURNING output even when the INSERT policy alone would have
+// allowed the write, which broke internal-actor writes by any role admitted
+// for insert but not select, e.g. permit_manager). So these two tests below
+// now read the row back by its caller-supplied entityId (a fresh randomUUID()
+// per test, so this is just as collision-free as looking up by the row's own
+// id was) instead of by `data.id`.
+async function fetchRowByEntityId(entityId: string) {
+  const { data, error } = await main.from('audit_logs').select('*').eq('entity_id', entityId).single();
   if (error || !data) {
-    throw new Error(`failed to read back audit_logs row ${id}: ${error?.message}`);
+    throw new Error(`failed to read back audit_logs row for entity_id ${entityId}: ${error?.message}`);
   }
   return data;
 }
 
 describe('writeAuditLog external-actor / internal-actor branches (live)', () => {
   test('internal-actor shape (actorUserId + actorRole) writes successfully', async () => {
+    const entityId = randomUUID();
     const { data, error } = await writeAuditLog(main, {
       orgId: ORG_A_ID,
       actorUserId: ORG_A_OWNER_USER_ID,
       actorRole: 'owner',
       action: 'test.audit_log_live.internal_actor',
       entityType: 'audit_log_live_test',
-      entityId: randomUUID(),
+      entityId,
     });
 
     expect(error).toBeNull();
-    expect(data?.id).toBeDefined();
+    expect(data).toBeNull();
 
-    const row = await fetchRow(data!.id);
+    const row = await fetchRowByEntityId(entityId);
     expect(row.actor_user_id).toBe(ORG_A_OWNER_USER_ID);
     expect(row.actor_role).toBe('owner');
     expect(row.external_actor_id).toBeNull();
@@ -68,6 +78,7 @@ describe('writeAuditLog external-actor / internal-actor branches (live)', () => 
 
   test('external-actor shape (externalActorId + externalActorLabel) writes successfully', async () => {
     const externalActorId = randomUUID();
+    const entityId = randomUUID();
 
     const { data, error } = await writeAuditLog(main, {
       orgId: ORG_A_ID,
@@ -75,13 +86,13 @@ describe('writeAuditLog external-actor / internal-actor branches (live)', () => 
       externalActorLabel: 'Jane Test Recipient <client-portal-live-test@example.test>',
       action: 'test.audit_log_live.external_actor',
       entityType: 'audit_log_live_test',
-      entityId: randomUUID(),
+      entityId,
     });
 
     expect(error).toBeNull();
-    expect(data?.id).toBeDefined();
+    expect(data).toBeNull();
 
-    const row = await fetchRow(data!.id);
+    const row = await fetchRowByEntityId(entityId);
     expect(row.actor_user_id).toBeNull();
     expect(row.actor_role).toBeNull();
     expect(row.external_actor_id).toBe(externalActorId);

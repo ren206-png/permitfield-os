@@ -21,9 +21,24 @@ import nextTs from "eslint-config-next/typescript";
 // that has to bypass the bridge's own public functions to set up, the same
 // reason supabase/tests/*.test.sql fixtures write directly to tables no
 // application code writes to.
+//
+// Sub-phase 2.6 (GATE_2_0_FINDINGS.md §O.2, decided) adds a third file,
+// lib/bridge/client-portal-admin.ts, and its own live test file
+// (lib/bridge/client-portal-admin.live.test.ts) -- the staff-facing
+// sibling module (issueToken/revokeToken), authorized against project 1's
+// org membership rather than a project-2 token. It needs the identical
+// credential for the identical reason (it writes client_access_tokens/
+// token_lifecycle_events), and gets its own allow-list entry rather than
+// being folded into client-portal.ts, so that file's own docstring claim
+// ("the entire enumerated operation set §3 defines") stays true.
 const clientPortalServiceClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/bridge/client-portal.ts", "lib/bridge/client-portal.live.test.ts"],
+  ignores: [
+    "lib/bridge/client-portal.ts",
+    "lib/bridge/client-portal.live.test.ts",
+    "lib/bridge/client-portal-admin.ts",
+    "lib/bridge/client-portal-admin.live.test.ts",
+  ],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -35,7 +50,7 @@ const clientPortalServiceClientRestriction = {
               "**/client-portal-service-client.ts",
             ],
             message:
-              "lib/supabase/client-portal-service-client.ts (the second, dedicated Supabase project's service-role client) may only be imported from lib/bridge/client-portal.ts or its own live test file (lib/bridge/client-portal.live.test.ts) -- see that module's header comment and GATE_2_0_SPEC.md §3's structural-enforcement mechanism.",
+              "lib/supabase/client-portal-service-client.ts (the second, dedicated Supabase project's service-role client) may only be imported from lib/bridge/client-portal.ts, lib/bridge/client-portal-admin.ts, or either module's own live test file -- see those modules' header comments and GATE_2_0_SPEC.md §3's structural-enforcement mechanism.",
           },
         ],
       },

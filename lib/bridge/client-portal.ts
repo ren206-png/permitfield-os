@@ -6,11 +6,24 @@ import { isClientPortalEnabled } from '@/lib/flags';
 import { writeAuditLog } from '@/lib/audit/log';
 
 // Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3), extended by sub-phase 2.5.
-// The client-portal bridge layer: the ONLY module in this repo permitted to
-// hold both projects' service-role credentials side by side and read across
-// them. This file is the entire enumerated operation set §3 defines: the
+// The client-portal bridge layer: the ONLY module in this repo permitted,
+// alongside its sub-phase 2.6 sibling below, to hold both projects'
+// service-role credentials side by side and read across them. This file is
+// the entire CLIENT-FACING, token-authorized operation set §3 defines: the
 // five read operations from 2.4, plus `uploadDocument` (2.5) -- each a
 // specific, narrow, hand-written projection, never a passthrough query.
+//
+// Sub-phase 2.6 added a second module with the same credential access,
+// lib/bridge/client-portal-admin.ts -- staff-facing issuance/revocation of
+// client_access_tokens, authorized against project 1's org membership
+// rather than a project-2 bearer token (GATE_2_0_FINDINGS.md §O.2,
+// decided: a separate module rather than adding those two operations
+// here, specifically so this file's own "entire operation set" claim
+// stays true for the set it actually describes -- the client-portal
+// surface's six read/write operations -- rather than silently becoming
+// incomplete the moment a structurally different, staff-facing operation
+// landed in it). If you are looking for issueToken/revokeToken, they are
+// in that sibling file, not this one.
 //
 // Import boundary: eslint.config.mjs's no-restricted-imports rule is the
 // only file in the repo permitted to import

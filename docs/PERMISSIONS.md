@@ -384,17 +384,26 @@ Notes on deliberate asymmetries vs. Table 1:
   calls it.** Zero do, as of Phase 1.0. A future phase's report should update
   this section (and this file's "Current status") when the first call site
   lands, rather than leaving this warning stale.
-- **`lib/audit/log.ts`'s `writeAuditLog()` has two real call sites, one
+- **`lib/audit/log.ts`'s `writeAuditLog()` has three real call sites, two
   internal and one external.** `app/(app)/projects/new/actions.ts` (Phase 1.1)
   calls it with the internal-actor shape (`actorUserId`/`actorRole`) on
   `project.created`. `lib/bridge/client-portal.ts`'s `uploadDocument()` (Gate
   2.0 sub-phase 2.5) calls it with the external-actor shape
   (`externalActorId`/`externalActorLabel`) on `client_document_upload` — the
   first caller to exercise that branch, which `AuditLogEntry` was widened to
-  carry in the same sub-phase (see `lib/audit/log.live.test.ts`). This
-  section previously claimed "no writers in this codebase yet," which was
-  already stale before 2.5 began (the Phase 1.1 internal-actor call site
-  predates it) — corrected here rather than simply noting the external one.
+  carry in the same sub-phase (see `lib/audit/log.live.test.ts`).
+  `lib/bridge/client-portal-admin.ts`'s `issueToken()`/`revokeTokenById()`/
+  `revokeTokenForRecipient()` (Gate 2.0 sub-phase 2.6) call it with the
+  internal-actor shape again, on `client_access_token.issued` /
+  `client_access_token.revoked` — the second internal-actor call site, using
+  a session-scoped project-1 client each time (never service-role), same RLS
+  reasoning as `project.created`'s own call. This section previously claimed
+  "no writers in this codebase yet," which was already stale before 2.5 began
+  (the Phase 1.1 internal-actor call site predates it) — corrected then to
+  "two," and corrected again here to "three" now that 2.6 added a third,
+  rather than letting this count go stale a second time the way
+  `GATE_2_0_SPEC.md` §6's own "first call site" text did (see
+  `GATE_2_0_FINDINGS.md` §O.6).
 - **`jurisdiction_sources` (Phase 1.2) is infrastructure only, same
   pattern.** The table, RLS, `is_platform_admin()`,
   `verify_jurisdiction_source()`, and `jurisdiction_source_effective_status()`

@@ -114,17 +114,38 @@ values
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project
 -- ============================================================
 
+-- Gate 2.0 sub-phase 2.6: the six trailing '' columns (confirmation_token
+-- through email_change_token_current) are needed because GoTrue's Admin API
+-- (auth.admin.getUserById / updateUserById) fails with a 500
+-- "AuthRetryableFetchError: Database error loading user" when scanning a row
+-- where these normally-nullable text columns are actually NULL -- GoTrue's
+-- own signup flow always writes '' into them, and its Go-side row scanner
+-- apparently isn't NULL-safe for them on read. Rows inserted directly via
+-- SQL (as these always have been, since there's no real password to sign up
+-- with) previously left them at their NULL default, which was silently fine
+-- until sub-phase 2.6 became the first code in this repo to ever call the
+-- Admin API against these two seeded owner rows (lib/bridge/
+-- client-portal-admin.live.test.ts, which resets one's password via
+-- updateUserById to get a session-scoped client for testing staff-facing
+-- token issuance/revocation authorization). Confirmed by direct repro: both
+-- getUserById and updateUserById failed identically for both rows before
+-- this fix, and succeeded after backfilling these columns to '' via a
+-- one-off UPDATE against a live local instance.
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
-  raw_app_meta_data, raw_user_meta_data, is_sso_user, is_anonymous
+  raw_app_meta_data, raw_user_meta_data, is_sso_user, is_anonymous,
+  confirmation_token, recovery_token, email_change, email_change_token_new,
+  phone_change, phone_change_token, email_change_token_current
 ) values
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000a', 'authenticated', 'authenticated',
    'org-a-owner@example.test', 'not-a-real-hash-local-dev-only',
-   now(), now(), now(), '{"provider":"email"}'::jsonb, '{}'::jsonb, false, false),
+   now(), now(), now(), '{"provider":"email"}'::jsonb, '{}'::jsonb, false, false,
+   '', '', '', '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000b', 'authenticated', 'authenticated',
    'org-b-owner@example.test', 'not-a-real-hash-local-dev-only',
-   now(), now(), now(), '{"provider":"email"}'::jsonb, '{}'::jsonb, false, false)
+   now(), now(), now(), '{"provider":"email"}'::jsonb, '{}'::jsonb, false, false,
+   '', '', '', '', '', '', '')
 on conflict (id) do nothing;
 
 insert into organizations (id, name) values
