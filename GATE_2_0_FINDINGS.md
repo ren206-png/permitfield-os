@@ -790,3 +790,132 @@ and K.4 is a genuine pre-implementation design question (which column/join `prop
 and "full property address" actually read) that needs an explicit answer before 2.4 writes the
 query, not an assumption carried in silently. K.5 restates H.5/H.6's still-open preconditions,
 unchanged since 2.1 and squarely 2.4's own scope to close. K.6 confirms no naming collision.
+
+---
+
+## §L. Gate 2.4-pre-grants pre-branch conflict check — sub-phase 2.4 proper (bridge module, §3's
+five read operations, structural enforcement, credential isolation), added before any 2.4
+implementation branch, mirroring §H–§K's own convention
+
+`20260806000032_bridge_read_grants.sql` (K.1's fix) is merged to `main` (fast-forward, verified by
+tip-hash comparison), as is the one-line `occurred_at` → `created_at` correction to §3 itself. Before
+2.4's implementation branch (`lib/bridge/client-portal.ts`: `resolveToken`, `getApplicationSummary`,
+`getReadinessChecklist`, `listDocuments`, `getDocumentDownloadUrl` — `uploadDocument` remains 2.5,
+out of scope here), this section re-checks §3's structural-enforcement design and its five read
+operations' column claims against the live repo, exactly as instructed: three specific areas, no
+code/schema/migration/component change made to produce this section, no branch opened.
+
+**L.1 — The lint rule is unbuilt but structurally buildable; the credential-isolation control cannot
+exist yet because no deploy target of any kind exists in this repo — not even for project 1 itself.**
+`eslint.config.mjs` (read in full) is a flat config (`defineConfig` from `eslint/config`) currently
+consisting of `nextVitals`, `nextTs`, and a `globalIgnores` block — zero `rules` overrides anywhere,
+zero precedent for `no-restricted-imports` or any other custom rule. Nothing prevents 2.4 from adding
+one (flat config supports per-`files` rule objects, which is exactly the shape §3's "scoped to
+`overrides` for every path except that one file" design needs), but it does not exist today, matching
+K.5's finding exactly.
+
+The second control is a different, harder gap than "unbuilt": it has **no target to attach to**.
+Confirmed by direct check, not inference — no `vercel.json` anywhere in the repo; `.github/workflows/`
+contains only `ci.yml`, which has zero "deploy"/"vercel" matches on grep; `next.config.ts` is the
+unmodified scaffold default (`{}`, no `output` mode); a repo-wide grep for "vercel" outside
+`.env.example`/docs matches only `package-lock.json` (a transitive dependency listing, not an
+integration). There is no serverless function group, no separate env-var scope, no deploy pipeline of
+any kind — for the client-portal bridge or for the main app it would sit beside. §3's own text
+describes credential isolation as depending on "whichever deploy target runs
+`lib/bridge/client-portal.ts`" — that target does not exist, so the sentence has no referent yet.
+
+This means §3's "two mechanisms, not one" framing is not currently achievable as designed. Per the
+explicit instruction to say so if the second control can't exist yet: it can't, and until it does, a
+lint rule is the entire boundary — a single, disableable, build-time-only convention doing the job
+§3 assigns to two independent layers. This is not a reason to block 2.4 (the lint rule is real and
+worth building regardless), but 2.4's delivery report should state plainly that credential isolation
+is deferred to whenever a deploy target is chosen, not implied as already covered by §3's prose.
+
+**L.2 — All five read operations' claimed columns exist, with the exact names claimed, on the tables
+claimed — one previously-fixed exception, one previously-flagged ambiguity now confirmed to affect a
+second operation, no new defects.** Checked field-by-field against the live migrations that define
+each table, not against §3's own prose:
+
+- `resolveToken` → `applicationId`, `orgName`, `propertyAddressSummary`, `recipientName`. `orgName`
+  reads `organizations.name` (`20260806000011`, now grant-covered per K.1/§L's own predecessor). The
+  other three fields are token-row-derived or address-derived (see below) — no defect.
+- `getApplicationSummary` → `permitStatus` (`permit_applications.permit_status`, `permit_status_enum`,
+  confirmed `20260806000022` L149), `projectTitle` (`permit_applications.project_title`, confirmed
+  `20260806000006` L22), full property address (see below), `statusHistory` (`to_status`,
+  `created_at` from `application_status_history` — the K.1-fixed column; `20260806000022` L291-311
+  defines the table with `created_at`, no `occurred_at` column ever existed on it). No remaining
+  defect on this row.
+- `getReadinessChecklist` → `{ title, isRequired, status }` from `readiness_checklist_items`. All
+  three confirmed as real columns (`title`, `is_required`, `status` of type `readiness_item_status`)
+  on the table `20260806000025` defines, and exercised directly by `bridge_read_grants.test.sql`'s own
+  assert step. No defect.
+- `listDocuments` → `{ id, originalFilename, docKind, status, uploadedAt }` from
+  `application_documents`. `id`, `original_filename`, `doc_kind`, `uploaded_at` are base columns
+  (`20260806000006` L35-49); `status` (`document_review_status` enum) was added by
+  `20260806000024` L73-100, the same migration that adds `archived_at`. All five confirmed real. No
+  defect.
+- `getDocumentDownloadUrl` → scope check via `application_documents.application_id` (base column,
+  same migration as above) plus "must not be archived," which reads the same migration's
+  `archived_at` column, confirmed non-null-checkable. The signed URL itself is not a new pattern to
+  invent: the existing convention (`app/(app)/applications/[id]/page.tsx` L142, L149) is an inline
+  `supabase.storage.from(BUCKET).createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS)` call, with
+  `SIGNED_URL_TTL_SECONDS = 300` a page-local constant (L13) — not exported or shared. 2.4 can reuse
+  the same call shape but has no existing shared helper to import; that constant will need to be
+  either duplicated or extracted, a small implementation decision, not a schema gap.
+
+The one column-name defect this pass would have caught (`occurred_at`) was already found and fixed
+before this section was opened (`5777ffa`) — confirmed resolved by direct re-read of the current L446
+table cell. The one open ambiguity is not new: K.4 already flagged `propertyAddressSummary`'s
+granularity and sourcing as unresolved (`project_address` is single free-text;
+`properties.city`/`province_code` is reachable only through a permanently-nullable `project_id`).
+This pass confirms the identical ambiguity also applies to `getApplicationSummary`'s "full property
+address" field, not only `resolveToken`'s summary — both fields read from the same
+under-specified source, so this is K.4 extended to a second call site, not a second, independent
+defect.
+
+**L.3 — What the bridge connects to: project 1 is buildable and testable today, locally and in CI;
+project 2 has a local CI-wired throwaway stack but no live remote instance and no credentials
+anywhere, so nothing can be built or tested against a real second project yet; and no application-level
+(TypeScript/vitest) test infrastructure exists for exercising a live Supabase connection on either
+project.** Three separate facts, checked independently:
+
+- Project 1 (`organizations`, `application_status_history`, `readiness_checklist_items`,
+  `application_documents`, `permit_applications`) is fully reachable via `supabase start` locally and
+  via `ci.yml`'s existing `build-and-test`/`sql-tests` jobs — the same stack every prior sub-phase's
+  SQL tests, including `bridge_read_grants.test.sql`, already exercise.
+- Project 2 (`client_access_tokens` and its siblings, `supabase-client-portal/supabase/migrations/
+  20260814000001_client_portal_token_schema.sql`) has no live remote instance and no credentials
+  provisioned anywhere — matching the user's own earlier statement in this session ("When 2.4 needs
+  it, I'll create the project and paste values into my own local `.env` and GitHub secrets myself").
+  `.env.example` still has zero second-project entries, confirmed by direct re-read. It does,
+  however, already have a local, throwaway, CI-wired stack: `ci.yml` runs
+  `supabase --workdir supabase-client-portal start` / `db reset` / `npm run test:sql:client-portal`
+  as a second, independent job step (lines 109-131) — that stack can be built and SQL-tested against
+  today, the same way project 1 can. What it cannot do is stand in for the real, credentialed project
+  2 instance token issuance/validation is ultimately meant to run against — this is a real, live
+  schema to develop and SQL-test against, not a substitute for the eventual production project.
+- Neither project has application-level (non-SQL) test coverage today. `vitest.config.mts`'s own
+  header comment states it is deliberately minimal — "no Next.js/React plugin, no jsdom environment"
+  — and all 6 existing `*.test.ts` files (`lib/jurisdictions/staleness.test.ts`,
+  `lib/intake/schemas.test.ts`, `lib/entitlements/index.test.ts`, `lib/authz/index.test.ts`,
+  `lib/authz/permissions-doc.test.ts`, `lib/permit-status/transitions.test.ts`) are pure-function
+  tests with no Supabase dependency. This means 2.4's five read operations, once written as
+  TypeScript in `lib/bridge/client-portal.ts`, have no existing vitest pattern to test against a live
+  instance the way `bridge_read_grants.test.sql` tests grants directly in SQL — 2.4 will need to
+  either extend `vitest.config.mts` or rely on SQL-level testing plus manual/integration verification,
+  a decision this section flags but does not make.
+
+**Conclusion.** No blocker equivalent to K.1 surfaced in this section — the grants gap that blocked
+2.4 was already closed before this section opened. What this section finds instead is a materially
+weaker starting position than §3's prose implies on exactly the point the instruction anticipated:
+the structural-enforcement mechanism is described as two independent layers, but only one (the lint
+rule) can be built at all right now, because the second (credential isolation) has no deploy target
+to scope itself to, for this app or any part of it. L.2 finds the five read operations' column claims
+are otherwise sound — one defect already fixed, one pre-existing ambiguity (K.4) now confirmed to
+span two fields instead of one, nothing new. L.3 finds project 1 fully buildable/testable today, a
+throwaway project-2 stack already wired into CI and usable for SQL-level development the same way,
+but no real project-2 credentials anywhere and no application-level test infrastructure for either —
+2.4 can be built and SQL-tested against both local stacks, but cannot be tested against a live,
+credentialed project 2, and has no vitest precedent for testing the TypeScript layer itself against
+either. None of this blocks 2.4 from starting; all of it should be named in 2.4's own scope before
+work begins, the same way K.1 through K.6 were named before 2.4-pre-grants.
