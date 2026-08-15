@@ -522,6 +522,45 @@ Both are enforceable and checkable (the lint rule by CI, the credential
 scoping by inspecting the deploy config) — neither depends on a future
 author remembering a written rule.
 
+### Current status of the two mechanisms (K.5/L.1) — recorded before any 2.4 code was written
+
+As of the start of sub-phase 2.4's implementation branch, only mechanism 1
+(the lint rule) is buildable. Mechanism 2 (credential physical isolation)
+cannot exist yet, and this is stated here plainly rather than left implied
+as already covered by the "two mechanisms, not one" framing above.
+
+`GATE_2_0_FINDINGS.md` §K.5 and §L.1 both confirm the same underlying fact
+by direct repo check, not inference: there is no deploy target of any kind
+in this repo, for the client-portal bridge or for the main app it would sit
+beside. No `vercel.json`, no "deploy"/"vercel" step in
+`.github/workflows/ci.yml`, no `output` mode set in `next.config.ts`, no
+serverless function group, no separate env-var scope. §3's mechanism 2 text
+above describes credential isolation as depending on "whichever deploy
+target runs `lib/bridge/client-portal.ts`" — that target has no referent
+today. This is not a gap specific to the second project or the client
+portal; the main app's own project-1 `service_role` key
+(`lib/supabase/service-client.ts`) is equally un-isolated, for the identical
+reason — there is nowhere to isolate either credential *to*.
+
+**The boundary today is single-layer, not two-layer.** The lint rule
+(module-boundary enforcement, restricting which file may import the
+second-project `service_role` client constructor) is the entire enforced
+boundary between the bridge layer and the rest of the app. It is real and
+worth building regardless, and 2.4 builds it. But it is a single,
+disableable, build-time-only convention — not backed by a second,
+independent, deployment-enforced layer, because that layer has nothing to
+attach to yet.
+
+**Binary trigger for when this must change.** Before any real,
+non-local project-2 `service_role` credential is provisioned into any
+environment reachable by the main app's runtime — staging included, not
+just production — mechanism 2 must exist first, or the single-layer state
+above must be re-justified in writing at that time. A staging deploy is not
+exempt from this trigger merely for being staging: "any environment
+reachable by the main app's runtime" is the actual boundary, and staging
+sits inside it. Until that trigger fires, this spec records the gap rather
+than treating §3's two-mechanism framing as already achieved.
+
 ## §4. `audit_logs` migration design (Option 2, path b)
 
 Current schema (`20260806000018`, verified live, unchanged since):
