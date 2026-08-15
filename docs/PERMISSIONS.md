@@ -384,9 +384,17 @@ Notes on deliberate asymmetries vs. Table 1:
   calls it.** Zero do, as of Phase 1.0. A future phase's report should update
   this section (and this file's "Current status") when the first call site
   lands, rather than leaving this warning stale.
-- **`lib/audit/log.ts`'s `writeAuditLog()` is infrastructure only.** No
-  existing route calls it. The `audit_logs` table exists and its RLS/grants
-  are live, but it has no writers in this codebase yet.
+- **`lib/audit/log.ts`'s `writeAuditLog()` has two real call sites, one
+  internal and one external.** `app/(app)/projects/new/actions.ts` (Phase 1.1)
+  calls it with the internal-actor shape (`actorUserId`/`actorRole`) on
+  `project.created`. `lib/bridge/client-portal.ts`'s `uploadDocument()` (Gate
+  2.0 sub-phase 2.5) calls it with the external-actor shape
+  (`externalActorId`/`externalActorLabel`) on `client_document_upload` — the
+  first caller to exercise that branch, which `AuditLogEntry` was widened to
+  carry in the same sub-phase (see `lib/audit/log.live.test.ts`). This
+  section previously claimed "no writers in this codebase yet," which was
+  already stale before 2.5 began (the Phase 1.1 internal-actor call site
+  predates it) — corrected here rather than simply noting the external one.
 - **`jurisdiction_sources` (Phase 1.2) is infrastructure only, same
   pattern.** The table, RLS, `is_platform_admin()`,
   `verify_jurisdiction_source()`, and `jurisdiction_source_effective_status()`
