@@ -44,3 +44,9 @@ next-env.d.ts
 # supabase CLI local state (Docker volumes, generated edge runtime bundle)
 /supabase/.temp/
 /supabase/.branches/
+
+# same, for the second Supabase project (Gate 2.0 client portal) -- config
+# lives at supabase-client-portal/supabase/config.toml, so the CLI's
+# generated local state lands one level deeper than project 1's, here
+/supabase-client-portal/supabase/.temp/
+/supabase-client-portal/supabase/.branches/

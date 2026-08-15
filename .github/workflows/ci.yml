@@ -21,6 +21,21 @@
 #     executed in this environment," which is what every one of those
 #     files' header comments has said since Phase 1.0.
 #
+#     This job also boots a second, independent local Postgres stack for
+#     supabase-client-portal/ (Gate 2.0's second Supabase project) via
+#     `supabase --workdir supabase-client-portal` and runs
+#     scripts/run-client-portal-sql-tests.sh (`npm run test:sql:client-portal`)
+#     against it. Both stacks run in the same job, on the same runner,
+#     concurrently -- safe because supabase-client-portal/supabase/config.toml
+#     offsets every port +100 from the root project's, specifically so this
+#     works without collision (see that file's header). Before this, PR #6's
+#     CI reported green having never executed
+#     supabase-client-portal/supabase/tests/client_portal_token_lifecycle.test.sql
+#     at all -- the sql-tests job only ever globbed supabase/tests/*.test.sql.
+#     Both scripts fail loud (non-zero, before running anything) if their
+#     respective test glob comes back empty, so a silently-empty or
+#     silently-skipped suite cannot report green.
+#
 # Kept as two jobs (not one) so a Postgres/Docker flake in sql-tests never
 # blocks the fast, infra-free build-and-test signal from reporting -- and
 # vice versa.
@@ -91,8 +106,26 @@ jobs:
 
       - run: npm run test:sql
 
+      # Second, independent stack for supabase-client-portal/ (Gate 2.0's
+      # second Supabase project). `--workdir` points the CLI at
+      # supabase-client-portal/supabase/config.toml instead of the
+      # repo-root project's -- the CLI only discovers a project's config
+      # at <workdir>/supabase/config.toml, which is why this file lives
+      # under supabase-client-portal/supabase/ and not directly in
+      # supabase-client-portal/ (see that migration's history for why).
+      # Runs concurrently with the stack started above; config.toml's own
+      # +100 port offset is what makes that safe.
+      - run: supabase --workdir supabase-client-portal start
+
+      - run: supabase --workdir supabase-client-portal db reset
+
+      - run: npm run test:sql:client-portal
+
       # Best-effort cleanup; the runner is thrown away after the job
       # regardless, but this documents intent and avoids leaving a
       # container running if this job is ever moved to a persistent runner.
       - if: always()
         run: supabase stop --no-backup
+
+      - if: always()
+        run: supabase --workdir supabase-client-portal stop --no-backup
