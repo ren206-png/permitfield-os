@@ -1,13 +1,15 @@
 import { createHash } from 'crypto';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { UPLOADS_BUCKET } from '@/lib/storage/documents';
+import { isAllowedMimeType, MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
+import { isClientPortalEnabled } from '@/lib/flags';
+import { writeAuditLog } from '@/lib/audit/log';
 
-// Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3). The client-portal bridge
-// layer: the ONLY module in this repo permitted to hold both projects'
-// service-role credentials side by side and read across them. This file is
-// the entire enumerated operation set §3 defines minus `uploadDocument`
-// (sub-phase 2.5, out of scope here) -- five read operations, each a
+// Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3), extended by sub-phase 2.5.
+// The client-portal bridge layer: the ONLY module in this repo permitted to
+// hold both projects' service-role credentials side by side and read across
+// them. This file is the entire enumerated operation set §3 defines: the
+// five read operations from 2.4, plus `uploadDocument` (2.5) -- each a
 // specific, narrow, hand-written projection, never a passthrough query.
 //
 // Import boundary: eslint.config.mjs's no-restricted-imports rule is the
@@ -25,6 +27,27 @@ import { UPLOADS_BUCKET } from '@/lib/storage/documents';
 // discarded, only kept out of the response: every attempt (found or not,
 // success or denied) writes a project-2 `client_access_log` row via
 // logAttempt() below.
+//
+// Feature flag (GATE_2_0_FINDINGS.md §M.4 decision, sub-phase 2.5): every
+// exported operation below -- all five 2.4 read operations, and
+// `uploadDocument` -- now starts with an `isClientPortalEnabled()` check,
+// before anything else runs, including before `createClientPortalServiceClient()`
+// is ever called. `isClientPortalEnabled()` (`lib/flags.ts`) had zero call
+// sites from 2.4 through the start of 2.5 -- an "inert flag" the user
+// flagged as unfinished business dating back to Gate 1.7, on a flag whose
+// own 2.4 header comment already claimed "leaving it off is what keeps the
+// second project's service-role credential... unreachable from any live
+// request until this is explicitly turned on," a claim that was not
+// actually true until this change. This also brings the implementation in
+// line with GATE_2_0_SPEC.md §6's own sub-phase table, which already
+// described both 2.4 and 2.5 as "flag-gated" before either was.
+//
+// Deliberately no `client_access_log` write for the disabled case: unlike
+// every other denial path below, a disabled flag means this function
+// returns before `createClientPortalServiceClient()` is ever called, so
+// project 2 is never touched at all when the flag is off -- not even to
+// log the attempt. That is the literal meaning of "unreachable," not an
+// oversight.
 
 const SIGNED_URL_TTL_SECONDS = 300; // Matches the existing convention (app/(app)/applications/[id]/page.tsx's
 // own page-local SIGNED_URL_TTL_SECONDS constant, ≤15 min per the master
@@ -47,7 +70,17 @@ type DenialDetail =
   | 'token_superseded'
   | 'application_not_found'
   | 'document_not_found'
-  | 'document_archived';
+  | 'document_archived'
+  // uploadDocument only (sub-phase 2.5): the two rejections §6(a) requires
+  // happen before any DB write, mirroring app/api/documents/route.ts's own
+  // ordering.
+  | 'invalid_mime_type'
+  | 'file_too_large'
+  // uploadDocument only: the Storage upload or application_documents insert
+  // itself failed for a reason other than the legitimate "already exists"
+  // re-submission case (which is not a denial at all -- see uploadDocument's
+  // own comment).
+  | 'upload_failed';
 
 // Optional request metadata a future route handler can supply for the
 // `client_access_log.ip`/`user_agent` columns. Deliberately NOT part of any
@@ -133,6 +166,11 @@ type ResolvedToken = {
   applicationId: string;
   orgId: string;
   recipientName: string | null;
+  // Added sub-phase 2.5, for uploadDocument's audit-log external-actor
+  // label only -- no 2.4 operation reads this field. `recipient_email_display`
+  // is `not null` on client_access_tokens (20260814000001), unlike
+  // `recipient_name`, so this is always a real value to fall back on.
+  recipientEmailDisplay: string;
 };
 
 // Hash-lookup + status/expiry check, shared by every operation. Returns the
@@ -151,7 +189,7 @@ async function resolveValidToken(
 
   const { data: row, error } = await portal
     .from('client_access_tokens')
-    .select('id, application_id, org_id, status, expires_at, recipient_name')
+    .select('id, application_id, org_id, status, expires_at, recipient_name, recipient_email_display')
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -189,8 +227,21 @@ async function resolveValidToken(
       applicationId: row.application_id,
       orgId: row.org_id,
       recipientName: row.recipient_name,
+      recipientEmailDisplay: row.recipient_email_display,
     },
   };
+}
+
+// Sub-phase 2.5: the "display snapshot" GATE_2_0_FINDINGS.md's step 3
+// describes for `audit_logs.external_actor_label` -- denormalized at write
+// time, matching 20260806000030's own header comment ("recipient_email_display/
+// recipient_name, not the normalized recipient_email"). Uses both fields
+// together when a name is on file, matching the exact fixture shape
+// lib/bridge/client-portal.live.test.ts's insertTokenFixture already builds
+// ("Jane Test Recipient <email>") -- falls back to the email alone since
+// `recipient_name` is nullable and `recipient_email_display` is not.
+function buildExternalActorLabel(token: ResolvedToken): string {
+  return token.recipientName ? `${token.recipientName} <${token.recipientEmailDisplay}>` : token.recipientEmailDisplay;
 }
 
 type ScopedApplication = {
@@ -263,6 +314,10 @@ export async function resolveToken(
   rawToken: string,
   context?: BridgeRequestContext
 ): Promise<ResolveTokenResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
   const portal = createClientPortalServiceClient();
   const resolved = await resolveValidToken(portal, rawToken, 'resolveToken', context);
   if (!resolved.ok) {
@@ -334,6 +389,10 @@ export async function getApplicationSummary(
   rawToken: string,
   context?: BridgeRequestContext
 ): Promise<GetApplicationSummaryResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
   const portal = createClientPortalServiceClient();
   const resolved = await resolveValidToken(portal, rawToken, 'getApplicationSummary', context);
   if (!resolved.ok) {
@@ -405,6 +464,10 @@ export async function getReadinessChecklist(
   rawToken: string,
   context?: BridgeRequestContext
 ): Promise<GetReadinessChecklistResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
   const portal = createClientPortalServiceClient();
   const resolved = await resolveValidToken(portal, rawToken, 'getReadinessChecklist', context);
   if (!resolved.ok) {
@@ -479,6 +542,10 @@ export async function listDocuments(
   rawToken: string,
   context?: BridgeRequestContext
 ): Promise<ListDocumentsResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
   const portal = createClientPortalServiceClient();
   const resolved = await resolveValidToken(portal, rawToken, 'listDocuments', context);
   if (!resolved.ok) {
@@ -539,6 +606,10 @@ export async function getDocumentDownloadUrl(
   documentId: string,
   context?: BridgeRequestContext
 ): Promise<GetDocumentDownloadUrlResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
   const portal = createClientPortalServiceClient();
   const resolved = await resolveValidToken(portal, rawToken, 'getDocumentDownloadUrl', context);
   if (!resolved.ok) {
@@ -630,4 +701,248 @@ export async function getDocumentDownloadUrl(
   });
 
   return { url: signed.signedUrl };
+}
+
+export type UploadDocumentResult = { documentId: string; status: string } | BridgeErrorResponse;
+
+// §3's `uploadDocument`: same authorization/scope check as `listDocuments`
+// (token resolves, application live-re-checks against this token's
+// `applicationId`/`orgId`), plus MIME/size validation reused directly from
+// `lib/storage/documents.ts` (`isAllowedMimeType`, `MAX_FILE_SIZE_BYTES`) --
+// M.3 confirmed both helpers, `computeSha256`, and `buildStoragePath` are
+// unchanged since 2.4's own live test already imports them directly. No
+// `MAX_APPLICATION_TOTAL_BYTES` running-total check here -- §3's table cell
+// names only the allowlist and the per-file cap as this operation's
+// validation surface; the per-application total is app/api/documents/route.ts's
+// own additional policy for internal uploads, not something §3 asked this
+// operation to replicate.
+//
+// Returns only `{ documentId, status }` (§3's own cell: "No data returned
+// beyond `{ documentId, status: 'pending' }` -- a bare acknowledgment, not
+// the full row"). `status` is read back from the actual inserted/existing
+// row rather than hardcoded, so this return value can never silently drift
+// from `application_documents.status`'s real default
+// (`document_review_status not null default 'pending'`, 20260806000024) if
+// that default is ever changed.
+//
+// Storage-write authorization: `service_role`'s Storage API key bypasses
+// `storage.objects` RLS entirely (M.3, confirmed against 20260806000013's
+// own header comment) -- no new bucket policy needed for this write, same
+// as `getDocumentDownloadUrl`'s existing signed-URL read above.
+// `docKind` is passed through as a plain string rather than re-declared
+// against a locally duplicated allowlist (app/api/documents/route.ts's own
+// DOC_KINDS/isDocKind, defined inline there since lib/storage/documents.ts
+// exports no shared doc_kind type) -- an invalid value is rejected by
+// Postgres's own `doc_kind` enum type at the insert below, surfacing as the
+// same generic `upload_failed` denial as any other insert failure. This is
+// the same "GRANT/CHECK is the enforcement surface, not app code"
+// discipline the rest of this bridge and lib/audit/log.ts's widened
+// interface both already lean on, applied to a plain type constraint
+// instead of a security-relevant CHECK.
+export async function uploadDocument(
+  rawToken: string,
+  fileBytes: Buffer,
+  originalFilename: string,
+  mimeType: string,
+  docKind: string,
+  context?: BridgeRequestContext
+): Promise<UploadDocumentResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
+  const portal = createClientPortalServiceClient();
+  const resolved = await resolveValidToken(portal, rawToken, 'uploadDocument', context);
+  if (!resolved.ok) {
+    return { error: 'link_unavailable' };
+  }
+  const { token } = resolved;
+
+  const main = createServiceClient();
+  const application = await loadScopedApplication(main, token.applicationId, token.orgId);
+  if (!application) {
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation: 'uploadDocument',
+      resourceType: 'application_documents',
+      outcome: 'denied',
+      detail: 'application_not_found',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  // MIME/size validation BEFORE any write (§6 2.5(a)) -- same ordering as
+  // app/api/documents/route.ts's own per-file checks, reusing the identical
+  // helpers rather than re-deriving the allowlist or the byte cap here.
+  if (!isAllowedMimeType(mimeType)) {
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation: 'uploadDocument',
+      resourceType: 'application_documents',
+      outcome: 'denied',
+      detail: 'invalid_mime_type',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  if (fileBytes.byteLength > MAX_FILE_SIZE_BYTES) {
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation: 'uploadDocument',
+      resourceType: 'application_documents',
+      outcome: 'denied',
+      detail: 'file_too_large',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  // orgId here is `application.orgId` (the live re-checked value from
+  // project 1), never `token.orgId` (the token's own bare, unenforced
+  // pointer) -- same "the live re-check is authoritative, the token's
+  // pointer is only a hint" discipline `loadScopedApplication`'s own header
+  // comment describes. This is also what makes the storage path
+  // impossible to steer at another application: it is built entirely from
+  // server-verified `application.orgId`/`token.applicationId`, never from
+  // anything the caller supplies.
+  const sha256 = computeSha256(fileBytes);
+  const storagePath = buildStoragePath(application.orgId, token.applicationId, sha256, originalFilename);
+
+  // Same "duplicate/already exists is a legitimate no-op re-submission, not
+  // a failure" tolerance as app/api/documents/route.ts's own upload step --
+  // the sha256-in-path convention means a re-upload of identical bytes
+  // lands on the same object path.
+  const { error: uploadError } = await main.storage
+    .from(UPLOADS_BUCKET)
+    .upload(storagePath, fileBytes, { contentType: mimeType, upsert: false });
+
+  if (uploadError && !/duplicate|already exists/i.test(uploadError.message)) {
+    console.error(`[lib/bridge/client-portal] Storage upload failed for ${storagePath}: ${uploadError.message}`);
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation: 'uploadDocument',
+      resourceType: 'application_documents',
+      outcome: 'denied',
+      detail: 'upload_failed',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  const { data: inserted, error: insertError } = await main
+    .from('application_documents')
+    .insert({
+      application_id: token.applicationId,
+      storage_path: storagePath,
+      original_filename: originalFilename,
+      mime_type: mimeType,
+      byte_size: fileBytes.byteLength,
+      sha256,
+      doc_kind: docKind,
+    })
+    .select('id, status')
+    .maybeSingle();
+
+  let documentId: string;
+  let status: string;
+
+  if (insertError) {
+    // Duplicate (application_id, sha256): the file was already recorded by
+    // an earlier call (or a genuinely concurrent one) -- not a failure, same
+    // "already recorded, not an error" tolerance as the internal route.
+    // Falls through to look up the existing row so this call still returns
+    // a real `{ documentId, status }`, not a synthetic one.
+    if (!/duplicate key value/i.test(insertError.message)) {
+      console.error(`[lib/bridge/client-portal] application_documents insert failed: ${insertError.message}`);
+      await logAttempt(portal, {
+        tokenId: token.tokenId,
+        operation: 'uploadDocument',
+        resourceType: 'application_documents',
+        outcome: 'denied',
+        detail: 'upload_failed',
+        context,
+      });
+      return { error: 'link_unavailable' };
+    }
+
+    const { data: existing, error: existingError } = await main
+      .from('application_documents')
+      .select('id, status')
+      .eq('application_id', token.applicationId)
+      .eq('sha256', sha256)
+      .maybeSingle();
+
+    if (existingError || !existing) {
+      console.error(
+        `[lib/bridge/client-portal] application_documents duplicate-row lookup failed: ${existingError?.message ?? 'no row found'}`
+      );
+      await logAttempt(portal, {
+        tokenId: token.tokenId,
+        operation: 'uploadDocument',
+        resourceType: 'application_documents',
+        outcome: 'denied',
+        detail: 'upload_failed',
+        context,
+      });
+      return { error: 'link_unavailable' };
+    }
+
+    documentId = existing.id;
+    status = existing.status;
+  } else if (inserted) {
+    documentId = inserted.id;
+    status = inserted.status;
+  } else {
+    console.error('[lib/bridge/client-portal] application_documents insert returned no row and no error.');
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation: 'uploadDocument',
+      resourceType: 'application_documents',
+      outcome: 'denied',
+      detail: 'upload_failed',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  // The audit row (GATE_2_0_SPEC.md §4's "Does this gate wire up
+  // writeAuditLog()?" section; user step 3). This is writeAuditLog()'s
+  // first EXTERNAL-actor call site -- app/(app)/projects/new/actions.ts
+  // (Phase 1.1) already calls it for the internal-actor shape, so this is
+  // not the function's first call site overall, only the first to exercise
+  // the branch 2.2/2.5 exist for. `main` (project 1's own service_role
+  // client) is the caller -- the only way to write an external-actor row at
+  // all, since no `authenticated` session exists for a client-portal
+  // recipient in project 1 (see lib/audit/log.ts's own updated header
+  // comment). A failed audit write does not fail the upload itself --
+  // writeAuditLog()'s own contract -- but is logged loudly, since silently
+  // losing the audit trail for a real mutation is worse than silently
+  // losing it for a read.
+  const { error: auditError } = await writeAuditLog(main, {
+    orgId: application.orgId,
+    externalActorId: token.tokenId,
+    externalActorLabel: buildExternalActorLabel(token),
+    action: 'client_document_upload',
+    entityType: 'application_documents',
+    entityId: documentId,
+    afterSummary: { originalFilename, docKind, byteSize: fileBytes.byteLength },
+    ip: context?.ip ?? null,
+    userAgent: context?.userAgent ?? null,
+  });
+  if (auditError) {
+    console.error(`[lib/bridge/client-portal] writeAuditLog failed for client_document_upload (document ${documentId}): ${auditError}`);
+  }
+
+  await logAttempt(portal, {
+    tokenId: token.tokenId,
+    operation: 'uploadDocument',
+    resourceType: 'application_documents',
+    resourceId: documentId,
+    outcome: 'success',
+    context,
+  });
+
+  return { documentId, status };
 }
