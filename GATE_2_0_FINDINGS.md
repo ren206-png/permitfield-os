@@ -919,3 +919,121 @@ but no real project-2 credentials anywhere and no application-level test infrast
 credentialed project 2, and has no vitest precedent for testing the TypeScript layer itself against
 either. None of this blocks 2.4 from starting; all of it should be named in 2.4's own scope before
 work begins, the same way K.1 through K.6 were named before 2.4-pre-grants.
+
+## §M. Gate 2.4 pre-branch conflict check — sub-phase 2.5 (`uploadDocument`, first `writeAuditLog()`
+call site, storage path), added before any 2.5 implementation branch, mirroring §H–§L's own convention
+
+2.4 (`lib/bridge/client-portal.ts`'s five read operations) is merged to `main` (fast-forward,
+`d26c9d2`, tip-hash verified against `headRefOid`) with CI green, including the branch's own live-Node
+finding (Node 20 → 22, `supabase-js`'s `realtime-js` requires native `WebSocket`) fixed in the same
+merge. Before 2.5's implementation branch (`uploadDocument`; §4's `writeAuditLog()` call site; §5's
+storage path), this section re-checks the state the prior sections left undecided or deferred, exactly
+as instructed: three specific areas, no code/schema/migration/component change made to produce this
+section, no branch opened.
+
+**M.1 — Both of 2.5's schema/grant prerequisites (2.2, 2.3) are already merged to `main`, exactly
+matching §4/§5's design, with no drift.** Checked by direct read of the live migrations, not by
+assuming the sub-phase table's sequencing was honored:
+
+- `20260806000030_audit_logs_external_actor.sql` (2.2, §4) is live: `actor_user_id`/`actor_role` both
+  nullable, `external_actor_id`/`external_actor_label` added, both CHECK constraints present under the
+  exact names §4 specifies (`audit_logs_actor_exactly_one_populated`,
+  `audit_logs_external_actor_label_requires_id`), plus a `do $$ ... raise exception` sanity block
+  proving zero existing rows would violate the new CHECK — the same discipline §6's 2.2 row requires,
+  already executed at migration time rather than left to a separate test file to catch first.
+- `20260806000031_application_documents_service_role_insert.sql` (2.3, §5) is live: a single additive
+  `grant insert on application_documents to service_role;`, with its own header comment confirming (via
+  a re-grep of `lib/inngest/functions/{extract,audit}.ts`) that no existing `service_role` caller gains
+  an unused capability, and confirming `application_documents_insert`'s RLS `with check` is irrelevant
+  to `service_role` (`BYPASSRLS`), matching §5's "the GRANT is the entire enforcement surface" claim
+  exactly.
+
+Both migrations cite their own originating findings sections (§I, §J) inline, which this check
+independently re-confirms rather than takes on faith. 2.5 does not need to design or migrate anything
+schema-side — both prerequisites §6's table lists as dependencies are already satisfied on `main`.
+
+**M.2 — `writeAuditLog()` cannot write an external-actor row today; this is a real, load-bearing gap,
+not a hypothetical one, and 2.5 cannot satisfy §6(b)'s test requirement without extending it first.**
+Read in full (`lib/audit/log.ts`). Its `AuditLogEntry` interface declares `actorUserId: string` and
+`actorRole: Role` as required fields — not optional — and the function body unconditionally maps them
+to `actor_user_id`/`actor_role` on every insert; there is no `externalActorId`/`externalActorLabel`
+field anywhere in the interface, and no branch in the insert body that would ever populate
+`external_actor_id`/`external_actor_label`. Concretely: there is no way to call this function today
+that produces a row satisfying `audit_logs_actor_exactly_one_populated`'s external-actor branch
+(`actor_user_id is null and actor_role is null and external_actor_id is not null`) — every call is
+structurally forced down the internal-actor branch, or fails a required-field TypeScript error before
+it compiles. This gap is invisible until 2.5 tries to use it, exactly the shape of gap this
+pre-branch-check convention exists to surface first.
+
+The fix is additive, not a redesign: widen `AuditLogEntry` so `actorUserId`/`actorRole` become
+optional and add optional `externalActorId`/`externalActorLabel`, then branch the insert body between
+the two shapes the CHECK already enforces at the DB layer (mirroring the constraint's own two-branch
+structure, so the TypeScript shape and the SQL CHECK can't silently diverge). One adjacent question
+this section flags but does not decide: whether to make this a hard runtime assertion (throw if neither
+or both shapes are populated) in addition to the type-level optionality, so a caller bug surfaces at
+the `writeAuditLog()` call site rather than as a CHECK-violation Postgres error surfaced from inside a
+bridge operation.
+
+The function's *client* parameter is not part of this gap, despite the header comment's framing. That
+comment states the function "takes the caller's own session-scoped Supabase client... rather than
+instantiating one itself or accepting a service-role client" and frames this as deliberate, written
+when every caller was an `authenticated` Route Handler. But the function body itself has no
+session-specific behavior — it calls `supabase.from('audit_logs').insert(...)` on whatever client
+object it's given. `uploadDocument` will call this from the bridge layer as project 1's `service_role`
+client (`lib/supabase/service-client.ts`, the only way to write an external-actor row at all, since no
+`authenticated` session exists for a client-portal recipient in project 1), and nothing in the function
+body prevents that — `service_role` bypasses `audit_logs_insert`'s RLS check entirely (`BYPASSRLS`),
+same as every other `service_role` write in this schema. The header comment's "deliberate" framing
+should be corrected to describe *both* legal callers once 2.5 adds the second one, not left to imply
+a restriction the code was never actually enforcing.
+
+**M.3 — No gap on the storage write path; every helper `uploadDocument` needs already exists with the
+exact names/signatures 2.4's own live test already exercises, and `service_role`'s Storage access needs
+no new grant.** `storage.objects`' RLS policies (`20260806000013_storage_buckets.sql`) are scoped to
+`to authenticated` only (`uploads_select`/`uploads_insert`/`uploads_delete`); that migration's own
+header comment already states the reason no `service_role` policy exists: the Storage API's
+service-role key bypasses `storage.objects` RLS entirely, the same mechanism (not a coincidence of
+naming) as `service_role`'s Postgres-level `BYPASSRLS`. `uploadDocument` needs no new bucket grant or
+policy, matching §5's own claim ("no new `storage.objects` RLS policy is needed... the bridge layer's
+`service_role` storage access bypasses it the same way every other `service_role` operation in this
+schema does") — this section confirms that claim against the live migration rather than repeating it.
+
+`lib/storage/documents.ts`'s `isAllowedMimeType`, `MAX_FILE_SIZE_BYTES`, `computeSha256`,
+`buildStoragePath`, and `UPLOADS_BUCKET` are all still present with the exact names §5 cites — and this
+is doubly confirmed, not singly: `lib/bridge/client-portal.live.test.ts`'s own `insertDocumentFixture`
+helper (2.4, merged) already imports and calls `computeSha256`/`buildStoragePath`/`UPLOADS_BUCKET`
+directly to build test fixtures, so 2.4's own passing CI run is a second, independent confirmation
+these helpers exist and behave as §5 describes, beyond this section's own re-read.
+
+**M.4 — `isClientPortalEnabled()` still has zero call sites, same as 2.4's own read operations; 2.5 as
+scoped by §6 does not change that, and this section states it plainly rather than leaving it implied.**
+Re-grepped repo-wide: `lib/flags.ts` declares `isClientPortalEnabled()` (2.4), but no route, Server
+Action, or the bridge module itself (`lib/bridge/client-portal.ts`) reads it anywhere — matching the
+same "declared ahead of its consumer" pattern `lib/flags.ts`'s own header comments document for
+`isLifecycleCoreEnabled()`, `isJurisdictionsEnabled()`, and others. §6 scopes 2.5 to "the
+`uploadDocument` operation" — a bridge-module function, not a route or Server Action — so 2.5 does not
+obviously introduce a call site either, unless 2.5's own implementation chooses to add one inside the
+bridge module (an implementation decision this section flags but does not make, same discipline L.1
+used for the credential-isolation gap). Left unstated, a future reader could easily assume the flag is
+already enforced somewhere because it exists; this section says otherwise directly.
+
+Separately, `docs/PERMISSIONS.md`'s "`writeAuditLog()` is infrastructure only... no existing route
+calls it" claim (its "Current status" section) is re-confirmed still accurate as of this check — true
+today, and only becomes stale the moment 2.5's first call lands. §4 already assigns updating that file
+to 2.5's own delivery report; this section does not redecide that, only confirms the claim is still
+true pre-branch, so 2.5 starts from a correct baseline rather than an already-stale one.
+
+**Conclusion.** One real, load-bearing blocker-equivalent finding, the same severity class as K.1's
+grants gap before 2.4: `writeAuditLog()`'s `AuditLogEntry` interface must be extended with optional
+`externalActorId`/`externalActorLabel` (and `actorUserId`/`actorRole` made optional) before 2.5 can
+write a single external-actor `audit_logs` row, let alone satisfy §6(b)'s control-then-assert test
+requirement — today, no call shape exists that produces a row passing
+`audit_logs_actor_exactly_one_populated`'s external-actor branch. Unlike K.1, this is not a missing
+GRANT hidden behind RLS; it is a TypeScript interface gap in application code, caught here instead of
+mid-implementation. M.1 finds both of 2.5's schema/grant prerequisites (2.2, 2.3) already merged and
+verified matching §4/§5 exactly, so 2.5 needs no new migration. M.3 finds the storage write path and
+its helper functions fully ready, doubly confirmed by 2.4's own passing tests. M.4 finds the client-
+portal feature flag still uncalled anywhere, consistent with 2.5's own scope rather than a gap 2.5
+introduces. None of this blocks 2.5 from starting; M.2's finding should be the first change on the 2.5
+branch, before `uploadDocument` itself is written, the same way K.1's grant migration preceded 2.4's
+bridge module.
