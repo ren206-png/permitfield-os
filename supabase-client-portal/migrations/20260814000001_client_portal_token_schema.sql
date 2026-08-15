@@ -1,3 +1,31 @@
+-- =============================================================================
+-- STATUS: UNVERIFIED. Read this before trusting anything below.
+--
+-- This migration has never executed against a real Postgres instance, ever.
+-- It was written with Docker unavailable locally (untested then), and there
+-- is no CI path that runs it now: .github/workflows/ci.yml's sql-tests job
+-- only executes supabase/tests/*.test.sql (project 1) -- it has zero
+-- reference to supabase-client-portal/ or this file's own test,
+-- client_portal_token_lifecycle.test.sql, which has likewise never run.
+--
+-- The second Supabase project this migration targets does not exist yet.
+-- supabase-client-portal/config.toml's project_id is local CLI config, not
+-- evidence of a live, provisioned project -- grepped .env.example and lib/
+-- for any CLIENT_PORTAL_SUPABASE_* var or equivalent: zero hits.
+-- GATE_2_0_FINDINGS.md SS H.5 named provisioning that project as a hard
+-- precondition and sequenced it as 2.1's own first step; it did not happen,
+-- and this file landing on `main` regardless does not retroactively make it
+-- happen. Gate 2.0 sub-phase 2.2's audit_logs migration (already merged)
+-- already stores external_actor_id values documented as pointing at
+-- client_access_tokens.id here -- a table that exists in no live database
+-- anywhere. Provisioning this project and wiring sql-tests to actually run
+-- supabase-client-portal/tests/ is a blocker for the gate, not a follow-up.
+--
+-- Being on `main` means reviewed and versioned. It does not mean verified.
+-- Do not treat this file as validated until it has actually run somewhere
+-- and its own test file has passed for real, not just been read closely.
+-- =============================================================================
+
 -- Gate 2.0 sub-phase 2.1 (GATE_2_0_SPEC.md SS2, "Tables (second project)").
 -- Stands up the three tables this sub-phase is scoped to in the second,
 -- dedicated Supabase project: client_access_tokens, token_lifecycle_events,
