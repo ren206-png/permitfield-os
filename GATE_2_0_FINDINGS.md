@@ -485,6 +485,8 @@ live.** `20260806000011_grants.sql` grants `authenticated` `select, insert, dele
 today, in the current migrations directory. The spec's sub-phase-2.3 grant is necessary and has not
 been applied by anything already in the repo.
 
+> **Closure — Owning sub-phase: 2.3. Status: Executed, `860d787`.**
+
 **H.3 — No naming collisions.** Grepped the full repo for `token_status`, `client_access_tokens`,
 `client_access_log`, `token_lifecycle_events`: zero hits outside `GATE_2_0_SPEC.md` itself. Clean to
 implement exactly as named.
@@ -500,6 +502,8 @@ explicitly enables it rather than relying on a platform default. As literally wr
 migration fails on a fresh project the first time it hits `gen_random_uuid()`. Needs
 `create extension if not exists pgcrypto;` added before first use.
 
+> **Closure — Owning sub-phase: 2.1. Status: Executed, `135d5c8`.**
+
 **H.5 — No second Supabase project exists yet, anywhere.** One `supabase/config.toml` in this repo,
 no env-var scaffolding for a second project's URL/keys anywhere (`lib/`, `.env.example`, or
 otherwise). This is the same gap §7 already named ("infra provisioning... not addressed"), but it is
@@ -507,6 +511,8 @@ not just an open question deferred to later — it is a hard precondition specif
 2.1 *is* the second-project schema. The project has to exist and be reachable before its first
 migration can run. Sequence this explicitly as 2.1's actual first step, not something assumed to have
 happened before 2.1 "starts."
+
+> **Closure — Owning sub-phase: 2.1. Status: Executed, `135d5c8`.**
 
 **H.6 — Credential-isolation naming is not yet decided, and the existing convention doesn't leave
 an obvious slot for it.** `lib/supabase/service-client.ts` is the sole existing module for project
@@ -518,6 +524,12 @@ under its own, distinctly-named module and env vars that this file and these nam
 That naming should be decided now (e.g. `CLIENT_PORTAL_SUPABASE_URL` /
 `CLIENT_PORTAL_SUPABASE_SERVICE_ROLE_KEY`), not left for 2.4 to retrofit onto whatever the bridge
 layer's author happens to call it, given the existing file already occupies the generic name.
+
+> **Closure — Owning sub-phase: 2.1 ("decide now, at 2.1" — explicit deadline in this finding's own
+> text). Status: Not executed at 2.1. Slipped silently past 2.1's actual commit; re-flagged
+> independently by K.5 before 2.4 opened; executed late, at 2.4, `40fa7a2`. Delayed past its own named
+> sub-phase, but self-caught by a later conflict check before implementation depended on it — distinct
+> from J.3/K.3 below, which were never re-caught.**
 
 **H.7 — Missing rollback SQL for migration 29, found while checking H.1.** `supabase/migrations_rollback/`
 (untracked, verified present) holds one rollback file per migration for all 28 migrations that
@@ -599,6 +611,11 @@ frame itself as "the first thing to falsify this claim" — the claim is already
 unrelated Phase 1.1 work, and the report should say so plainly rather than repeating §4's now-dated
 framing.
 
+> **Closure — Owning sub-phase: 2.2. Status: Not executed at 2.2.** `cbdfe27` (2.2's commit) touches
+> only the migration and its SQL test, not `docs/PERMISSIONS.md`. Survived 2.3 and 2.4 untouched, then
+> actively re-asserted (not just left stale) by §M.4(b) below, without §M.4 cross-referencing this
+> finding. Finally executed at 2.5, this retrofit, `aaf4cef`.
+
 **I.5 — No naming collisions.** Grepped the full repo for `external_actor_id`, `external_actor_label`,
 `audit_logs_actor_exactly_one_populated`, `audit_logs_external_actor_label_requires_id`: zero hits
 outside `GATE_2_0_SPEC.md` itself. Clean to implement exactly as named.
@@ -662,6 +679,19 @@ nullable with no NOT NULL constraint added by `20260806000024` (confirmed by dir
 noting explicitly, the same way I.4 flagged a claim worth stating plainly rather than leaving
 implicit.
 
+> **Closure — Owning sub-phase: 2.5, orphaned when first found (owning sub-phase closed, action never
+> executed, not caught by §M). Reassigned owner: this retrofit (§N). Status: Investigated and closed
+> in the same commit as this retrofit.** Checked directly rather than left as an open question: `application_documents`'s
+> `uploaded_by` and `document_revisions.uploaded_by` are both nullable with no NOT NULL constraint
+> (`20260806000024`), `document_revisions_select`'s RLS policy does not reference `uploaded_by` at all
+> (org-membership join only, confirmed by direct re-read), and a repo-wide grep of `app/` and `lib/`
+> found **zero** references to `document_revisions` or `uploaded_by` anywhere in application code —
+> nothing reads either today. Conclusion: cosmetic, not a data-integrity risk, as of this check. Not
+> permanently closed, though — flagged forward: the first future work that builds a revision-history UI
+> or otherwise reads `document_revisions.uploaded_by` must handle a null value gracefully for
+> portal-originated uploads (render "client portal," not a broken user lookup), and that future
+> sub-phase inherits this note as its own precondition, the same way 2.4 inherited K.1's grants gap.
+
 **J.4 — §5's Inngest-caller claim re-grep-confirmed against current file contents, not just
 recalled.** `lib/inngest/functions/extract.ts`: `.from('application_documents')` appears at L47
 (`.select('id, storage_path, original_filename, mime_type')`) and L102
@@ -718,6 +748,8 @@ against a real database. Three additive `grant select on <table> to service_role
 precondition for 2.4, the same way `pgcrypto` was a hard precondition for 2.1 (H.4) — not a
 follow-up item.
 
+> **Closure — Owning sub-phase: 2.4. Status: Executed, `6095576`.**
+
 **K.2 — The other tables these operations touch are already correctly granted; no gap there.**
 `permit_applications` and `application_documents` both have `select` (`20260806000015` L30–31,
 and now `insert` on the latter as of 2.3); `properties` and `projects` both have
@@ -742,6 +774,13 @@ should describe this as a live invariant the re-check actively defends against t
 forward-looking precaution — the same class of correction I.4 already made for a different claim in
 §4.
 
+> **Closure — Owning sub-phase: 2.4, orphaned when first found (owning sub-phase closed, action never
+> executed). Reassigned owner: this retrofit (§N). Status: Executed, same commit as this retrofit.**
+> `GATE_2_0_SPEC.md` §2 now describes the `permit_applications` hard-delete path as live and unrevoked
+> today (citing `20260806000006`'s `permit_applications_delete` policy and `20260806000011`'s
+> `DELETE` grant to `authenticated`, both still unrevoked, confirmed by direct re-read), not a
+> forward-looking hedge — the framing this finding flagged is corrected, not just flagged again.
+
 **K.4 — Real, non-blocking design gap: §3's own text is internally inconsistent about
 `propertyAddressSummary`'s granularity, and neither reading has a clean, always-reachable schema
 source.** The `resolveToken` table cell states the field is "(city/province only)," but the same
@@ -765,6 +804,9 @@ decide and document which source each field actually reads (most likely: "full p
 every token-eligible row) before writing the query, not discover the gap mid-implementation or
 mid-test.
 
+> **Closure — Owning sub-phase: 2.4. Status: Executed, `3645a4c`.** `summarizeAddress()` in
+> `lib/bridge/client-portal.ts`, with a comment citing this as its "K.4 resolution."
+
 **K.5 — The structural-enforcement mechanism's two preconditions are both still entirely unbuilt,
 exactly as H.5/H.6 already flagged before 2.1 and unchanged since — not a new conflict, but still
 open and squarely 2.4's to close.** Confirmed by direct check: no `lib/bridge/` directory exists;
@@ -775,6 +817,8 @@ originating this mechanism, not reusing one; `.env.example` still has zero secon
 `lib/flags.ts` has no `PERMITFIELD_FF_CLIENT_PORTAL` flag yet, confirmed by direct read. None of this
 blocks 2.4 — it is exactly what 2.4 is scoped to build — but H.6's credential-naming decision is
 still undecided and should be made explicitly as part of 2.4's own delivery, not left implicit again.
+
+> **Closure — Owning sub-phase: 2.4 (restates H.6). Status: Executed, `40fa7a2`.**
 
 **K.6 — No naming collisions.** Grepped the full repo for `resolveToken`, `getApplicationSummary`,
 `getReadinessChecklist`, `listDocuments`, `getDocumentDownloadUrl`, `PERMITFIELD_FF_CLIENT_PORTAL`:
@@ -830,6 +874,13 @@ lint rule is the entire boundary — a single, disableable, build-time-only conv
 §3 assigns to two independent layers. This is not a reason to block 2.4 (the lint rule is real and
 worth building regardless), but 2.4's delivery report should state plainly that credential isolation
 is deferred to whenever a deploy target is chosen, not implied as already covered by §3's prose.
+
+> **Closure — Owning sub-phase: 2.4.**
+> **L.1(a) (lint rule) — Status: Executed, `40fa7a2`.** `no-restricted-imports` rule added to
+> `eslint.config.mjs`.
+> **L.1(b) (state plainly that credential isolation is deferred) — Status: Executed**, persisted in
+> code comments, not just a delivery-report sentence: `lib/bridge/client-portal.ts:21`,
+> `lib/supabase/client-portal-service-client.ts:21`, `eslint.config.mjs:8`.
 
 **L.2 — All five read operations' claimed columns exist, with the exact names claimed, on the tables
 claimed — one previously-fixed exception, one previously-flagged ambiguity now confirmed to affect a
@@ -904,6 +955,8 @@ project.** Three separate facts, checked independently:
   instance the way `bridge_read_grants.test.sql` tests grants directly in SQL — 2.4 will need to
   either extend `vitest.config.mts` or rely on SQL-level testing plus manual/integration verification,
   a decision this section flags but does not make.
+
+> **Closure — Owning sub-phase: 2.4. Status: Executed**, `vitest.live.config.mts` added, `fac3cae`.
 
 **Conclusion.** No blocker equivalent to K.1 surfaced in this section — the grants gap that blocked
 2.4 was already closed before this section opened. What this section finds instead is a materially
@@ -987,6 +1040,13 @@ same as every other `service_role` write in this schema. The header comment's "d
 should be corrected to describe *both* legal callers once 2.5 adds the second one, not left to imply
 a restriction the code was never actually enforcing.
 
+> **Closure — Owning sub-phase: 2.5. Status: Executed, `2a3ad6f`.** `AuditLogEntry` widened, the
+> insert body branched, the header comment corrected. Partial: the adjacent "hard runtime assertion"
+> question this finding flags but doesn't decide was resolved implicitly (no guard added, the DB
+> CHECK is the sole enforcement) but never explicitly recorded anywhere as an answer to that question
+> — flagged here rather than treated as a separate open item, since the code path it would have
+> guarded is the same one M.2 already closed.
+
 **M.3 — No gap on the storage write path; every helper `uploadDocument` needs already exists with the
 exact names/signatures 2.4's own live test already exercises, and `service_role`'s Storage access needs
 no new grant.** `storage.objects`' RLS policies (`20260806000013_storage_buckets.sql`) are scoped to
@@ -1017,11 +1077,25 @@ bridge module (an implementation decision this section flags but does not make, 
 used for the credential-isolation gap). Left unstated, a future reader could easily assume the flag is
 already enforced somewhere because it exists; this section says otherwise directly.
 
+> **Closure — M.4(a). Owning sub-phase: 2.5. Status: Executed.** Decision recorded in `lib/flags.ts`'s
+> own header comment for `isClientPortalEnabled()` (`20eb823`/`aaf4cef`).
+
 Separately, `docs/PERMISSIONS.md`'s "`writeAuditLog()` is infrastructure only... no existing route
 calls it" claim (its "Current status" section) is re-confirmed still accurate as of this check — true
 today, and only becomes stale the moment 2.5's first call lands. §4 already assigns updating that file
 to 2.5's own delivery report; this section does not redecide that, only confirms the claim is still
 true pre-branch, so 2.5 starts from a correct baseline rather than an already-stale one.
+
+> **Closure — M.4(b). Not an executed/not-executed item — a process failure in this check itself.**
+> This paragraph re-asserts `docs/PERMISSIONS.md`'s "no existing route calls it... no writers" claim as
+> "still accurate," without cross-referencing §I.4 above, which — three sections earlier in this same
+> document — had already found that exact claim false (`createProjectAction`,
+> `app/(app)/projects/new/actions.ts`, live since Phase 1.1). §M.4(b) is not merely a missed action; it
+> is this document actively regressing a fact its own earlier section had already corrected, at the
+> moment of writing (`bcbcb80`), predating the user's independent verbal repetition of the same stale
+> claim during 2.5's scoping. Recorded here as a distinct failure mode from every other row in this
+> retrofit — see the new convention section below for the going-forward fix (every pre-branch check
+> must audit prior sections' still-open findings, not just its own sub-phase's new claims).
 
 **Conclusion.** One real, load-bearing blocker-equivalent finding, the same severity class as K.1's
 grants gap before 2.4: `writeAuditLog()`'s `AuditLogEntry` interface must be extended with optional
@@ -1037,3 +1111,74 @@ portal feature flag still uncalled anywhere, consistent with 2.5's own scope rat
 introduces. None of this blocks 2.5 from starting; M.2's finding should be the first change on the 2.5
 branch, before `uploadDocument` itself is written, the same way K.1's grant migration preceded 2.4's
 bridge module.
+
+---
+
+## §N. Closure retrofit — auditing §H through §M for follow-through, and the going-forward convention
+this establishes
+
+Added after 2.5 was merged and Gate 2.0 was reported closed, per explicit instruction, scoped to this
+file and `GATE_2_0_SPEC.md` only — no code, schema, or migration change. §H through §M reliably
+**detect** conflicts and name follow-up actions; nothing in that convention, as written, ever
+**closed the loop** on whether a named action actually executed. This section is that retrofit: every
+action-naming finding in §H–§M now carries a `> **Closure —**` blockquote immediately beneath it,
+stating an owning sub-phase and an executed/not-executed determination with a commit hash where
+applicable. Findings that named no forward action (pure confirmations, self-contained corrections —
+e.g. H.1, H.3, H.7, H.8, I.1–I.3, I.5, J.1, J.2, J.4–J.6, K.2, K.6, L.2, M.1, M.3) carry no closure tag;
+they had nothing to close.
+
+**What this audit found, net.** Sixteen findings named a forward action. Twelve executed, of which one
+(H.6) executed only after slipping silently past its own named sub-phase (2.1) and being independently
+re-caught by a later section (K.5) before 2.4 depended on it — a delay, not a failure, since the
+process itself caught its own gap before anything downstream broke. Three were found still open with
+no live owner at the point this audit was first run: **J.3** and **K.3** were orphaned — each named an
+owning sub-phase (2.5 and 2.4 respectively) that was already closed, the action never executed, and no
+later section re-caught either one the way K.5 re-caught H.6. **I.4** was open the same way until this
+retrofit closed it directly (`aaf4cef`, this retrofit updates `docs/PERMISSIONS.md`). J.3 and K.3 were
+themselves assigned owners and resolved within this same retrofit pass, below — see the "Update" note
+after the outstanding-items list. The sixteenth, **M.4(b)**, is not an
+unexecuted action at all — it is this document's own pre-branch check actively re-asserting a claim
+(`docs/PERMISSIONS.md`'s "no writers" line) that an earlier section of this same document, §I.4, had
+already found false three sections prior. That is a distinct and worse failure mode than a missed
+action: not "nobody did the follow-up," but "the audit process itself regressed a previously-corrected
+fact," and it is the direct reason this retrofit exists rather than a smaller fix confined to I.4 alone.
+
+**Why the mechanism failed this way.** Every §H–§M section was written to check the *next* sub-phase's
+spec claims against the live repo — a forward-looking check, by design. None of them was written to
+look backward across *prior* sections' own still-open findings before letting its sub-phase proceed.
+J.3 and K.3 are exactly the predictable result: each was correctly identified once, assigned to a
+sub-phase that had every opportunity to close it, and then never looked at again by any subsequent
+section, because no subsequent section's job was to look. M.4(b) is the same gap in a sharper form —
+§M didn't just fail to re-check I.4's finding, it re-derived the original, wrong answer independently,
+without ever consulting the section that had already corrected it.
+
+**Going forward, two binding rules, effective immediately:**
+
+1. **Every future finding that names a follow-up action must carry an "Owning sub-phase" tag at the
+   moment it is written**, not retrofitted later. The tag names the sub-phase responsible and nothing
+   else — it does not yet assert the action executed, only who is on the hook for it.
+2. **Every future sub-phase's own pre-branch conflict-check must explicitly audit all still-open
+   findings it inherits from every prior section** — not only the ones that happen to touch its own
+   migration or module — and state, per inherited finding, executed or not, before that sub-phase's
+   branch opens. A finding does not get to close because a later sub-phase coincidentally needed the
+   same fix for an unrelated reason (the exact pattern that closed H.6, I.4, and K.4/K.5 by luck rather
+   than by design); it closes because the section responsible for it checked and said so.
+
+**Update, same commit as this retrofit's initial write-up: J.3 and K.3 both closed, per explicit
+instruction not to let orphaned findings carry forward into Gate 3.0 unowned.** Both were flagged
+above as needing a new owner before either was actually assigned one; both now are, and both are
+resolved as of this section:
+
+- **J.3** — `document_revisions` auto-seed / null `uploaded_by` on portal-originated uploads.
+  Investigated directly (not assumed): nullable columns, no NOT NULL constraint, no RLS dependency on
+  the value, and zero application-code references to either `document_revisions` or `uploaded_by`
+  anywhere in `app/` or `lib/`. Cosmetic today, not a data-integrity risk — see J.3's own closure tag
+  above for the full check. A forward note is recorded for whichever future sub-phase first builds a
+  revision-history UI, since that sub-phase inherits the null-handling requirement as a precondition.
+- **K.3** — `GATE_2_0_SPEC.md` §2's hedged framing corrected to state the `permit_applications`
+  hard-delete path as live and unrevoked today, not a forward-looking possibility. See K.3's own
+  closure tag above.
+
+Both are now visible in this document's own text (their closure blockquotes above), not just
+resolved in a chat transcript — that visibility, plus the actual resolution, is this update's
+deliverable.

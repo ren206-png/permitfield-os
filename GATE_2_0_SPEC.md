@@ -173,10 +173,17 @@ matches it; it takes that id, does a fresh `is_org_member`-equivalent
 lookup against the *main* project (as service-role, which bypasses RLS, so
 the check is the bridge code's own explicit `application_id` existence
 check, not RLS) before returning anything. If the main-project application
-was ever deleted (it never hard-deletes today, only archives — but the
-bridge layer does not get to assume that invariant holds forever), the
-stale pointer in project 2 fails this live check and the bridge returns
-"not found," not a stale cached answer. This is the direct answer to "how
+was ever deleted, the stale pointer in project 2 fails this live check and
+the bridge returns "not found," not a stale cached answer. This is not a
+hypothetical to future-proof against: `permit_applications_delete`
+(`20260806000006`) plus `authenticated`'s table-level `DELETE` grant
+(`20260806000011`) are both live and unrevoked today — any org owner can
+hard-delete a `permit_applications` row right now, through the existing UI,
+cascading to every FK-linked child row (`application_documents`'s own
+`DELETE` path was closed by `20260806000024`, but `permit_applications`'
+was not). The re-check above is what defends against that live path today,
+not a forward-looking precaution against a possibility (`GATE_2_0_FINDINGS.md`
+§K.3, closed by this correction). This is the direct answer to "how
 does a token record link to `clients`/`permit_applications` given no
 shared FK space": *it doesn't, structurally — it carries an ID that is
 re-verified live, every time, against the project that actually owns it.*
@@ -865,26 +872,59 @@ still in the tree.)
 
 ## §7. Explicitly undecided
 
-Per the instruction to say so rather than assume the convenient branch:
+Per the instruction to say so rather than assume the convenient branch. Each item below carries a
+status designation added by the `GATE_2_0_FINDINGS.md` §N closure retrofit, distinguishing genuinely
+**still open** (an owner was assigned and didn't execute) from **never assigned** (no sub-phase in
+2.1–2.5 ever scoped the work at all) — the two are not the same state and this document previously
+did not distinguish them:
 
 - **Default token TTL** — §1 proposes 14 days as a plausible fit for a
   permit-review cycle. This is not derived from any product requirement
   read during this spec's research; it needs a real decision, not this
   document's guess, before 2.1 ships.
+
+  > **Status — Unassigned, deferred.** No sub-phase in the §6 table (2.1–2.5) implements token
+  > *issuance* logic — 2.1 is schema only, 2.2–2.5 build the bridge layer's read/write operations
+  > against tokens already assumed to exist. This item also missed a deadline this document set for
+  > itself ("before 2.1 ships," never met) — that is a different, worse state than "never assigned,"
+  > and is recorded as such rather than folded into the same bucket as the items below that were never
+  > given a deadline at all. Owner: whichever future sub-phase first implements token issuance.
+
 - **Staff-facing issuance/revocation UI and its own role gate** — §1's
   matrix names "org staff" as the trigger for issuance/revocation but does
   not specify which `org_role` tier(s) can do so. This spec deliberately
   did not guess a tier (e.g. "owner/org_owner only" vs. "any member") —
   that's a product decision for whoever scopes 2.1, not inferable from
   anything read here.
+
+  > **Status — Unassigned, deferred.** Same reasoning as the TTL item above: no sub-phase in 2.1–2.5
+  > scopes any UI or route work at all (§6's table is schema/grants/bridge-module operations only).
+  > Never given a deadline the way TTL was, so this is "never assigned," not "missed." Owner:
+  > whichever future sub-phase first builds a staff-facing route for issuance/revocation.
+
 - **Rate limiting / abuse handling on token validation itself** (e.g.
   repeated invalid-token lookups against `resolveToken`) is not designed
   in this document. §1 covers legitimate lifecycle states; it does not
   cover an adversary hammering the endpoint with guessed tokens. This is a
   real gap this spec is not resolving, not an oversight being hidden.
+
+  > **Status — Unassigned, deferred.** Never assigned to any of 2.1–2.5. Rate limiting is also
+  > meaningless with no live target yet: zero routes call `lib/bridge/client-portal.ts` as of this
+  > retrofit (see `GATE_2_0_FINDINGS.md` §M.4(a)/§N), so there is no reachable endpoint to rate-limit
+  > today. Owner: whichever future sub-phase first exposes `resolveToken` (or `uploadDocument`) behind
+  > a live, reachable route.
+
 - **Whether the second Supabase project's own infrastructure (hosting,
   billing, backup/DR posture) has been provisioned at all** was out of
   scope for this document's research and is not addressed.
+
+  > **Status — Not a Claude-owned sub-phase deliverable; explicitly the user's own responsibility.**
+  > `GATE_2_0_FINDINGS.md` §L.3 records the user's own statement directly: "When 2.4 needs it, I'll
+  > create the project and paste values into my own local `.env` and GitHub secrets myself." No
+  > sub-phase owner is assigned here because none should be — provisioning was never this project's
+  > work to schedule, and marking it "unassigned" the same way as the items above would misstate whose
+  > job it is.
+
 - **A staff-facing read path for `client_access_log`** — §4's guarantees
   comparison identifies that this table has no DB-native, RLS-enforced
   read restriction (project 2 has no staff-authenticated role for such a
@@ -893,6 +933,11 @@ Per the instruction to say so rather than assume the convenient branch:
   bridge-layer read operation, enforcing org-membership in application
   code, is not designed here and is not part of this gate's operation set
   (§3) — it is future work, named so the gap isn't silently assumed closed.
+
+  > **Status — Unassigned, deferred.** This item's own text already states it is deliberately excluded
+  > from §3's operation set; §6's table never scopes it to 2.1–2.5 either. Never given a deadline.
+  > Owner: none named as of this retrofit — still needs one before it can move from "known gap" to
+  > "scheduled work."
 
 ---
 
