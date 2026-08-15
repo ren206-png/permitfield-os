@@ -68,7 +68,7 @@ begin
   -- that was issued -- the actual hash-validate round trip SS1 requires.
   select id into v_found_id
   from client_access_tokens
-  where token_hash = encode(digest(v_raw_token, 'sha1'), 'hex')
+  where token_hash = encode(digest(v_raw_token, 'sha256'), 'hex')
     and status = 'active'
     and expires_at > now();
 
