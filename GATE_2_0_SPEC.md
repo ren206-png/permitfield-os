@@ -281,7 +281,15 @@ create table token_lifecycle_events (
 -- audit_logs (see §4's reasoning for why these are not merged).
 create table client_access_log (
   id uuid primary key default gen_random_uuid(),
-  token_id uuid not null references client_access_tokens(id),
+  -- Nullable as of 20260815000001 (a 2.4-implementation-discovered gap,
+  -- documented in full just below the table) -- NOT NULL was unsatisfiable
+  -- for the token_not_found case this same table's detail comment and §3's
+  -- failure-mode section both require logging: there is no row to
+  -- reference when the hash lookup finds nothing. NULL is reserved
+  -- exclusively for that pre-resolution case, enforced by the bridge
+  -- layer's own code (lib/bridge/client-portal.ts), not by an additional
+  -- CHECK.
+  token_id uuid references client_access_tokens(id),
   operation text not null,        -- one of §3's enumerated operation names
   resource_type text,             -- e.g. 'application_documents', null for token-scoped reads with no sub-resource
   resource_id text,                -- bare id string, cross-project, same non-FK reasoning as above
@@ -299,6 +307,28 @@ create table client_access_log (
   occurred_at timestamptz not null default now(),
   check ((outcome = 'denied') or (detail is null))
 );
+
+-- 2.4-implementation-discovered gap, fixed by migration 20260815000001
+-- (supabase-client-portal/supabase/migrations/), additive per this repo's
+-- own established convention for post-hoc schema fixes (identical shape to
+-- 20260806000032's fix for K.1 -- a new ALTER migration, not an edit to the
+-- already-shipped 20260814000001 that first defined this table). Not
+-- caught by GATE_2_0_FINDINGS.md's K/L checks (grepped: zero hits for
+-- "token_not_found" anywhere in that file) -- found only once 2.4 tried to
+-- actually write resolveToken()'s logging call: as originally shipped,
+-- `token_id uuid not null references client_access_tokens(id)` directly
+-- contradicted two things this same spec already states -- this table's
+-- own "detail" column comment above (token_not_found is one of the
+-- enumerated detail values) and §4's guarantees-comparison section, which
+-- explicitly rejects splitting "resolved vs. unresolved" events across two
+-- tables in favor of keeping "every token-driven access, resolved or not,
+-- successful or denied" in this one ledger. A NOT NULL FK cannot reference
+-- a row that was never found to exist, so a token_not_found attempt could
+-- not have been logged at all under the original constraint -- silently
+-- breaking both promises the first time a malformed or unrecognized token
+-- was ever presented. Fixed by dropping NOT NULL; the FK itself is
+-- untouched, so every row that does carry a token_id still has to
+-- reference a real one.
 
 -- Project 2 has no access to the main project's forbid_update_delete()
 -- function -- separate Postgres instances share no function catalog, the

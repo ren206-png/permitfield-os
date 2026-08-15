@@ -1,0 +1,32 @@
+-- Gate 2.0 sub-phase 2.4, discovered while implementing
+-- lib/bridge/client-portal.ts's resolveToken() (GATE_2_0_SPEC.md §2's
+-- client_access_log block carries the full writeup just above this comment
+-- in that file -- reproduced in short form here).
+--
+-- 20260814000001 defined `token_id uuid not null references
+-- client_access_tokens(id)` on this table. That NOT NULL directly
+-- contradicts two things GATE_2_0_SPEC.md already states: this table's own
+-- "detail" column comment (token_not_found is one of the enumerated denial
+-- reasons this column exists to hold) and §4's guarantees-comparison
+-- section, which explicitly rejects splitting "resolved vs. unresolved"
+-- token events across two tables, keeping "every token-driven access,
+-- resolved or not, successful or denied" in this one ledger instead. A NOT
+-- NULL FK cannot reference a row that was never found -- there is no
+-- client_access_tokens row to point to when the hash lookup itself returns
+-- nothing, which is exactly the token_not_found case. As originally
+-- shipped, that class of event could not be logged here at all.
+--
+-- Not caught by GATE_2_0_FINDINGS.md's K/L pre-implementation checks
+-- (grepped: zero hits for "token_not_found" anywhere in that file) --
+-- found only once 2.4 tried to write the actual insert statement.
+--
+-- Fix: drop NOT NULL. The FK itself (references client_access_tokens(id),
+-- no ON DELETE clause -- rows in that table are never deleted, only
+-- status-transitioned per §1) is untouched: every row that DOES carry a
+-- token_id still has to reference a real one. NULL is reserved exclusively
+-- for the pre-resolution, hash-lookup-found-nothing case, enforced by the
+-- bridge layer's own code (lib/bridge/client-portal.ts), not by an
+-- additional CHECK -- there is no clean DB-level way to express "NULL only
+-- when detail = 'token_not_found'" that wouldn't itself need updating for
+-- every future not-yet-invented denial reason.
+alter table client_access_log alter column token_id drop not null;
