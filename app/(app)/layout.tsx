@@ -18,8 +18,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
       <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex shrink-0 items-center gap-6">
             <Link href="/applications" className="text-sm font-semibold tracking-tight text-zinc-900">
               {PRODUCT_SHORT}
             </Link>
@@ -29,9 +29,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               </Link>
             </nav>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-zinc-500">{orgName}</span>
-            <form action={signOutAction}>
+          {/* min-w-0 lets this group (and the truncated span inside it) shrink
+              below its content width instead of forcing the org name onto a
+              second line and crowding the nav above -- the bug this fixes at
+              375px, where org names like "Org A - Test Mechanical Ltd." don't
+              fit alongside "Applications" and "Sign out" on one line. */}
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="min-w-0 truncate text-sm text-zinc-500" title={orgName}>
+              {orgName}
+            </span>
+            <form action={signOutAction} className="shrink-0">
               <button type="submit" className="text-sm text-zinc-600 hover:text-zinc-900">
                 Sign out
               </button>
