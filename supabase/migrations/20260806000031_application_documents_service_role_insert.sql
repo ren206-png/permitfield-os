@@ -1,0 +1,37 @@
+-- Gate 2.0 sub-phase 2.3 (GATE_2_0_SPEC.md §5, "Document upload/download";
+-- scoped and reviewed in GATE_2_0_FINDINGS.md §J before this branch).
+-- Closes the single known gap §J.1 re-confirmed live at this migration's
+-- own HEAD: 20260806000015_service_role_grants.sql grants service_role
+-- only `select, update` on application_documents -- no `insert` -- because
+-- that grant was scoped deliberately to what
+-- lib/inngest/functions/{extract,audit}.ts actually perform (grep-verified
+-- then, re-grep-verified again in §J.4), not issued speculatively.
+-- uploadDocument (§3, sub-phase 2.5) is the first service_role caller in
+-- this codebase that needs to INSERT into application_documents, so this
+-- gap is now load-bearing, not hypothetical.
+--
+-- Single additive GRANT. No RLS policy touched -- service_role has
+-- BYPASSRLS (20260806000015's own header comment), so
+-- application_documents_insert's is_org_member-gated `with check` is
+-- irrelevant to it either way; this GRANT is the entire enforcement
+-- surface for this specific capability. Does not alter, widen, or narrow
+-- service_role's pre-existing select/update grant on this table, and does
+-- not touch any other role's privileges (authenticated's own
+-- select/insert grant is untouched; its delete grant was already revoked
+-- by 20260806000024, independently of this migration).
+--
+-- 20260806000024_lifecycle_documents_revisions.sql -- merged after §5 was
+-- drafted -- restructured this table's post-upload write paths
+-- (DELETE -> archive_application_document(), raw UPDATE ->
+-- replace_application_document()) but left INSERT itself untouched: the
+-- existing application_documents_insert RLS policy
+-- (app/api/documents/route.ts) remains the sanctioned initial-upload path
+-- for `authenticated`, and this migration adds a second, parallel INSERT
+-- path for service_role rather than reopening or altering that one.
+-- GATE_2_0_FINDINGS.md §J.2/§J.3 already confirmed no other constraint or
+-- trigger on this table blocks a service_role-authored row: uploaded_by
+-- and the AFTER INSERT application_documents_seed_revision trigger both
+-- tolerate a NULL auth.uid() (no Supabase Auth session exists for the
+-- second project's bridge layer), since neither column carrying that
+-- value is NOT NULL.
+grant insert on application_documents to service_role;
