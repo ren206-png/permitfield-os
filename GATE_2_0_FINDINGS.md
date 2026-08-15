@@ -686,3 +686,107 @@ corroborates §5's "no existing behavior changes for any existing caller" claim 
 is the only real gap found, and it is a documentation-completeness note for 2.5's delivery report
 (the automatic `document_revisions` seed row and null `uploaded_by` on portal-originated uploads),
 not a blocker for 2.3's narrow grant change itself.
+
+## §K. Gate 2.3 pre-branch conflict check — sub-phase 2.4 (bridge layer, §3's five read operations),
+added before any 2.4 branch, mirroring §H/§I/§J's own convention
+
+2.3's own commit is merged to `main` (fast-forward, verified by tip-hash comparison). Before moving
+to 2.4 (`GATE_2_0_SPEC.md` §3/§6: `lib/bridge/client-portal.ts` implementing `resolveToken`,
+`getApplicationSummary`, `getReadinessChecklist`, `listDocuments`, `getDocumentDownloadUrl` — the
+five read operations; `uploadDocument` is 2.5, not this sub-phase), this section checks §3's table
+and its structural-enforcement design against the live repo the same way §H/§I/§J checked §2/§4/§5.
+No code, schema, migration, or component change was made to produce this section either.
+
+**K.1 — Real, blocking gap for 2.4 as scoped: `service_role` has zero privilege on three of the
+tables the five read operations depend on.** Grepped every `grant ... to service_role` statement in
+`supabase/migrations/` (full list, not a sample): `organizations`, `application_status_history`, and
+`readiness_checklist_items` have never once been granted to `service_role`, by any migration, at any
+point. Only `authenticated` has ever received a grant on any of the three —
+`grant select, insert, update, delete on organizations to authenticated;` (`20260806000011` L12),
+`grant select on application_status_history to authenticated;` (`20260806000022` L339),
+`grant select, insert, update, delete on readiness_checklist_items to authenticated;`
+(`20260806000025` L149). `service_role`'s `BYPASSRLS` attribute does not substitute for this —
+`20260806000015`'s own header comment establishes exactly that lesson, having caught the identical
+bug for the Inngest functions ("service_role... is NOT a superuser and holds no table-level
+privileges of its own; GRANT is an entirely separate permission layer that BYPASSRLS does not
+touch"). As the schema stands today, `resolveToken` (needs `organizations.name` for `orgName`),
+`getApplicationSummary` (needs `application_status_history` for `statusHistory`), and
+`getReadinessChecklist` (needs `readiness_checklist_items` entirely) would each fail on their first
+query with `permission denied for table ...`, in every environment, the moment 2.4's code runs
+against a real database. Three additive `grant select on <table> to service_role;` statements
+(mirroring `20260806000015`'s own shape and header-comment discipline exactly) are a hard
+precondition for 2.4, the same way `pgcrypto` was a hard precondition for 2.1 (H.4) — not a
+follow-up item.
+
+**K.2 — The other tables these operations touch are already correctly granted; no gap there.**
+`permit_applications` and `application_documents` both have `select` (`20260806000015` L30–31,
+and now `insert` on the latter as of 2.3); `properties` and `projects` both have
+`select, insert, update` (`20260806000019` L267–268). Confirmed by direct grep, not assumed by
+extension from K.1's finding — these four were already right before this check, and remain right
+after it.
+
+**K.3 — Real, non-blocking documentation-drift gap: §2's "it never hard-deletes today, only
+archives" claim about `permit_applications` is inaccurate as of the live schema, understating a risk
+that is actually already live, not merely future-proofed against.** `permit_applications_delete`
+(`20260806000006` L71–73, `for delete to authenticated ... using (is_org_owner(org_id))`) plus
+`grant select, insert, update, delete on permit_applications to authenticated;`
+(`20260806000011` L15) are both live and unrevoked — grepped every later migration for any statement
+touching either; none exists, unlike `application_documents_delete`, which `20260806000024`
+explicitly dropped for that table. A hard delete of a `permit_applications` row today — by any
+org owner, through the existing UI, cascading to every FK-linked child row — is a real, present-day,
+reachable path, not the hypothetical §2's "the bridge layer does not get to assume that invariant
+holds forever" hedge frames it as. This does not change the design: the live re-check (§2's own
+mechanism) already correctly returns "not found" for a deleted row either way, regardless of whether
+the deletion path is hypothetical or live. But 2.4's delivery report, and any future revision of §2,
+should describe this as a live invariant the re-check actively defends against today, not a
+forward-looking precaution — the same class of correction I.4 already made for a different claim in
+§4.
+
+**K.4 — Real, non-blocking design gap: §3's own text is internally inconsistent about
+`propertyAddressSummary`'s granularity, and neither reading has a clean, always-reachable schema
+source.** The `resolveToken` table cell states the field is "(city/province only)," but the same
+cell's illustrative rendering — *"...viewing your application for 123 Main St"* — is a street-level
+address, not a city/province summary; the two clauses describe different granularities within one
+table cell. Tracing either reading against the live schema surfaces a further, real gap:
+`permit_applications.project_address` (`20260806000006` L23) is a single `not null` free-text field
+with no city/province decomposition — the only structured split
+(`properties.city`/`properties.province_code`, `20260806000019` L115–116) is reachable only via
+`permit_applications.project_id -> projects.property_id -> properties`, and `project_id` is
+deliberately, permanently nullable: `20260806000023`'s own header states its NOT NULL follow-up is
+written but deliberately unshipped (`supabase/migrations_blocked/20260806000023b`), specifically
+because `createApplicationAction` (`app/(app)/applications/new/actions.ts` L12, L78–90, read
+directly) is a live, currently-open code path whose `.insert({..., project_address: projectAddress,
+...})` call supplies `project_address` but never `project_id` at all. Any application created
+through that still-open path — a real, ongoing possibility, not a historical-only edge case — has no
+`properties` row to derive a structured city/province summary from, at any granularity. 2.4 needs to
+decide and document which source each field actually reads (most likely: "full property address" =
+`project_address` directly, unparsed; `propertyAddressSummary` = a derived prefix/truncation of
+`project_address` itself, not a `properties` join, since that join is not guaranteed to exist for
+every token-eligible row) before writing the query, not discover the gap mid-implementation or
+mid-test.
+
+**K.5 — The structural-enforcement mechanism's two preconditions are both still entirely unbuilt,
+exactly as H.5/H.6 already flagged before 2.1 and unchanged since — not a new conflict, but still
+open and squarely 2.4's to close.** Confirmed by direct check: no `lib/bridge/` directory exists;
+`lib/supabase/` holds only `client.ts`/`server.ts`/`service-client.ts`, all scoped to project 1, no
+second-project service-role client module anywhere; `eslint.config.mjs` has no existing
+`no-restricted-imports` (or equivalent single-importer) precedent to extend — 2.4 would be
+originating this mechanism, not reusing one; `.env.example` still has zero second-project entries;
+`lib/flags.ts` has no `PERMITFIELD_FF_CLIENT_PORTAL` flag yet, confirmed by direct read. None of this
+blocks 2.4 — it is exactly what 2.4 is scoped to build — but H.6's credential-naming decision is
+still undecided and should be made explicitly as part of 2.4's own delivery, not left implicit again.
+
+**K.6 — No naming collisions.** Grepped the full repo for `resolveToken`, `getApplicationSummary`,
+`getReadinessChecklist`, `listDocuments`, `getDocumentDownloadUrl`, `PERMITFIELD_FF_CLIENT_PORTAL`:
+zero hits anywhere outside `GATE_2_0_SPEC.md` itself. Clean to implement exactly as named.
+
+**Conclusion.** K.1 is a real blocker for 2.4 as scoped, not previously surfaced by §H/§I/§J (none of
+which touched these three tables' grants) — three additive `grant select ... to service_role;`
+statements are a hard precondition, the same class of precondition H.4's `pgcrypto` gap was for 2.1.
+K.2 confirms the other four tables these operations touch are already correctly granted. K.3 and K.4
+are both real findings but neither is a schema risk — K.3 is documentation drift in §2 that
+understates an already-live risk (framing correction only, the design itself is already correct),
+and K.4 is a genuine pre-implementation design question (which column/join `propertyAddressSummary`
+and "full property address" actually read) that needs an explicit answer before 2.4 writes the
+query, not an assumption carried in silently. K.5 restates H.5/H.6's still-open preconditions,
+unchanged since 2.1 and squarely 2.4's own scope to close. K.6 confirms no naming collision.
