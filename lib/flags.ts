@@ -139,3 +139,18 @@ export function isRequirementsEnabled(): boolean {
 export function isDashboardEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_DASHBOARD');
 }
+
+// Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3/§7). Gates the client-portal
+// bridge layer's five read operations (lib/bridge/client-portal.ts:
+// resolveToken, getApplicationSummary, getReadinessChecklist, listDocuments,
+// getDocumentDownloadUrl -- uploadDocument is sub-phase 2.5, out of this
+// flag's scope for now). Default OFF per the same global engineering rule as
+// every flag above -- this is the first flag in this file gating a code path
+// that reads a real, external-facing bearer credential
+// (client_access_tokens, project 2), not an internal RPC or UI route, so
+// leaving it off is what keeps the second project's service-role credential
+// (lib/supabase/client-portal-service-client.ts) unreachable from any live
+// request until this is explicitly turned on.
+export function isClientPortalEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_CLIENT_PORTAL');
+}
