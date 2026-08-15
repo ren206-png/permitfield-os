@@ -166,12 +166,23 @@ jobs:
       # demo keys -- identical for every local project regardless of port,
       # not secrets -- matching the same values already committed in
       # .env.local's own comment ("standard local demo keys").
+      #
+      # PERMITFIELD_FF_CLIENT_PORTAL=true (sub-phase 2.5, GATE_2_0_FINDINGS.md
+      # §M.4): every lib/bridge/client-portal.ts operation now starts with an
+      # isClientPortalEnabled() check -- this suite tests the bridge's
+      # actual authorization/scoping behavior, which only runs at all once
+      # the flag is on. Every other flag in this job's env (there are none
+      # set here) stays at its off-by-default value; this is the one
+      # exception because it gates the exact code path lib/bridge/client-portal.live.test.ts
+      # and lib/audit/log.live.test.ts exist to exercise, not because live
+      # tests generally need every flag enabled.
       - run: npm run test:live
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
           CLIENT_PORTAL_SUPABASE_URL: http://127.0.0.1:54421
           CLIENT_PORTAL_SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          PERMITFIELD_FF_CLIENT_PORTAL: 'true'
 
       # Best-effort cleanup; the runner is thrown away after the job
       # regardless, but this documents intent and avoids leaving a

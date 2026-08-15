@@ -47,13 +47,14 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
+import { MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
 import {
   resolveToken,
   getApplicationSummary,
   getReadinessChecklist,
   listDocuments,
   getDocumentDownloadUrl,
+  uploadDocument,
 } from './client-portal';
 
 // supabase/seed.sql PART 2 fixtures (LOCAL DEV / TEST FIXTURES ONLY).
@@ -151,6 +152,35 @@ async function insertDocumentFixture(orgId: string, applicationId: string): Prom
   }
 
   return { id: data.id as string, storagePath };
+}
+
+// Sub-phase 2.5 helpers. `insertTokenFixture` returns only the raw
+// (unhashed) token a caller presents -- these look up the DB-side rows
+// `uploadDocument`'s tests need to correlate against (its own token id, and
+// the resulting application_documents row count), the same "reconstruct
+// only what a real caller could also derive" discipline `hashRawToken`
+// above already follows.
+async function lookupTokenId(rawToken: string): Promise<string> {
+  const { data, error } = await portal
+    .from('client_access_tokens')
+    .select('id')
+    .eq('token_hash', hashRawToken(rawToken))
+    .single();
+  if (error || !data) {
+    throw new Error(`token id lookup failed: ${error?.message}`);
+  }
+  return data.id as string;
+}
+
+async function countApplicationDocuments(applicationId: string): Promise<number> {
+  const { count, error } = await main
+    .from('application_documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('application_id', applicationId);
+  if (error) {
+    throw new Error(`application_documents count failed: ${error.message}`);
+  }
+  return count ?? 0;
 }
 
 let orgADocument: { id: string; storagePath: string };
@@ -355,5 +385,128 @@ describe('getDocumentDownloadUrl', () => {
     const result = await getDocumentDownloadUrl(rawToken, orgBDocument.id);
 
     expect(result).toEqual({ error: 'link_unavailable' });
+  });
+});
+
+describe('uploadDocument', () => {
+  test('rejects a disallowed MIME type before any DB write', async () => {
+    const rawToken = await insertTokenFixture();
+    const before = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+
+    const result = await uploadDocument(rawToken, Buffer.from('not a real file'), 'malware.exe', 'application/x-msdownload', 'other');
+
+    expect(result).toEqual({ error: 'link_unavailable' });
+    const after = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+    expect(after).toBe(before);
+  });
+
+  test('rejects an oversized file before any DB write', async () => {
+    const rawToken = await insertTokenFixture();
+    const before = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+    const oversized = Buffer.alloc(MAX_FILE_SIZE_BYTES + 1);
+
+    const result = await uploadDocument(rawToken, oversized, 'huge.pdf', 'application/pdf', 'other');
+
+    expect(result).toEqual({ error: 'link_unavailable' });
+    const after = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+    expect(after).toBe(before);
+  });
+
+  test('a successful upload writes exactly one application_documents row and one audit_logs row with the external-actor shape', async () => {
+    const rawToken = await insertTokenFixture({ recipientName: 'Upload Test Recipient' });
+    const bytes = Buffer.from(`upload live test ${randomUUID()}`, 'utf8');
+
+    const result = await uploadDocument(rawToken, bytes, 'live-upload-test.pdf', 'application/pdf', 'blueprint');
+
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.status).toBe('pending');
+    expect(typeof result.documentId).toBe('string');
+
+    const { data: docRows, error: docErr } = await main
+      .from('application_documents')
+      .select('id, application_id, doc_kind, status')
+      .eq('id', result.documentId);
+    if (docErr) throw new Error(docErr.message);
+    expect(docRows).toHaveLength(1);
+    expect(docRows![0].application_id).toBe(ORG_A_APPLICATION_ID);
+    expect(docRows![0].doc_kind).toBe('blueprint');
+    expect(docRows![0].status).toBe('pending');
+
+    const { data: auditRows, error: auditErr } = await main
+      .from('audit_logs')
+      .select('actor_user_id, actor_role, external_actor_id, external_actor_label, action, entity_type, entity_id')
+      .eq('entity_id', result.documentId)
+      .eq('action', 'client_document_upload');
+    if (auditErr) throw new Error(auditErr.message);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows![0].actor_user_id).toBeNull();
+    expect(auditRows![0].actor_role).toBeNull();
+    expect(auditRows![0].external_actor_label).toContain('Upload Test Recipient');
+    expect(auditRows![0].entity_type).toBe('application_documents');
+  });
+
+  test('denies a forged/mismatched token before any storage or DB write -- cannot target another application\'s storage path', async () => {
+    const rawToken = await insertTokenFixture({ applicationId: ORG_A_APPLICATION_ID, orgId: ORG_B_ID });
+    const before = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+
+    const result = await uploadDocument(rawToken, Buffer.from('forged token attempt'), 'forged.pdf', 'application/pdf', 'other');
+
+    expect(result).toEqual({ error: 'link_unavailable' });
+    const after = await countApplicationDocuments(ORG_A_APPLICATION_ID);
+    expect(after).toBe(before);
+  });
+});
+
+describe('uploadDocument is the only bridge operation that writes audit_logs', () => {
+  test('the five read operations write zero audit_logs rows for a fresh token', async () => {
+    const rawToken = await insertTokenFixture();
+    const tokenId = await lookupTokenId(rawToken);
+
+    await resolveToken(rawToken);
+    await getApplicationSummary(rawToken);
+    await getReadinessChecklist(rawToken);
+    await listDocuments(rawToken);
+    await getDocumentDownloadUrl(rawToken, orgADocument.id);
+
+    const { data: auditRows, error } = await main.from('audit_logs').select('id').eq('external_actor_id', tokenId);
+    if (error) throw new Error(error.message);
+    expect(auditRows).toEqual([]);
+  });
+});
+
+describe('feature flag gating (isClientPortalEnabled, GATE_2_0_FINDINGS.md §M.4)', () => {
+  test('every operation returns link_unavailable and writes no client_access_log row when the flag is off', async () => {
+    const rawToken = await insertTokenFixture();
+    const tokenId = await lookupTokenId(rawToken);
+    const original = process.env.PERMITFIELD_FF_CLIENT_PORTAL;
+    process.env.PERMITFIELD_FF_CLIENT_PORTAL = 'false';
+    try {
+      const results = await Promise.all([
+        resolveToken(rawToken),
+        getApplicationSummary(rawToken),
+        getReadinessChecklist(rawToken),
+        listDocuments(rawToken),
+        getDocumentDownloadUrl(rawToken, orgADocument.id),
+        uploadDocument(rawToken, Buffer.from('flag off attempt'), 'flag-off.pdf', 'application/pdf', 'other'),
+      ]);
+      for (const result of results) {
+        expect(result).toEqual({ error: 'link_unavailable' });
+      }
+    } finally {
+      process.env.PERMITFIELD_FF_CLIENT_PORTAL = original;
+    }
+
+    const { data: logRows, error } = await portal.from('client_access_log').select('id').eq('token_id', tokenId);
+    if (error) throw new Error(error.message);
+    expect(logRows).toEqual([]);
+  });
+
+  test('the same token succeeds once the flag is back on', async () => {
+    const rawToken = await insertTokenFixture();
+
+    const result = await resolveToken(rawToken);
+
+    expect('error' in result).toBe(false);
   });
 });
