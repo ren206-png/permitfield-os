@@ -45,8 +45,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // supabase CLI's local Edge Runtime bundle -- vendored/generated, not project source.
-    "supabase/.temp/**",
+    // supabase CLI's local Edge Runtime bundle -- vendored/generated, not
+    // project source. "**/" prefix (not just "supabase/.temp/**") so this
+    // also covers project 2's stack (supabase-client-portal/supabase/.temp/**),
+    // which generates the identical kind of bundle under `supabase --workdir
+    // supabase-client-portal start` -- caught by 2.4 when that stack's local
+    // dev run left one behind and `npm run lint` flagged it as 150+ errors of
+    // real source.
+    "**/supabase/.temp/**",
   ]),
 ]);
 
