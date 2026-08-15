@@ -1,0 +1,41 @@
+-- Gate 2.0 sub-phase 2.4 pre-bridge grants (GATE_2_0_SPEC.md §3, "Bridge
+-- layer contract"; scoped and reviewed in GATE_2_0_FINDINGS.md §K before
+-- this branch, approved as its own migration ahead of the bridge module
+-- itself: "APPROVED: PHASE 2.4 PRE-GRANTS").
+--
+-- Closes §K.1, the single blocking gap found: service_role has never been
+-- granted access to organizations, application_status_history, or
+-- readiness_checklist_items, though §3's read operations require all three
+-- --
+--   resolveToken           -> organizations.name (orgName)
+--   getApplicationSummary  -> application_status_history.to_status/created_at
+--                              (statusHistory)
+--   getReadinessChecklist  -> readiness_checklist_items.title/is_required/status
+--
+-- confirmed by grepping every `grant ... to service_role` statement across
+-- supabase/migrations/ (§K.1): only `authenticated` has ever been granted
+-- on these three tables (20260806000011 L12 for organizations,
+-- 20260806000022 L339 for application_status_history, 20260806000025 L149
+-- for readiness_checklist_items). Without these, lib/bridge/client-portal.ts
+-- cannot read a single row from any of the three -- not a hardening
+-- measure, a hard functional precondition, same class as H.4's pgcrypto
+-- gap before 2.1.
+--
+-- SELECT only, on all three -- the bridge layer's five read operations
+-- (§3) never write to these tables; the sixth operation, uploadDocument
+-- (2.5), writes only to application_documents, already granted in
+-- 20260806000031. Matches this migration's own narrow-grant convention
+-- (20260806000031's header: "additive GRANT... does not alter, widen, or
+-- narrow" any other privilege).
+--
+-- RLS is irrelevant to service_role here for the same reason it was for
+-- 20260806000031: service_role has BYPASSRLS (20260806000015's own header
+-- comment), so these three GRANTs are the entire enforcement surface for
+-- this specific capability, same as every service_role grant in this
+-- codebase. Does not touch authenticated's own select grant on any of the
+-- three tables, and does not touch service_role's pre-existing grants on
+-- any other table (application_documents, permit_applications, properties,
+-- projects, etc. -- §K.2 already confirmed those are correctly scoped).
+grant select on organizations to service_role;
+grant select on application_status_history to service_role;
+grant select on readiness_checklist_items to service_role;
