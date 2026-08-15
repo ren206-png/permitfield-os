@@ -36,6 +36,15 @@
 #     respective test glob comes back empty, so a silently-empty or
 #     silently-skipped suite cannot report green.
 #
+#     Gate 2.0 sub-phase 2.4 adds a third step to this job, `npm run
+#     test:live` (lib/bridge/client-portal.live.test.ts), run last -- after
+#     both SQL suites, never before, since it commits fixture rows into
+#     project 1 that the SQL suites' clean-slate assumptions don't expect
+#     (see that test file's own header for the failure this ordering fixes).
+#     It exercises the client-portal bridge layer's five read operations
+#     against both real local stacks together, the one thing neither SQL
+#     suite alone can prove (each only ever talks to its own project).
+#
 # Kept as two jobs (not one) so a Postgres/Docker flake in sql-tests never
 # blocks the fast, infra-free build-and-test signal from reporting -- and
 # vice versa.
@@ -120,6 +129,26 @@ jobs:
       - run: supabase --workdir supabase-client-portal db reset
 
       - run: npm run test:sql:client-portal
+
+      # Gate 2.0 sub-phase 2.4: the bridge module's own live-Supabase tests
+      # (lib/bridge/client-portal.live.test.ts) against both stacks started
+      # above. MUST run after both `npm run test:sql` and
+      # `npm run test:sql:client-portal`, never before -- this suite commits
+      # a fixture row into project 1's application_documents that it cannot
+      # delete (no DELETE grant for service_role there by design; see that
+      # test file's own header), which was caught breaking two of
+      # supabase/tests/*.test.sql's own clean-slate row-count assumptions
+      # when run first during 2.4's own local verification. The credentials
+      # below are the Supabase CLI's fixed, publicly documented local-dev
+      # demo keys -- identical for every local project regardless of port,
+      # not secrets -- matching the same values already committed in
+      # .env.local's own comment ("standard local demo keys").
+      - run: npm run test:live
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          CLIENT_PORTAL_SUPABASE_URL: http://127.0.0.1:54421
+          CLIENT_PORTAL_SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
       # Best-effort cleanup; the runner is thrown away after the job
       # regardless, but this documents intent and avoids leaving a

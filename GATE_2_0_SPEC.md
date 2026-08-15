@@ -580,6 +580,21 @@ Both are enforceable and checkable (the lint rule by CI, the credential
 scoping by inspecting the deploy config) — neither depends on a future
 author remembering a written rule.
 
+**2.4 addendum: the lint rule's exemption list has two entries, not one.**
+As implemented, `lib/bridge/client-portal.ts`'s own live-Supabase test file
+(`lib/bridge/client-portal.live.test.ts`, §6's test-plan item (a)/(b)) is
+also exempted from the `no-restricted-imports` rule above. This is not a
+second production importer — that file writes fixture rows directly into
+`client_access_tokens` (deliberately mismatched `application_id`/`org_id`
+pairs, each lifecycle status, the lazy-expiry case) specifically because
+those states cannot be reached by calling the bridge module's own exported
+functions, the same reason `supabase/tests/*.test.sql` fixtures write
+directly to tables no application code writes to. `eslint.config.mjs`'s
+`clientPortalServiceClientRestriction` documents this narrowing inline; it
+does not change the guarantee mechanism 1 provides (no *route handler,
+Server Action, or other application module* may import the credential),
+only which files may.
+
 ### Current status of the two mechanisms (K.5/L.1) — recorded before any 2.4 code was written
 
 As of the start of sub-phase 2.4's implementation branch, only mechanism 1

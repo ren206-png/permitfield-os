@@ -6,15 +6,24 @@ import nextTs from "eslint-config-next/typescript";
 // lint-enforced -- see GATE_2_0_SPEC.md §3 and its "Current status of the
 // two mechanisms (K.5/L.1)" note: this is the ENTIRE enforced boundary
 // today, mechanism 2 having no deploy target to attach to yet). Only
-// lib/bridge/client-portal.ts may import the second-project service-role
-// client constructor (lib/supabase/client-portal-service-client.ts) -- every
-// other file in the repo is forbidden from importing it, whether by the "@/"
-// alias or a relative path, so this build fails if a future author wires
-// that credential into a route handler, Server Action, or any other module
-// acting on behalf of an end user or org staff session.
+// lib/bridge/client-portal.ts (and, added in sub-phase 2.4, its own live
+// test file, lib/bridge/client-portal.live.test.ts) may import the
+// second-project service-role client constructor
+// (lib/supabase/client-portal-service-client.ts) -- every other file in the
+// repo is forbidden from importing it, whether by the "@/" alias or a
+// relative path, so this build fails if a future author wires that
+// credential into a route handler, Server Action, or any other module
+// acting on behalf of an end user or org staff session. The test-file
+// exemption is narrow and deliberate, not a loosening of the boundary: that
+// file's whole job is inserting/mutating client_access_tokens fixture rows
+// directly (status transitions, deliberately mismatched application_id/
+// org_id pairs) to prove the bridge module's authorization logic -- work
+// that has to bypass the bridge's own public functions to set up, the same
+// reason supabase/tests/*.test.sql fixtures write directly to tables no
+// application code writes to.
 const clientPortalServiceClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/bridge/client-portal.ts"],
+  ignores: ["lib/bridge/client-portal.ts", "lib/bridge/client-portal.live.test.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -26,7 +35,7 @@ const clientPortalServiceClientRestriction = {
               "**/client-portal-service-client.ts",
             ],
             message:
-              "lib/supabase/client-portal-service-client.ts (the second, dedicated Supabase project's service-role client) may only be imported from lib/bridge/client-portal.ts -- see that module's header comment and GATE_2_0_SPEC.md §3's structural-enforcement mechanism.",
+              "lib/supabase/client-portal-service-client.ts (the second, dedicated Supabase project's service-role client) may only be imported from lib/bridge/client-portal.ts or its own live test file (lib/bridge/client-portal.live.test.ts) -- see that module's header comment and GATE_2_0_SPEC.md §3's structural-enforcement mechanism.",
           },
         ],
       },

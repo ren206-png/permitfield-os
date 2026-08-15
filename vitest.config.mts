@@ -16,6 +16,12 @@ export default defineConfig({
   },
   test: {
     include: ['**/*.test.ts'],
-    exclude: ['node_modules/**', '.next/**'],
+    // Gate 2.0 sub-phase 2.4: live-Supabase tests (named `*.live.test.ts`,
+    // e.g. lib/bridge/client-portal.live.test.ts) need two real local
+    // Postgres instances up and real credentials -- neither is true for a
+    // plain `npm test` run. They get their own config/script instead
+    // (vitest.live.config.mts / `npm run test:live`) -- see that file's
+    // header for the full reasoning.
+    exclude: ['node_modules/**', '.next/**', '**/*.live.test.ts'],
   },
 });

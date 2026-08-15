@@ -9,6 +9,7 @@
     "lint": "eslint",
     "eval": "tsx eval/run.ts",
     "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.mts",
     "test:sql": "bash scripts/run-sql-tests.sh",
     "test:sql:client-portal": "bash scripts/run-client-portal-sql-tests.sh"
   },
