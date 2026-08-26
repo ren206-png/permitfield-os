@@ -62,8 +62,20 @@ export async function proxy(request: NextRequest) {
   // Server Component's own check), so this is not a weakening of any
   // existing authenticated route, only an allowlist entry for '/' itself.
   const isPublicMarketingRoute = isMarketingV2Enabled() && pathname === '/';
+  // Marketing Homepage v2, Phase 3: app/robots.ts and app/sitemap.ts are
+  // always reachable unauthenticated, unconditionally (not flag-gated here)
+  // -- unlike '/' above, these two files already self-gate their own
+  // content on isMarketingV2Enabled() (disallow-all / empty sitemap when
+  // off, per each file's own header comment), so redirecting an
+  // unauthenticated crawler away from them to /login would be strictly
+  // worse in both flag states: with the flag off it hides a harmless
+  // "disallow all," and with the flag on it would make the SEO artifacts
+  // this phase adds uncrawlable, defeating their purpose. No other route is
+  // affected -- this is scoped to exactly these two well-known,
+  // content-self-gated filenames.
+  const isPublicSeoRoute = pathname === '/robots.txt' || pathname === '/sitemap.xml';
 
-  if (!user && !isAuthRoute && !isPublicMarketingRoute) {
+  if (!user && !isAuthRoute && !isPublicMarketingRoute && !isPublicSeoRoute) {
     const redirectUrl = new URL('/login', request.url);
     return NextResponse.redirect(redirectUrl);
   }
