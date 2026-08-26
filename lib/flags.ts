@@ -164,3 +164,20 @@ export function isDashboardEnabled(): boolean {
 export function isClientPortalEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_CLIENT_PORTAL');
 }
+
+// Marketing Homepage v2 (IMPLEMENTATION_PLAN.md SS1). Gates the public,
+// unauthenticated homepage rendered at '/' by app/page.tsx, and the single
+// matching allowlist condition in proxy.ts that lets an unauthenticated
+// request reach that route instead of being redirected to /login -- see
+// both files' own comments for the exact off-path-is-byte-identical
+// reasoning. Named NEXT_PUBLIC_MARKETING_V2 rather than this file's usual
+// PERMITFIELD_FF_* convention -- documented intentional divergence, same
+// class of decision as lib/entitlements/index.ts's dot-vs-underscore key
+// naming -- because this is the one flag in this file that must also be
+// readable from a client component if a future homepage section needs it,
+// which requires the NEXT_PUBLIC_ prefix Next.js inlines at build time.
+// Reuses this file's existing isEnabled() helper unchanged: absent, "false",
+// or any value other than the literal string "true" all resolve to OFF.
+export function isMarketingV2Enabled(): boolean {
+  return isEnabled('NEXT_PUBLIC_MARKETING_V2');
+}
