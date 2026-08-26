@@ -13,21 +13,34 @@ export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setInfo(null);
     setPending(true);
 
     const supabase = createClient();
-    // Password auth only, matching supabase/config.toml's local auth
-    // config (no OAuth providers enabled, email confirmation off) -- see
-    // the Phase 5 research notes. Both branches leave the user with a live
-    // session cookie on success (local `enable_confirmations = false`
-    // means sign-up does not require an email round trip before the
-    // session is usable).
-    const { error: authError } =
+    // Password auth only. NOTE: this used to assume every environment has
+    // email confirmation off, matching supabase/config.toml's local dev
+    // config (`enable_confirmations = false`). That assumption does NOT
+    // hold in production -- the deployed Supabase project has
+    // `mailer_autoconfirm: false` (confirmed via a GET to its public
+    // /auth/v1/settings endpoint), meaning sign-up there requires a real
+    // email confirmation round trip before a session exists. Previously
+    // this function couldn't tell the two cases apart: signUp() returns no
+    // `error` either way, so on a confirmation-required project the code
+    // fell through to router.push('/applications') with no session cookie
+    // ever set, which proxy.ts's own auth guard then bounces straight back
+    // to /login -- from the user's perspective this looked like the
+    // "Please wait…" button hanging forever (worse, if the mailer itself is
+    // slow/misconfigured, the signUp() call can also just take a long time
+    // to resolve). Checking `data.session` below distinguishes "signed up,
+    // already live" (local/confirmation-off) from "signed up, check your
+    // email" (production/confirmation-on) instead of assuming the former.
+    const { data, error: authError } =
       mode === 'sign-in'
         ? await supabase.auth.signInWithPassword({ email, password })
         : await supabase.auth.signUp({ email, password });
@@ -35,6 +48,15 @@ export function LoginForm() {
     if (authError) {
       setError(authError.message);
       setPending(false);
+      return;
+    }
+
+    if (mode === 'sign-up' && !data.session) {
+      // Account created, but this project requires email confirmation and
+      // no session was issued yet -- stop here instead of navigating to a
+      // route that will just redirect back once proxy.ts sees no user.
+      setPending(false);
+      setInfo('Check your email to confirm your account, then sign in.');
       return;
     }
 
@@ -103,6 +125,12 @@ export function LoginForm() {
         {error && (
           <p role="alert" className="text-sm text-red-600">
             {error}
+          </p>
+        )}
+
+        {info && (
+          <p role="status" className="text-sm text-emerald-600">
+            {info}
           </p>
         )}
 
