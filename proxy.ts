@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { isMarketingV2Enabled } from '@/lib/flags';
 
 // Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` (same
 // runtime behavior, new file/export name -- see
@@ -51,8 +52,18 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname === '/login';
+  // Marketing Homepage v2 (IMPLEMENTATION_PLAN.md SS2): the one path this
+  // proxy lets an unauthenticated request reach besides /login itself, and
+  // only while the flag is on. When isMarketingV2Enabled() is false this
+  // resolves to `false` for every request, so the branch below is byte-for-
+  // byte identical to its pre-flag behavior -- app/page.tsx still does its
+  // own auth.getUser() check before deciding what to render (per this
+  // file's own header comment: proxy checks are never a substitute for a
+  // Server Component's own check), so this is not a weakening of any
+  // existing authenticated route, only an allowlist entry for '/' itself.
+  const isPublicMarketingRoute = isMarketingV2Enabled() && pathname === '/';
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isAuthRoute && !isPublicMarketingRoute) {
     const redirectUrl = new URL('/login', request.url);
     return NextResponse.redirect(redirectUrl);
   }
