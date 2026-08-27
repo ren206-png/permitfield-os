@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/*
+ * Class-based dark variant, scoped to marketing homepage only.
+ *
+ * By default Tailwind v4's `dark:` variant follows the OS-level
+ * `prefers-color-scheme` media query. That's fine for the plain
+ * `--background`/`--foreground` vars below (still used by the bare
+ * app/layout.tsx body, i.e. any page that isn't the marketing homepage),
+ * but the marketing homepage (app/(marketing)/marketing-homepage.tsx)
+ * offers visitors an explicit light/dark toggle instead of just mirroring
+ * their OS setting, so it needs `dark:` to key off a `.dark` class
+ * instead. `theme-toggle.tsx` toggles that class on the homepage's own
+ * root wrapper (id="marketing-root"), not on <html> -- this variant
+ * matches any `.dark` ancestor, so it only affects markup under that
+ * wrapper and never leaks into the authenticated app.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

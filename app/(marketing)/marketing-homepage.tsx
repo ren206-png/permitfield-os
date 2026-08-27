@@ -7,6 +7,24 @@ import { Capabilities } from './sections/capabilities';
 import { Coverage } from './sections/coverage';
 import { FooterCta } from './sections/footer-cta';
 import { StructuredData } from './structured-data';
+import { ThemeToggle } from './theme-toggle';
+
+// Applies the persisted theme (if any) to #marketing-root before first
+// paint, so returning dark-mode visitors don't see a flash of the light
+// page. Scoped to this one element, not <html> -- see theme-toggle.tsx and
+// globals.css for why (keeps this entirely out of the authenticated app).
+//
+// The storage key below is a literal, not an import of
+// MARKETING_THEME_STORAGE_KEY from theme-toggle.tsx: that file is a "use
+// client" module, and a server component importing a plain (non-component)
+// value export from across that boundary gets `undefined` at render time --
+// confirmed by inspecting the rendered HTML, which shipped
+// `localStorage.getItem(undefined)`. Keep this string in sync with
+// MARKETING_THEME_STORAGE_KEY in theme-toggle.tsx if it ever changes.
+const MARKETING_THEME_STORAGE_KEY = 'permitfield-marketing-theme';
+const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.stringify(
+  MARKETING_THEME_STORAGE_KEY,
+)})==='dark'){document.getElementById('marketing-root').classList.add('dark');}}catch(e){}})();`;
 
 // Marketing Homepage v2 (COPY_DECK.md). Rendered only for unauthenticated
 // visitors to '/' when NEXT_PUBLIC_MARKETING_V2 is on -- see app/page.tsx
@@ -26,33 +44,36 @@ import { StructuredData } from './structured-data';
 // that action item.
 export function MarketingHomepage() {
   return (
-    <div className="flex min-h-full flex-col bg-white">
+    <div id="marketing-root" className="flex min-h-full flex-col bg-white dark:bg-zinc-950">
+      {/* eslint-disable-next-line react/no-danger -- static string literal, no user input */}
+      <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
       <StructuredData />
       <Analytics />
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-sky-500 text-sm font-bold text-white shadow-sm shadow-indigo-200">
+          <span className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-sky-500 text-sm font-bold text-white shadow-sm shadow-indigo-200 dark:shadow-none">
               P
             </span>
             {PRODUCT_NAME}
           </span>
-          <nav className="flex items-center gap-6 text-sm text-zinc-600">
-            <a href="#how-it-works" className="hidden hover:text-zinc-900 sm:inline">
+          <nav className="flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400 sm:gap-6">
+            <a href="#how-it-works" className="hidden hover:text-zinc-900 dark:hover:text-white sm:inline">
               How it works
             </a>
-            <a href="#coverage" className="hidden hover:text-zinc-900 sm:inline">
+            <a href="#coverage" className="hidden hover:text-zinc-900 dark:hover:text-white sm:inline">
               What&apos;s covered
             </a>
-            <Link href="/login" className="hover:text-zinc-900">
+            <Link href="/login" className="hover:text-zinc-900 dark:hover:text-white">
               Sign in
             </Link>
             <Link
               href="/login"
-              className="rounded-md bg-gradient-to-r from-indigo-600 to-sky-500 px-3 py-1.5 font-medium text-white shadow-sm shadow-indigo-200 transition hover:shadow-md hover:shadow-indigo-300"
+              className="rounded-md bg-gradient-to-r from-indigo-600 to-sky-500 px-3 py-1.5 font-medium text-white shadow-sm shadow-indigo-200 transition hover:shadow-md hover:shadow-indigo-300 dark:shadow-none"
             >
               Create your account
             </Link>
+            <ThemeToggle />
           </nav>
         </div>
       </header>

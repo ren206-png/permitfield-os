@@ -38,24 +38,24 @@ const CAPABILITIES = [
 export function Capabilities() {
   return (
     <section className="mx-auto max-w-5xl px-6 py-16">
-      <h2 className="text-2xl font-semibold text-zinc-900">
+      <h2 className="text-2xl font-semibold text-zinc-900 dark:text-white">
         What PermitField OS does today
       </h2>
       <div className="mt-10 grid gap-6 sm:grid-cols-2">
         {CAPABILITIES.map((capability) => (
           <div
             key={capability.title}
-            className="group rounded-xl border border-zinc-200 p-6 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg hover:shadow-zinc-100"
+            className="group rounded-xl border border-zinc-200 p-6 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg hover:shadow-zinc-100 dark:border-zinc-800 dark:hover:border-zinc-700 dark:hover:shadow-none"
           >
             <span
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold text-white shadow-sm ${capability.accent}`}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold text-white shadow-sm dark:shadow-none ${capability.accent}`}
             >
               {capability.title.charAt(0)}
             </span>
-            <h3 className="mt-4 text-base font-semibold text-zinc-900">
+            <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
               {capability.title}
             </h3>
-            <p className="mt-2 text-sm text-zinc-600">{capability.body}</p>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{capability.body}</p>
           </div>
         ))}
       </div>

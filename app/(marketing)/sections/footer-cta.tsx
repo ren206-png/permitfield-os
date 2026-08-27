@@ -6,7 +6,8 @@ import { PRODUCT_NAME, LEGAL_DISCLAIMER } from '@/lib/brand';
 // consistent with wherever else the product already shows it.
 export function FooterCta() {
   return (
-    <footer className="border-t border-zinc-200">
+    <footer className="border-t border-zinc-200 dark:border-zinc-800">
+      {/* Gradient banner is already vivid enough to work unchanged in both themes. */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 px-6 py-16 text-center">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-2xl font-semibold text-white">
@@ -23,8 +24,8 @@ export function FooterCta() {
           </p>
         </div>
       </div>
-      <div className="border-t border-zinc-200 px-6 py-6 text-center text-xs text-zinc-400">
-        <Link href="/login" className="hover:text-zinc-600">
+      <div className="border-t border-zinc-200 bg-white px-6 py-6 text-center text-xs text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-500">
+        <Link href="/login" className="hover:text-zinc-600 dark:hover:text-zinc-300">
           Sign in
         </Link>
         <span className="mx-2">·</span>
