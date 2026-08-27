@@ -26,19 +26,22 @@ import { StructuredData } from './structured-data';
 // that action item.
 export function MarketingHomepage() {
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col bg-white">
       <StructuredData />
       <Analytics />
-      <header className="border-b border-zinc-200">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="text-lg font-semibold tracking-tight text-zinc-900">
+          <span className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-sky-500 text-sm font-bold text-white shadow-sm shadow-indigo-200">
+              P
+            </span>
             {PRODUCT_NAME}
           </span>
           <nav className="flex items-center gap-6 text-sm text-zinc-600">
-            <a href="#how-it-works" className="hover:text-zinc-900">
+            <a href="#how-it-works" className="hidden hover:text-zinc-900 sm:inline">
               How it works
             </a>
-            <a href="#coverage" className="hover:text-zinc-900">
+            <a href="#coverage" className="hidden hover:text-zinc-900 sm:inline">
               What&apos;s covered
             </a>
             <Link href="/login" className="hover:text-zinc-900">
@@ -46,7 +49,7 @@ export function MarketingHomepage() {
             </Link>
             <Link
               href="/login"
-              className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-800"
+              className="rounded-md bg-gradient-to-r from-indigo-600 to-sky-500 px-3 py-1.5 font-medium text-white shadow-sm shadow-indigo-200 transition hover:shadow-md hover:shadow-indigo-300"
             >
               Create your account
             </Link>

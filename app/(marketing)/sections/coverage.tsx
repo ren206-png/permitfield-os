@@ -17,7 +17,10 @@ const JURISDICTIONS = [
 
 export function Coverage() {
   return (
-    <section id="coverage" className="border-t border-zinc-200 bg-zinc-50">
+    <section
+      id="coverage"
+      className="border-t border-zinc-200 bg-gradient-to-b from-zinc-50 to-white"
+    >
       <div className="mx-auto max-w-5xl px-6 py-16">
         <h2 className="text-2xl font-semibold text-zinc-900">
           What&apos;s covered today
@@ -26,7 +29,7 @@ export function Coverage() {
           {JURISDICTIONS.map((jurisdiction) => (
             <li
               key={jurisdiction.name}
-              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm transition hover:border-zinc-300 hover:shadow-md"
             >
               <span className="text-sm font-medium text-zinc-900">
                 {jurisdiction.name}
