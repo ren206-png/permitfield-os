@@ -45,7 +45,6 @@ const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.st
 export function MarketingHomepage() {
   return (
     <div id="marketing-root" className="flex min-h-full flex-col bg-white dark:bg-zinc-950">
-      {/* eslint-disable-next-line react/no-danger -- static string literal, no user input */}
       <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
       <StructuredData />
       <Analytics />

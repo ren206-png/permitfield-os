@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 // Marketing-homepage-only light/dark toggle. Persists to localStorage and
 // flips a `dark` class on #marketing-root (see marketing-homepage.tsx) --
@@ -8,43 +8,57 @@ import { useEffect, useState } from 'react';
 // which has no dark-mode styling of its own.
 export const MARKETING_THEME_STORAGE_KEY = 'permitfield-marketing-theme';
 
-function setRootDark(isDark: boolean) {
-  document.getElementById('marketing-root')?.classList.toggle('dark', isDark);
+// The DOM class itself is the source of truth (it's what the no-FOUC
+// inline script in marketing-homepage.tsx sets before hydration), so this
+// reads it directly rather than mirroring it into a second piece of state.
+// useSyncExternalStore (not useState+useEffect) because: (a) it's the API
+// built for exactly this -- syncing React to an external, non-React-owned
+// value -- and (b) its getServerSnapshot handles the server/hydration
+// case for us, so there's no manual "mounted" flag or setState-in-effect
+// needed to avoid a hydration mismatch.
+let listeners: Array<() => void> = [];
+
+function subscribe(onStoreChange: () => void) {
+  listeners.push(onStoreChange);
+  return () => {
+    listeners = listeners.filter((listener) => listener !== onStoreChange);
+  };
+}
+
+function getSnapshot() {
+  return document.getElementById('marketing-root')?.classList.contains('dark') ?? false;
+}
+
+function getServerSnapshot() {
+  // Matches what the server renders (no `dark` class yet -- only the
+  // client-side no-FOUC script or a user click ever adds it).
+  return false;
+}
+
+function toggleTheme() {
+  const next = !getSnapshot();
+  document.getElementById('marketing-root')?.classList.toggle('dark', next);
+  try {
+    window.localStorage.setItem(MARKETING_THEME_STORAGE_KEY, next ? 'dark' : 'light');
+  } catch {
+    // Storage can be unavailable (private browsing, disabled cookies,
+    // etc.) -- the toggle still works for the current page view.
+  }
+  listeners.forEach((listener) => listener());
 }
 
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // The inline script in marketing-homepage.tsx already applied the
-    // class before paint (avoids a flash of the wrong theme); this just
-    // syncs component state to what's already on the DOM.
-    setIsDark(document.getElementById('marketing-root')?.classList.contains('dark') ?? false);
-    setMounted(true);
-  }, []);
-
-  function toggle() {
-    const next = !isDark;
-    setIsDark(next);
-    setRootDark(next);
-    try {
-      window.localStorage.setItem(MARKETING_THEME_STORAGE_KEY, next ? 'dark' : 'light');
-    } catch {
-      // Storage can be unavailable (private browsing, disabled cookies,
-      // etc.) -- the toggle still works for the current page view.
-    }
-  }
+  const isDark = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   return (
     <button
       type="button"
-      onClick={toggle}
-      aria-label={mounted ? (isDark ? 'Switch to light mode' : 'Switch to dark mode') : 'Toggle color theme'}
-      aria-pressed={mounted ? isDark : undefined}
+      onClick={toggleTheme}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-pressed={isDark}
       className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-white"
     >
-      {mounted && isDark ? (
+      {isDark ? (
         // Sun icon (click to go light)
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
           <circle cx="12" cy="12" r="4" />
