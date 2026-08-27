@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -15,11 +15,29 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Set once a sign-up needs email confirmation (see the `!data.session`
+  // branch below), so the "Resend confirmation email" affordance only shows
+  // up in the state it's actually useful for, and knows which address to
+  // resend to without trusting the (possibly since-edited) `email` field.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resendPending, setResendPending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Ticks the resend cooldown down to 0 once a resend has been sent, so the
+  // button can't be mashed into re-triggering Supabase's own rate limit
+  // (which would just surface as an opaque error) -- 60s matches Supabase's
+  // default resend interval.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setInfo(null);
+    setUnconfirmedEmail(null);
     setPending(true);
 
     const supabase = createClient();
@@ -48,6 +66,15 @@ export function LoginForm() {
     if (authError) {
       setError(authError.message);
       setPending(false);
+      // Supabase returns this exact message (no separate error code) when
+      // signInWithPassword() hits a real, correctly-passworded account that
+      // just hasn't confirmed its email yet -- surface the resend option
+      // here too, not only right after sign-up, since this is the more
+      // likely place someone lands if their original confirmation link
+      // already expired before they got a chance to use it.
+      if (mode === 'sign-in' && authError.message === 'Email not confirmed') {
+        setUnconfirmedEmail(email);
+      }
       return;
     }
 
@@ -57,6 +84,7 @@ export function LoginForm() {
       // route that will just redirect back once proxy.ts sees no user.
       setPending(false);
       setInfo('Check your email to confirm your account, then sign in.');
+      setUnconfirmedEmail(email);
       return;
     }
 
@@ -66,6 +94,37 @@ export function LoginForm() {
     // signed-out state for one frame.
     router.refresh();
     router.push('/applications');
+  }
+
+  async function handleResend() {
+    if (!unconfirmedEmail) return;
+    setError(null);
+    setInfo(null);
+    setResendPending(true);
+
+    const supabase = createClient();
+    // type: 'signup' re-sends the same confirmation email signUp() itself
+    // triggers -- this doesn't create a second account or error if one
+    // already exists, it just issues a fresh, unexpired link for the
+    // pending one. See lib/seo.ts's SITE_URL comment / the DELIVERY_REPORT
+    // known-gap note: if the Supabase project's dashboard "Site URL" is
+    // still pointed at localhost, the new link will have the same problem
+    // as the old one -- that's a dashboard config fix, not something this
+    // call can work around client-side.
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: unconfirmedEmail,
+    });
+
+    setResendPending(false);
+
+    if (resendError) {
+      setError(resendError.message);
+      return;
+    }
+
+    setInfo(`Confirmation email resent to ${unconfirmedEmail}.`);
+    setResendCooldown(60);
   }
 
   return (
@@ -132,6 +191,21 @@ export function LoginForm() {
           <p role="status" className="text-sm text-emerald-600">
             {info}
           </p>
+        )}
+
+        {unconfirmedEmail && (
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resendPending || resendCooldown > 0}
+            className="text-left text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 hover:text-zinc-900 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:no-underline"
+          >
+            {resendPending
+              ? 'Resending…'
+              : resendCooldown > 0
+                ? `Resend confirmation email (${resendCooldown}s)`
+                : 'Resend confirmation email'}
+          </button>
         )}
 
         <button
