@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
+import { isCurrentUserAdmin } from '@/lib/auth/admin';
+import { isAdminPanelEnabled } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
 
@@ -14,6 +16,13 @@ import { signOutAction } from '@/app/actions/auth';
 // navigation.
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { orgName } = await requireOrgContext();
+  // Cheap enough to check on every (app) page load (one env var read plus a
+  // getUser() call that's already been made by requireOrgContext() above --
+  // requireUser() inside isCurrentUserAdmin() re-hits auth.getUser(), same
+  // "re-derive, don't thread trust through props" pattern this file's own
+  // header comment describes for orgId). The flag check happens first so a
+  // non-admin environment never even evaluates the allowlist.
+  const showAdminLink = isAdminPanelEnabled() && (await isCurrentUserAdmin());
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
@@ -27,6 +36,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <Link href="/applications" className="hover:text-zinc-900">
                 Applications
               </Link>
+              {showAdminLink && (
+                <Link href="/admin" className="hover:text-zinc-900">
+                  Admin
+                </Link>
+              )}
             </nav>
           </div>
           {/* min-w-0 lets this group (and the truncated span inside it) shrink

@@ -181,3 +181,18 @@ export function isClientPortalEnabled(): boolean {
 export function isMarketingV2Enabled(): boolean {
   return isEnabled('NEXT_PUBLIC_MARKETING_V2');
 }
+
+// Platform admin panel (app/admin/). Gates the single cross-tenant,
+// service-role-backed route in this codebase -- everywhere else, every
+// query is org-scoped via requireOrgContext() + RLS (see that file's header
+// comment). app/admin/page.tsx deliberately reads across every
+// organization at once using lib/supabase/service-client.ts, so this flag
+// is the first line of defense against that route existing in an
+// environment where it shouldn't (e.g. a preview deploy) -- the second line
+// is lib/auth/admin.ts's requireAdmin(), which additionally allowlists by
+// email via ADMIN_EMAILS regardless of this flag. Both must be satisfied:
+// this flag OFF makes the route 404 outright (see app/admin/page.tsx),
+// independent of who's signed in.
+export function isAdminPanelEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_ADMIN_PANEL');
+}
