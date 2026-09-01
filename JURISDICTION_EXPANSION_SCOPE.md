@@ -95,41 +95,80 @@ not a natural third or fourth pick.
 
 ## 3. AcroForm inspection (done — real findings, not inference)
 
-With your go-ahead, downloaded the 5 named candidate PDFs and ran the same
-pdf-lib field inspection Phase 0 ran on Toronto/Calgary/ESA
-(`PDFDocument.getForm().getFields()`, one throwaway script, no files
-committed to the repo). Results:
+With your go-ahead, downloaded the candidate PDFs and ran the same pdf-lib
+field inspection Phase 0 ran on Toronto/Calgary/ESA
+(`PDFDocument.getForm().getFields()`, throwaway scripts, no files leaked
+into the repo outside the ones deliberately committed to
+`docs-reference-forms/`). Results, across two research passes:
 
 | File | Pages | AcroForm fields | Verdict |
 |---|---|---|---|
 | Edmonton — Commercial Building Permit Application | 4 | **0** | Flat/scanned. Same category as ESA's ICIA-LV form: would need hand-measured coordinate-overlay values, not a name-based fill. |
-| Surrey, BC — Building Permit Application | 2 | **80** | Real AcroForm, comparable in kind to Toronto's — genuinely fillable by field name. |
-| Technical Safety BC — Electrical Installation Permit (Homeowner, Form 1259) | 6 | **163** | Real AcroForm. Larger surface area than Toronto's (163 fields across 6 pages vs. Toronto's 3 verified so far), but name-based, not overlay. |
-| Vancouver — both forms (`dev-build-app-form.pdf`, `cp-building-permit-app.pdf`) | — | — | **Blocked.** vancouver.ca returned HTTP 403 (bot-detection page, not the PDF) to a direct fetch. Not yet assessed — would need a browser-based fetch, not curl. |
+| Surrey, BC — Building Permit Application | 2 | **80** | Real AcroForm. **Shipped** — see supabase/seed.sql, coverage_level `assisted`. |
+| Technical Safety BC — Electrical Installation Permit (**Homeowner**, Form 1259) | 6 | **163** | Real AcroForm, but this specific form is scoped to homeowners doing their own work, not licensed contractors — see §3a below, this deprioritizes TSBC rather than confirming it. |
+| Vancouver, BC — Certified Professional Building Permit Application (`cp-building-permit-app.pdf`) | 2 | **105** | Real AcroForm, fetched via a real browser session (direct `curl` hit vancouver.ca's bot-detection, a browser fetch didn't). Scoped to the CP (Certified Professional) fast-track stream — requires the applicant already have a CP retained, narrower audience than the general path. |
+| Vancouver, BC — Development and/or Building Permit Application (`dev-build-app-form.pdf`) | 3 | **158** | Real AcroForm, same browser-fetch resolution. General-purpose form (new build, addition, interior/exterior alteration, demolition all on one form via checkboxes) — closer structural analog to Surrey's form than the CP one. Largest verified AcroForm surface area of any candidate so far. |
+| Winnipeg, MB — Alterations (Single/Two Family Dwelling) Building Permit Application | 4 | **0** | Flat/scanned, same bottleneck as Edmonton. `curl` worked fine (no bot-detection), the PDF itself is just non-fillable. |
+| Winnipeg, MB — Development Permit Application (Residential/Commercial) | 3 | **0** | Same — flat/scanned. |
 
-This **flips the earlier ranking**: Edmonton looked cheapest from search
-snippets alone, but its actual form is a flat PDF — the same "needs manual
-coordinate measurement, don't fabricate it" situation Calgary's own form is
-still stuck in, unresolved 6+ months later. Surrey and Technical Safety BC
-both turned out to be genuine AcroForms, which is the proven-cheaper path
-(name-based fill, same mechanism as Toronto).
+### 3a. Technical Safety BC — deprioritized, not confirmed
+
+The 163-field PDF inspected is specifically titled **"Electrical
+Installation Permit – Homeowner"**, and TSBC maintains a genuinely separate
+**Homeowner Electrical Permits** page/category
+(`technicalsafetybc.ca/apply-for/permits/homeowner-permits/...`) distinct
+from the contractor path. For licensed contractors — this product's actual
+audience — TSBC's real process is: apply through an **online services
+account** (portal) or an **online form** (not confirmed to be a downloadable
+static PDF), with a **Field Safety Representative (FSR)** — a TSBC-certified
+individual — required on every application to validate work and request
+inspections. No contractor-specific downloadable static PDF was found
+distinct from the Homeowner form. This looks structurally closer to
+**Halifax's problem** (portal-mediated intake, not the pdf-lib/AcroForm
+pattern this product is built around) than to Toronto/Surrey's pattern.
+Revisit only if a genuine contractor-facing static form turns up, or once a
+portal-intake mechanism exists as a second integration shape.
+
+### 3b. Winnipeg — same bottleneck as Edmonton, plus a live portal in parallel
+
+Both Winnipeg forms inspected are flat (0 fields) — the coordinate-overlay
+problem this product doesn't yet have a verified workflow for (same
+unresolved state as Calgary's own form, months later). Separately,
+winnipeg.ca now runs a parallel **"Permits Online"** portal
+(`permitsonline.winnipeg.ca`) alongside the `legacy.winnipeg.ca` PDF forms;
+search results describe it as accepting "integrated online forms rather
+than external PDFs" for most standard submissions, though the legacy PDFs
+are still live and linked, not confirmed dead. Net effect either way:
+Winnipeg doesn't look cheaper than Edmonton anymore — flat-PDF bottleneck at
+minimum, possibly also a portal-shape problem on top.
+
+This **updates the ranking again**: Vancouver, previously unassessed due to
+a fetch-tooling limitation (not a real property of the jurisdiction), turns
+out to have two real, large AcroForms — the best-verified BC candidate
+after Surrey. TSBC and Winnipeg both move down: TSBC because the only form
+inspected doesn't match this product's audience, Winnipeg because its real
+forms are flat like Edmonton's.
 
 ## 4. Revised ranked recommendation
 
-1. **Surrey, BC** — real 80-field AcroForm, single municipal authority,
-   closest match to the one pattern already fully proven (Toronto).
-2. **Technical Safety BC** (province-wide electrical authority, pairs with
-   any BC municipality — same relationship as Ontario's ESA) — real
-   163-field AcroForm. More fields to hand-verify than Toronto's 3, so more
-   labor, but no overlay-measurement problem.
-3. **Edmonton, AB** — deprioritized from where it started. Flat PDF, same
-   overlay-coordinate bottleneck Calgary's form is already stuck in with
-   zero verified fields months later. Revisit once the coordinate-overlay
+1. ~~Surrey, BC~~ — **shipped** (see §5b). Real 80-field AcroForm, single
+   municipal authority, closest match to the one pattern already fully
+   proven (Toronto).
+2. **Vancouver, BC** — real 158-field AcroForm (`dev-build-app-form.pdf`,
+   general-purpose, closer analog to Surrey's form than the CP-track one).
+   BC's largest trade-contractor market; Surrey alone doesn't cover it.
+   Needs the same research pass Surrey got: real permit type/trigger
+   conditions, hand-verified field subset, `coverage_level: assisted`.
+3. **Edmonton, AB** — flat PDF, same overlay-coordinate bottleneck Calgary's
+   form is already stuck in. Revisit once the coordinate-overlay
    verification workflow actually exists, not before.
-4. **Vancouver, BC** — unassessed; the site's bot-detection blocked a
-   direct fetch. Worth a second attempt (browser-based) if BC is the
-   direction you pick, since Surrey alone doesn't cover BC's largest market.
-5. **Winnipeg, MB** — not yet downloaded/inspected this round.
+4. **Winnipeg, MB** — newly deprioritized to Edmonton's tier: both
+   downloaded forms are flat, and a parallel online portal may already be
+   superseding the PDF path for standard submissions.
+5. **Technical Safety BC** — newly deprioritized. The only form inspected is
+   homeowner-scoped, not contractor-scoped; the real contractor path looks
+   portal + FSR-mediated, a different integration shape than this product is
+   built around. Revisit only with a confirmed contractor-facing static form.
 6. **Defer: Halifax, NS and Montreal/QC** — same reasoning as before
    (portal-based intake / per-arrondissement fragmentation + a second
    licensing body). Revisit once 2-3 provinces are proven, not before.
@@ -168,18 +207,39 @@ hardcoded jurisdiction lists found in code.
 `COPY_DECK.md` and `MARKETING_CAPABILITY_LEDGER.md` (the design docs
 `marketing-homepage.tsx`'s own header says must stay in sync with any
 homepage copy change) still reference Toronto/Calgary/Ottawa/Hamilton in
-prose — not updated, because the actual rendered content didn't change
-(still the same 4, same tiers), only the mechanism producing it. These
-docs would need a real edit once jurisdiction coverage actually changes,
-not from this pass.
+prose — not updated at the time coverage.tsx/hero.tsx were fixed, because
+the rendered content hadn't changed yet. It has now (§5b) — these two docs
+still need a real edit reflecting Surrey, not done as part of this pass
+either; flagging again so it isn't dropped a second time.
+
+## 5b. Surrey, BC — shipped
+
+Per the ranked recommendation above, Surrey went through the full research
+pass and is now real seed data: `supabase/seed.sql` (jurisdiction, `City of
+Surrey - Building Division` authority citing Surrey Building Bylaw 2012 No.
+17850, a `Commercial Tenant Improvement` permit_type sourced from the City's
+real "Tenant and Landlord Improvement Building Permit" page, one
+unconditional filing, 5 hand-verified `permit_form_fields` rows),
+`README.md`'s citation table and jurisdiction-count/"Limits" paragraph, and
+`docs-reference-forms/surrey-building-permit-application.pdf` (the real
+inspected PDF, alongside Toronto/Calgary/ESA's). `coverage_level: assisted`
+— no direct BC Building Code review yet, same bar Ottawa/Hamilton are held
+to. Committed and pushed.
 
 ## 6. Decision needed
 
-Pick a direction for §4 — Surrey, BC and/or Technical Safety BC look like
-the actual best next candidates now that field data is real rather than
-inferred. If you want to proceed, the next steps per candidate are: (a)
-research real permit types/trigger conditions for that jurisdiction, (b)
-hand-verify each AcroForm field name against what the form is actually
-asking for (same as Toronto's 3), (c) decide initial `coverage_level`
-("assisted" until code requirements are directly reviewed, matching
-Ottawa/Hamilton's existing pattern, not "verified" on day one).
+With TSBC and Winnipeg now deprioritized (§3a, §3b) and Vancouver newly
+assessed as two real AcroForms, **Vancouver, BC** is the clear next
+candidate — same reasoning that made Surrey the pick: real AcroForm,
+single form, BC's largest trade-contractor market, and Surrey already
+established the province-wide pattern (no new authority-type needed,
+unlike Technical Safety BC). If you want to proceed, the next steps mirror
+Surrey's: (a) research Vancouver's real permit types/trigger conditions
+for the `dev-build-app-form.pdf` general path — likely scoping to
+"interior alteration"/tenant-improvement-equivalent the same way Surrey's
+was scoped to tenant (not landlord) improvement, (b) hand-verify a
+restrained field subset against the 158 real field names already captured,
+(c) `coverage_level: assisted`, same bar as Surrey/Ottawa/Hamilton. §5's
+still-open item (COPY_DECK.md / MARKETING_CAPABILITY_LEDGER.md needing a
+real edit for Surrey) is independent of this and still outstanding either
+way.
