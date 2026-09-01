@@ -374,6 +374,18 @@ Supabase/Postgres stack via the Supabase CLI and runs `npm run test:sql` against
 `PHASE_0_FINDINGS.md`'s original audit flagged ("CI: NOT FOUND") and every subsequent phase report
 repeated: lint/build/tests are no longer only manually-run commands someone has to remember.
 
+**Deploy migrations** (`.github/workflows/deploy-migrations.yml`, added 2026-09-01 in response to a
+production incident): a separate workflow, triggered by `workflow_run` once `ci.yml` finishes
+successfully on `main`, that runs `supabase db push --linked` against the real production Supabase
+project and then fails loudly if `supabase migration list --linked` still shows anything out of sync.
+Exists because `supabase/migrations/` had silently drifted 6 migrations ahead of production (tested
+cleanly in CI's throwaway Postgres every time, but never pushed to the real remote) until the live
+homepage started 500ing on a view (`public_jurisdictions`) that only existed locally. Requires three
+repo secrets that only whoever holds the real Supabase project credentials can supply —
+`SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD` (see the workflow file's header
+for where to find each) — and fails visibly at the `supabase link` step until they're added, rather
+than silently no-op'ing.
+
 ## Setup
 
 ```bash

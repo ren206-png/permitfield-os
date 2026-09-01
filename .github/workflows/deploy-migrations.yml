@@ -1,0 +1,96 @@
+# Direct response to the 2026-09-01 production incident: supabase/migrations/
+# had drifted 6 migrations ahead of the linked production Supabase project
+# (20260806000033 through 20260806000038 existed locally -- and were being
+# replayed cleanly against CI's own throwaway Postgres via ci.yml's
+# sql-tests job on every push -- but were never pushed to the real remote
+# database). Nothing in the deploy path ever ran `supabase db push` against
+# production, so the drift went unnoticed until the live homepage started
+# 500ing (PGRST205, "Could not find the table 'public.public_jurisdictions'")
+# on a view that migration 20260806000035 creates and that only existed
+# locally. Fixed manually once (`supabase db push --linked`, all 38
+# migrations confirmed local==remote via `supabase migration list --linked`
+# afterward); this workflow is what stops it from recurring silently.
+#
+# Deliberately its OWN workflow file, not a third job bolted onto ci.yml.
+# ci.yml's two jobs (see that file's own header) either need no infra
+# (build-and-test) or talk only to a throwaway local Postgres started fresh
+# by `supabase start` (sql-tests) -- neither has, or should have, a route to
+# real production credentials. This is the only workflow in the repo that
+# touches the real remote database, so it gets its own trigger scope and its
+# own secrets, rather than widening ci.yml's blast radius or risking a
+# migration push from a job that's also juggling unrelated local-stack state.
+#
+# Trigger: `workflow_run` on ci.yml ("CI") completing on main, gated on
+# `conclusion == 'success'` below -- not a plain `push` trigger. This
+# guarantees a migration only ever reaches production after the exact same
+# commit's migrations have already replayed cleanly against a fresh Postgres
+# in ci.yml's sql-tests job (`supabase start` + `supabase db reset`) and every
+# supabase/tests/*.test.sql file has passed against them. Checks out
+# `github.event.workflow_run.head_sha` specifically (not just `main`'s
+# current tip) so this job always pushes the migrations that were actually
+# tested, even if another commit lands on main between CI finishing and this
+# job starting.
+#
+# Requires three repo secrets (Settings -> Secrets and variables -> Actions),
+# none of which this workflow or any commit in this repo can supply -- they
+# must be added by whoever holds the real Supabase project credentials:
+#   SUPABASE_ACCESS_TOKEN  -- personal access token:
+#                             https://supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_REF   -- the linked project's ref (from its dashboard
+#                             URL, e.g. https://supabase.com/dashboard/project/<ref>)
+#   SUPABASE_DB_PASSWORD   -- the project's database password
+#                             (Project Settings -> Database)
+# Until those three secrets exist, every run of this workflow fails at the
+# `supabase link` step -- loud and visible in the Actions tab, not a silent
+# no-op, so a missing-secrets state can't masquerade as "nothing to deploy."
+name: Deploy migrations
+
+"on":
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  db-push:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # --yes: this step runs unattended, no interactive confirmation is
+      # possible in CI. Deliberately NOT --include-seed -- supabase/seed.sql's
+      # own header says its Part 2 (auth.users/orgs fixtures) is "LOCAL DEV /
+      # TEST FIXTURES ONLY... never run against a shared or production
+      # project," and --include-seed would run all of seed.sql, not just
+      # Part 1's real reference data.
+      - run: supabase db push --linked --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # Fails the job (non-zero exit via the JSON message check below) if
+      # anything is still out of sync after the push above -- e.g. a
+      # migration that applied with an error `db push` didn't surface loudly
+      # enough, or a concurrent manual change to the remote project. Cheap
+      # insurance against this exact class of incident recurring silently.
+      - run: |
+          result="$(supabase migration list --linked -o json)"
+          echo "$result"
+          if echo "$result" | grep -q '"remote":""'; then
+            echo "::error::One or more local migrations did not apply to the linked remote project."
+            exit 1
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
