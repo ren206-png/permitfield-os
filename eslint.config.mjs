@@ -43,10 +43,48 @@ const clientPortalServiceClientRestriction = {
   },
 };
 
+// Gate AI-1, sub-phase AI-1.1's answer to the KEY_LEAK adversarial scenario
+// (GATE_AI_1_FINDINGS.md §H) -- same shape and mechanism as
+// clientPortalServiceClientRestriction above (a no-restricted-imports rule
+// scoped by files/ignores), applied to lib/ai/gemini/client.ts, the only
+// module in this repo permitted to read GEMINI_API_KEY (see that file's own
+// header). Only lib/ai/router.ts may import it -- every other file,
+// including app/**, is forbidden, whether by the "@/" alias or a relative
+// path, so this build fails if a future author wires the Gemini key into a
+// route handler, Server Action, or any other end-user-facing module.
+//
+// Unlike clientPortalServiceClientRestriction, there is no separate
+// live-test-file exemption here: lib/ai/gemini/client.ts has no dedicated
+// test file yet (same as the existing Voyage client, lib/ai/embed.ts, which
+// also has none -- see that module's header for why: a thin REST wrapper
+// with no local logic to unit-test in isolation, exercised live via
+// eval/run.ts instead). If a future test needs one, add it to `ignores`
+// alongside lib/ai/router.ts at that time, following the exact precedent
+// set by clientPortalServiceClientRestriction's own test-file exemption.
+const geminiClientRestriction = {
+  files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+  ignores: ["lib/ai/router.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        patterns: [
+          {
+            group: ["**/gemini/client", "**/gemini/client.ts"],
+            message:
+              "lib/ai/gemini/client.ts (the Gemini API client, GEMINI_API_KEY) may only be imported from lib/ai/router.ts -- see that module's header comment and GATE_AI_1_FINDINGS.md §H's KEY_LEAK scenario.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   clientPortalServiceClientRestriction,
+  geminiClientRestriction,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

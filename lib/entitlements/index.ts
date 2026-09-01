@@ -60,12 +60,27 @@
 // Route Handler/Server Component gates the whole panel set on one
 // can(orgId, 'analytics') check before calling any of them, consistent with
 // SS S's documented "permission-denied without a query issued" contract.
+// 'ai' added in Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §F,
+// question 4's default: "use your default"). Flat, no dot -- following the
+// 'analytics' precedent immediately above, not the dot-namespaced
+// resource.action convention every other key uses, because the AI-1
+// workstream's task kinds (routing, assistant, token caps -- see
+// lib/ai/router.ts's AiTaskKind) are sub-capabilities of one gate rather
+// than independent resources the way readiness.checker/readiness.override
+// are two genuinely separate actions. No call site yet -- same
+// "declared now, enforced at a later call site" pattern every key in this
+// file already follows. If a future need arises to gate the AI-1.4
+// Pro-escalation path independently from the base assistant/router (e.g.
+// only certain roles may call escalate), that would need a second,
+// dot-namespaced key (`ai.escalate`) rather than overloading this one --
+// flagged in GATE_AI_1_FINDINGS.md §F as a possible follow-up, not built now.
 export type Entitlement =
   | 'projects.create'
   | 'readiness.checker'
   | 'readiness.override'
   | 'jurisdiction.requirements'
-  | 'analytics';
+  | 'analytics'
+  | 'ai';
 export type LimitKey = 'projects.active_max';
 
 interface EntitlementTier {
@@ -84,6 +99,7 @@ const DEFAULT_TIER: EntitlementTier = {
     'readiness.override',
     'jurisdiction.requirements',
     'analytics',
+    'ai',
   ],
   limits: {
     'projects.active_max': 50,

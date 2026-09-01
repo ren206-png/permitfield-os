@@ -61,6 +61,18 @@ describe('can()', () => {
   it('analytics is not sensitive to orgId', () => {
     expect(can('org-a', 'analytics')).toBe(can('org-b', 'analytics'));
   });
+
+  // Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §F): 'ai' added
+  // alongside the existing keys in the same DEFAULT_TIER -- same
+  // "one hardcoded tier, no orgId branching" contract as every key above.
+  it('grants ai under the default tier for any orgId', () => {
+    expect(can('20000000-0000-0000-0000-00000000000a', 'ai')).toBe(true);
+    expect(can('some-other-org-id', 'ai')).toBe(true);
+  });
+
+  it('ai is not sensitive to orgId', () => {
+    expect(can('org-a', 'ai')).toBe(can('org-b', 'ai'));
+  });
 });
 
 describe('limit()', () => {

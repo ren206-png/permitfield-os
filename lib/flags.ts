@@ -229,3 +229,55 @@ export function isAdminPanelEnabled(): boolean {
 export function isJurisdictionPagesEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_JURISDICTION_PAGES');
 }
+
+// Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §G). Gates nothing at
+// runtime yet -- same "declared ahead of its consumer" pattern as
+// isLifecycleCoreEnabled/isJurisdictionsEnabled above: this flag ships
+// alongside lib/ai/router.ts's routeAiTask() and the new
+// ai_jobs/ai_token_ledger/ai_human_reviews schema
+// (20260806000036_ai_jobs_token_ledger_human_reviews.sql) with zero call
+// site -- the existing Claude-based extraction/audit engine
+// (lib/ai/extract-permit-data.ts, lib/ai/audit-permit-data.ts) is left
+// untouched in this sub-phase per GATE_AI_1_FINDINGS.md's question 2 default
+// (Ren: "use your default"). Will gate the router's own entry point once a
+// later AI-1 sub-phase adds a real caller.
+export function isAiRoutingEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_AI_ROUTING');
+}
+
+// Gate AI-1, sub-phase AI-1.4. Gates the future assistant/escalation UI and
+// Server Action(s) -- declared now, alongside AI-1.1's ai_human_reviews
+// table, so that sub-phase only has to flip this on rather than invent it.
+// Zero call sites yet, same discipline as every other flag in this file.
+export function isAiAssistantEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_AI_ASSISTANT');
+}
+
+// Gate AI-1, sub-phase AI-1.4. Gates the per-user daily / per-org monthly
+// spend-cap enforcement described in GATE_AI_1_FINDINGS.md §G/§H
+// (RUNAWAY_SPEND) -- reads ai_token_ledger and must run before the provider
+// call, not just log after it. Zero call sites yet; declared now so AI-1.4
+// does not need a follow-up flags.ts change just to gate the check it adds.
+export function isAiTokenCapsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_AI_TOKEN_CAPS');
+}
+
+// Gate AI-1, sub-phase AI-1.2 (GATE_AI_1_FINDINGS.md §C, §G, §H
+// CROSS_TENANT_RAG). Gates nothing at runtime yet -- same "declared ahead of
+// its consumer" pattern as isVectorRetrievalEnabled above: this flag ships
+// alongside the new application_document_chunks table and
+// search_application_document_chunks RPC
+// (20260806000038_application_document_chunks.sql) and
+// lib/ai/retrieve-org-document-chunks.ts, all with zero call sites -- no
+// chunking/embedding ingestion pipeline exists yet to populate the table
+// (that migration's own header comment), so there is nothing for this flag
+// to gate in practice today regardless of its value. Declared OFF now so
+// whichever future sub-phase adds the ingestion pipeline and wires a real
+// caller only has to flip this on, not invent it -- and so that caller has
+// an explicit kill switch from day one for a capability that reads an org's
+// own uploaded document content, the same class of decision as
+// isClientPortalEnabled's own header comment about not leaving a
+// credential-adjacent capability implicitly reachable.
+export function isOrgDocumentRetrievalEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_ORG_DOCUMENT_RETRIEVAL');
+}

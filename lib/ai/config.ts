@@ -58,3 +58,32 @@ export const EMBEDDING_DIMENSIONS = 1024;
 // an unbounded context both costs more and gives the model more surface area
 // to cite something it wasn't actually shown carefully.
 export const AUDIT_MAX_RETRIEVED_CHUNKS = 8;
+
+// Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §A/§G).
+// *** PROVISIONAL, NOT CONFIRMED. *** PERMITFIELD_AI_MODEL_DECISION.md --
+// the prompt's own named source of truth for every model/pricing decision in
+// this workstream -- does not exist anywhere in this repo (question 1 in
+// GATE_AI_1_FINDINGS.md, left unresolved when Ren answered "use your
+// default" to questions 2-5 only). These two constants are placeholders
+// using Gemini's current public model identifiers, wired into
+// lib/ai/router.ts's routeAiTask() for the two NEW AI-1.3/AI-1.4 task kinds
+// only (classification, assistant/checklist_generation) -- the existing
+// extraction/audit engine above stays on MODEL_ID (Claude), untouched, per
+// GATE_AI_1_FINDINGS.md question 2's default. Both constants happen to be
+// identical today because there is no confirmed per-task guidance yet to
+// differentiate them (see the WRONG_MODEL adversarial scenario,
+// GATE_AI_1_FINDINGS.md §H) -- the router is still structured per-kind so
+// that differentiating them later is a one-file constant change, not a
+// rewrite. Nothing depends on these being final: isAiRoutingEnabled()
+// defaults OFF, and even when on, nothing calls routeAiTask() yet.
+export const GEMINI_ASSISTANT_MODEL_ID = 'gemini-2.5-flash';
+export const GEMINI_CLASSIFICATION_MODEL_ID = 'gemini-2.5-flash';
+
+// Gate AI-1, sub-phase AI-1.2 (GATE_AI_1_FINDINGS.md §C, §G). Same bounding
+// rationale as AUDIT_MAX_RETRIEVED_CHUNKS above, applied to the new
+// application_document_chunks retrieval path
+// (lib/ai/retrieve-org-document-chunks.ts): an unbounded context both costs
+// more and gives the model more surface area to cite something it wasn't
+// actually shown carefully. No call site reads this yet -- see that
+// module's own header comment.
+export const ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS = 8;

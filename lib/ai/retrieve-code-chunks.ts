@@ -11,7 +11,38 @@ export interface RetrievedCodeChunk {
   sourceUrl: string;
   effectiveDate: string | null;
   corpusVersion: string;
+  // Gate AI-1, sub-phase AI-1.2 (GATE_AI_1_FINDINGS.md §B, §G, §H
+  // STALE_BYLAW). New dimension/window columns from
+  // 20260806000037_jurisdiction_code_chunks_dimensions_and_effective_window.sql,
+  // passed through for observability -- null means "universal" for the
+  // dimension fields (permitType/propertyType/language) and "unbounded" for
+  // the window fields (effectiveFrom/effectiveTo), matching the RPC's own
+  // null-means-unrestricted semantics documented in that migration.
+  permitType: string | null;
+  propertyType: string | null;
+  language: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
   rrfScore: number;
+}
+
+/**
+ * Optional narrowing filters for retrieveCodeChunks, mirroring
+ * search_jurisdiction_code_chunks's p_permit_type/p_property_type/
+ * p_language arguments (20260806000037...sql). All three are OPTIONAL and
+ * default to "no filtering" -- a chunk with a null value on a given
+ * dimension always matches regardless of whether a filter is passed for it,
+ * and omitting a filter here (or passing it as undefined) means "don't
+ * narrow by this dimension at all," identical to today's pre-AI-1.2
+ * behavior. The effective-date window (STALE_BYLAW) is NOT exposed here --
+ * unlike these three, it is not an optional caller narrowing, it's a
+ * correctness fix the RPC applies unconditionally (see that migration's
+ * header comment).
+ */
+export interface CodeChunkRetrievalFilters {
+  permitType?: string;
+  propertyType?: string;
+  language?: string;
 }
 
 /**
@@ -61,7 +92,8 @@ export function buildAuditQueryText(params: {
 export async function retrieveCodeChunks(
   supabase: SupabaseClient,
   jurisdictionId: string,
-  queryText: string
+  queryText: string,
+  filters?: CodeChunkRetrievalFilters
 ): Promise<RetrievedCodeChunk[]> {
   let queryEmbeddingLiteral: string | null = null;
   if (isVectorRetrievalEnabled()) {
@@ -69,11 +101,23 @@ export async function retrieveCodeChunks(
     queryEmbeddingLiteral = toPgvectorLiteral(embedding);
   }
 
+  // p_permit_type/p_property_type/p_language: omitted filters map to
+  // undefined here, and the existing caller (lib/inngest/functions/audit.ts)
+  // does not pass a fourth argument at all yet -- both resolve to `null` on
+  // the wire, which is search_jurisdiction_code_chunks's own "no filtering
+  // on this dimension" default (20260806000037...sql), so this change is
+  // backward-compatible with every pre-AI-1.2 caller. p_as_of_date is
+  // deliberately NOT exposed here -- see CodeChunkRetrievalFilters's own
+  // header comment on why the effective-date window isn't an optional
+  // filter.
   const { data, error } = await supabase.rpc('search_jurisdiction_code_chunks', {
     p_jurisdiction_id: jurisdictionId,
     p_query_text: queryText,
     p_query_embedding: queryEmbeddingLiteral,
     p_match_count: AUDIT_MAX_RETRIEVED_CHUNKS,
+    p_permit_type: filters?.permitType ?? null,
+    p_property_type: filters?.propertyType ?? null,
+    p_language: filters?.language ?? null,
   });
 
   if (error) {
@@ -87,6 +131,11 @@ export async function retrieveCodeChunks(
     source_url: string;
     effective_date: string | null;
     corpus_version: string;
+    permit_type: string | null;
+    property_type: string | null;
+    language: string | null;
+    effective_from: string | null;
+    effective_to: string | null;
     rrf_score: number;
   }>).map((row) => ({
     id: row.id,
@@ -95,6 +144,11 @@ export async function retrieveCodeChunks(
     sourceUrl: row.source_url,
     effectiveDate: row.effective_date,
     corpusVersion: row.corpus_version,
+    permitType: row.permit_type,
+    propertyType: row.property_type,
+    language: row.language,
+    effectiveFrom: row.effective_from,
+    effectiveTo: row.effective_to,
     rrfScore: row.rrf_score,
   }));
 }
