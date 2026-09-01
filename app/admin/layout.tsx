@@ -18,6 +18,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-6">
             <span className="text-sm font-semibold tracking-tight text-white">{PRODUCT_SHORT} · Platform Admin</span>
+            <Link href="/admin" className="text-sm text-zinc-300 hover:text-white">
+              Organizations
+            </Link>
+            <Link href="/admin/client-portal" className="text-sm text-zinc-300 hover:text-white">
+              Client portal tokens
+            </Link>
             <Link href="/applications" className="text-sm text-zinc-300 hover:text-white">
               Back to app
             </Link>

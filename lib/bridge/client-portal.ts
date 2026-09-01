@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { isAllowedMimeType, MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
@@ -48,6 +48,53 @@ import { writeAuditLog } from '@/lib/audit/log';
 // project 2 is never touched at all when the flag is off -- not even to
 // log the attempt. That is the literal meaning of "unreachable," not an
 // oversight.
+//
+// STAFF-FACING OPERATIONS (issueToken, revokeToken, listTokensForApplication,
+// added after Gate 2.0/2.5, following an explicit "yes, build it with
+// reasonable defaults" instruction): GATE_2_0_SPEC.md §3 only ever enumerated
+// the six CLIENT-facing operations above -- issuance/revocation were named
+// in §1's lifecycle matrix as staff-facing but explicitly left unbuilt (§7:
+// "Staff-facing issuance/revocation UI and its own role gate ... this spec
+// deliberately did not guess a tier"). These three functions fill that gap,
+// with two decisions §7 explicitly left open now made explicitly rather than
+// silently:
+//   - Default TTL: 14 days, exactly §1's own proposed-but-never-ratified
+//     number (its stated rationale -- "a realistic permit-review cycle" --
+//     was never contradicted by anything found while researching this, only
+//     never signed off).
+//   - Who can issue/revoke: gated by requireAdmin() (lib/auth/admin.ts) --
+//     the SAME platform-admin ADMIN_EMAILS allowlist /admin already uses,
+//     not a new `org_role` tier. §7 floated "owner/org_owner/platform_admin"
+//     as one option but declined to pick; reusing the existing admin gate is
+//     the most conservative reading available (fewest possible issuers, all
+//     already trusted with cross-tenant read access), not a rediscovery of
+//     that unresolved question. If a real requirement surfaces for org
+//     owners to self-serve this without platform-admin involvement, that is
+//     a new decision, not an oversight in this one.
+// Both are recorded here, in the one place they're implemented, rather than
+// only in a commit message, so a future reader hits the reasoning before
+// hitting the code.
+//
+// These three intentionally do NOT follow the "collapse every failure into
+// `{error: 'link_unavailable'}`" discipline the six client-facing operations
+// above use. That discipline exists because a client-portal recipient is an
+// untrusted bearer-token holder who must not be able to distinguish
+// "wrong token" from "revoked" from "expired." A staff caller here has
+// already passed requireAdmin() before either function runs -- there is no
+// equivalent reason to hide *why* an issuance or revocation failed from
+// someone already trusted with the platform admin panel.
+//
+// Also intentionally NOT using a real Postgres transaction / row lock for
+// the "supersede existing active token, then insert the new one" sequence
+// §1 describes with `select ... for update` -- supabase-js/PostgREST has no
+// multi-statement transaction primitive without a dedicated RPC function,
+// which is more than a "minimal version" needs. Concurrent issuance is
+// instead handled the way §1 already requires for the *simpler* pure-race
+// case: catching Postgres 23505 on `client_access_tokens_one_active_per_recipient`
+// as an expected outcome (see issueToken's own retry-once comment), not an
+// unhandled exception. A narrow TOCTOU window exists between the supersede
+// read and the new insert; worst case is a second 23505 on retry, which
+// surfaces as a clean `issue_failed` rather than crashing or double-issuing.
 
 const SIGNED_URL_TTL_SECONDS = 300; // Matches the existing convention (app/(app)/applications/[id]/page.tsx's
 // own page-local SIGNED_URL_TTL_SECONDS constant, ≤15 min per the master
@@ -945,4 +992,277 @@ export async function uploadDocument(
   });
 
   return { documentId, status };
+}
+
+// See this file's header comment ("STAFF-FACING OPERATIONS") for why this
+// group departs from the client-facing operations' generic-error and
+// no-transaction-vs-real-transaction tradeoffs above.
+
+const DEFAULT_TOKEN_TTL_DAYS = 14; // See header comment: §1's own proposed
+// number, now explicitly adopted rather than left unratified.
+
+const RAW_TOKEN_BYTES = 32; // 256 bits -- "a high-entropy random string" per
+// §0, same standard hashToken()'s own header comment already reasons about.
+
+function generateRawToken(): string {
+  return randomBytes(RAW_TOKEN_BYTES).toString('base64url');
+}
+
+export type IssueTokenParams = {
+  applicationId: string;
+  orgId: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  // The issuing admin's project-1 user id. Stored as a bare, non-FK pointer
+  // on both client_access_tokens (superseded-row update, not written here)
+  // and token_lifecycle_events.triggered_by_org_user_id -- same "opaque
+  // cross-project pointer, not a real foreign key" discipline
+  // client_access_tokens.application_id/org_id already use (§2's own
+  // design, "no shared FK space" between the two projects).
+  issuedByOrgUserId: string;
+  ttlDays?: number;
+};
+
+export type IssueTokenResult =
+  | { rawToken: string; tokenId: string; expiresAt: string }
+  | { error: 'client_portal_disabled' | 'application_not_found' | 'invalid_recipient_email' | 'issue_failed' };
+
+// Staff-facing: mints a new bearer token for a recipient+application pair,
+// superseding any existing active token for that same pair first (§1's
+// re-issue transition: "not a mutation of the existing row -- a new INSERT
+// that atomically supersedes the old one"). The raw token is returned
+// exactly once here and never persisted anywhere (only its SHA-256 hash is
+// written) -- the caller (the admin route) is responsible for displaying it
+// to the operator a single time and not logging it.
+export async function issueToken(params: IssueTokenParams): Promise<IssueTokenResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'client_portal_disabled' };
+  }
+
+  // Same live re-check discipline as every client-facing operation above
+  // (loadScopedApplication) -- an admin-supplied applicationId/orgId pair
+  // that doesn't correspond to a real, matching permit_applications row is
+  // rejected here rather than trusted, even though the caller already
+  // passed requireAdmin().
+  const main = createServiceClient();
+  const application = await loadScopedApplication(main, params.applicationId, params.orgId);
+  if (!application) {
+    return { error: 'application_not_found' };
+  }
+
+  const recipientEmailDisplay = params.recipientEmail.trim();
+  const recipientEmail = recipientEmailDisplay.toLowerCase();
+  // Mirrors client_access_tokens' own CHECK constraints (20260814000001):
+  // recipient_email must equal lower(btrim(recipient_email)), and
+  // lower(btrim(recipient_email_display)) must equal recipient_email. A
+  // bare `@` check is deliberately the only format validation here -- real
+  // email-format validation is not this function's job, and an
+  // over-strict regex here would only be a second, divergent copy of
+  // whatever the eventual delivery mechanism (not yet built -- nothing
+  // sends this token anywhere, the admin copies it by hand) actually needs.
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    return { error: 'invalid_recipient_email' };
+  }
+
+  const portal = createClientPortalServiceClient();
+  const ttlDays = params.ttlDays ?? DEFAULT_TOKEN_TTL_DAYS;
+  const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { data: existingActive, error: existingError } = await portal
+      .from('client_access_tokens')
+      .select('id')
+      .eq('recipient_email', recipientEmail)
+      .eq('application_id', params.applicationId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (existingError) {
+      console.error(`[lib/bridge/client-portal] issueToken existing-active lookup failed: ${existingError.message}`);
+      return { error: 'issue_failed' };
+    }
+
+    if (existingActive) {
+      const { error: supersedeError } = await portal
+        .from('client_access_tokens')
+        .update({ status: 'superseded' })
+        .eq('id', existingActive.id)
+        .eq('status', 'active');
+
+      if (supersedeError) {
+        console.error(`[lib/bridge/client-portal] issueToken supersede of ${existingActive.id} failed: ${supersedeError.message}`);
+        return { error: 'issue_failed' };
+      }
+
+      const { error: supersedeLifecycleError } = await portal.from('token_lifecycle_events').insert({
+        token_id: existingActive.id,
+        from_status: 'active',
+        to_status: 'superseded',
+        triggered_by_org_user_id: params.issuedByOrgUserId,
+      });
+      if (supersedeLifecycleError) {
+        console.error(
+          `[lib/bridge/client-portal] token_lifecycle_events insert failed for supersede of ${existingActive.id}: ${supersedeLifecycleError.message}`
+        );
+      }
+    }
+
+    const rawToken = generateRawToken();
+    const tokenHash = hashToken(rawToken);
+
+    const { data: inserted, error: insertError } = await portal
+      .from('client_access_tokens')
+      .insert({
+        application_id: params.applicationId,
+        org_id: params.orgId,
+        recipient_email_display: recipientEmailDisplay,
+        recipient_email: recipientEmail,
+        recipient_name: params.recipientName ?? null,
+        token_hash: tokenHash,
+        status: 'active',
+        expires_at: expiresAt,
+      })
+      .select('id')
+      .maybeSingle();
+
+    if (insertError) {
+      // 23505 on client_access_tokens_one_active_per_recipient means a
+      // concurrent issuance won the race between our supersede above and
+      // this insert -- §1's own required handling: treat as expected, not
+      // an unhandled exception, and retry once.
+      if (insertError.code === '23505' && attempt < MAX_ATTEMPTS) {
+        continue;
+      }
+      console.error(`[lib/bridge/client-portal] issueToken insert failed: ${insertError.message}`);
+      return { error: 'issue_failed' };
+    }
+
+    if (!inserted) {
+      console.error('[lib/bridge/client-portal] issueToken insert returned no row and no error.');
+      return { error: 'issue_failed' };
+    }
+
+    const { error: issueLifecycleError } = await portal.from('token_lifecycle_events').insert({
+      token_id: inserted.id,
+      from_status: null,
+      to_status: 'active',
+      triggered_by_org_user_id: params.issuedByOrgUserId,
+    });
+    if (issueLifecycleError) {
+      console.error(
+        `[lib/bridge/client-portal] token_lifecycle_events insert failed for issuance of ${inserted.id}: ${issueLifecycleError.message}`
+      );
+    }
+
+    return { rawToken, tokenId: inserted.id, expiresAt };
+  }
+
+  return { error: 'issue_failed' };
+}
+
+export type RevokeTokenResult =
+  | { revoked: true }
+  | { error: 'client_portal_disabled' | 'token_not_found' | 'already_inactive' | 'revoke_failed' };
+
+// Staff-facing, per-token revoke (§1's "instant revocation, per-token"
+// transition). Per-recipient bulk revoke and per-org offboarding bulk
+// revoke -- both also named in §1's matrix -- are NOT implemented here;
+// this is the minimal version, and the admin UI built on top of this only
+// ever revokes one row the operator can already see. Add a
+// `revokeTokensForRecipient`/`revokeTokensForOrg` sibling if that need
+// becomes real, rather than overloading this function's signature.
+export async function revokeToken(tokenId: string, revokedByOrgUserId: string): Promise<RevokeTokenResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'client_portal_disabled' };
+  }
+
+  const portal = createClientPortalServiceClient();
+
+  // The `.eq('status', 'active')` on the UPDATE itself (not just the
+  // read-then-write pattern the rest of this file otherwise avoids) is the
+  // authoritative guard against a concurrent revoke/expiry race -- if zero
+  // rows match, `updated` comes back null and the branch below
+  // distinguishes "never existed" from "already inactive" with one extra
+  // read, only on that failure path.
+  const { data: updated, error: updateError } = await portal
+    .from('client_access_tokens')
+    .update({
+      status: 'revoked',
+      revoked_at: new Date().toISOString(),
+      revoked_by_org_user_id: revokedByOrgUserId,
+      revoked_by_system: false,
+    })
+    .eq('id', tokenId)
+    .eq('status', 'active')
+    .select('id')
+    .maybeSingle();
+
+  if (updateError) {
+    console.error(`[lib/bridge/client-portal] revokeToken update failed for ${tokenId}: ${updateError.message}`);
+    return { error: 'revoke_failed' };
+  }
+
+  if (!updated) {
+    const { data: existing } = await portal.from('client_access_tokens').select('id').eq('id', tokenId).maybeSingle();
+    return existing ? { error: 'already_inactive' } : { error: 'token_not_found' };
+  }
+
+  const { error: lifecycleError } = await portal.from('token_lifecycle_events').insert({
+    token_id: tokenId,
+    from_status: 'active',
+    to_status: 'revoked',
+    triggered_by_org_user_id: revokedByOrgUserId,
+  });
+  if (lifecycleError) {
+    console.error(`[lib/bridge/client-portal] token_lifecycle_events insert failed for revoke of ${tokenId}: ${lifecycleError.message}`);
+  }
+
+  return { revoked: true };
+}
+
+export type TokenListEntry = {
+  id: string;
+  recipientEmailDisplay: string;
+  recipientName: string | null;
+  status: string;
+  issuedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+};
+
+export type ListTokensForApplicationResult = TokenListEntry[] | { error: 'client_portal_disabled' | 'list_failed' };
+
+// Staff-facing: every token ever issued for one application, newest first,
+// for the admin UI to render alongside its issue-token form. Deliberately a
+// thin projection with no derived "is this actually expired" computation --
+// `status` can still read 'active' with a past `expires_at` (the lazy-expiry
+// design resolveValidToken's own comment describes); the caller decides
+// how to present that, this function just returns the raw row.
+export async function listTokensForApplication(applicationId: string): Promise<ListTokensForApplicationResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'client_portal_disabled' };
+  }
+
+  const portal = createClientPortalServiceClient();
+  const { data, error } = await portal
+    .from('client_access_tokens')
+    .select('id, recipient_email_display, recipient_name, status, issued_at, expires_at, revoked_at')
+    .eq('application_id', applicationId)
+    .order('issued_at', { ascending: false });
+
+  if (error) {
+    console.error(`[lib/bridge/client-portal] listTokensForApplication failed for ${applicationId}: ${error.message}`);
+    return { error: 'list_failed' };
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    recipientEmailDisplay: row.recipient_email_display,
+    recipientName: row.recipient_name,
+    status: row.status,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+  }));
 }
