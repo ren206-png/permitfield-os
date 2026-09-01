@@ -32,6 +32,17 @@ values
   -- were already held to.
   ('00000000-0000-0000-0001-000000000005', 'CA', 'BC', 'Surrey', null, 'metric',
    'https://www.surrey.ca/renovating-building-development/building/commercial-building-permits',
+   'assisted', null),
+  -- Jurisdiction-expansion follow-up, Vancouver pass (see
+  -- JURISDICTION_EXPANSION_SCOPE.md SS4/SS5b): 'assisted', same bar as
+  -- Surrey -- real, cited process/bylaw research below, not a direct code
+  -- review. Vancouver is the only Canadian municipality that enacts its own
+  -- building code (Vancouver Building By-law No. 14343, effective 2025-09-15,
+  -- based on the 2024 BC Building Code plus Vancouver-specific provisions)
+  -- rather than adopting the provincial code directly -- worth noting here
+  -- since it's the reason this jurisdiction's authority isn't just "BC".
+  ('00000000-0000-0000-0001-000000000006', 'CA', 'BC', 'Vancouver', null, 'metric',
+   'https://vancouver.ca/home-property-development/building-permit.aspx',
    'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
@@ -59,6 +70,15 @@ values
   ('00000000-0000-0000-0002-000000000004', 'City of Surrey - Building Division', 'municipal', 'BC',
    '00000000-0000-0000-0001-000000000005',
    'https://www.surrey.ca/renovating-building-development/building/commercial-building-permits',
+   'portal'),
+  -- Vancouver Building By-law No. 14343 (confirmed on the City's own Building
+  -- Permit page and its By-law page, effective 2025-09-15). filing_mechanism
+  -- 'portal' matches the City's own online application flow
+  -- (vancouver.ca .../building-permit.aspx), the same "CAPermitApply" portal
+  -- the inspected form's own field labels reference.
+  ('00000000-0000-0000-0002-000000000005', 'City of Vancouver - Development and Building Services Centre', 'municipal', 'BC',
+   '00000000-0000-0000-0001-000000000006',
+   'https://vancouver.ca/home-property-development/building-permit.aspx',
    'portal');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
@@ -89,6 +109,22 @@ values
   ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0001-000000000005',
    'Commercial Tenant Improvement', 'surrey/building-permit-application.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Vancouver's general "Development and Building Permit Application" form
+  -- (docs-reference-forms/vancouver-dev-build-app-form.pdf, 158 real AcroForm
+  -- fields) covers this row's scope. Deliberately NOT the same as Vancouver's
+  -- separate "Tenant Improvement Program (TIPs)" -- that's a narrower,
+  -- dedicated fast-track review stream for office tenants in eligible
+  -- buildings (any commercial office building permitted after 2007-01-31),
+  -- confirmed on the City's own TIPs program page, and is out of scope for
+  -- this general-path row. Also deliberately NOT Vancouver's separate
+  -- "Certified Professional" building-permit form (cp-building-permit-app.pdf,
+  -- 105 fields) -- that's a parallel expedited-review track requiring a
+  -- pre-qualified Certified Professional, a different filing path than the
+  -- general one modeled here.
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0001-000000000006',
+   'Commercial Tenant Improvement', 'vancouver/dev-build-app-form.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
 -- Explicit ids (Phase 4) so permit_form_fields rows below can reference a
@@ -115,7 +151,12 @@ values
   -- unlike Toronto's dedicated per-permit-type form, so a single
   -- unconditional filing, not a multi-authority/conditional chain.
   ('00000000-0000-0000-0004-000000000004', '00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0002-000000000004', 1, null,
-   'surrey/building-permit-application.pdf');
+   'surrey/building-permit-application.pdf'),
+  -- Vancouver's general Development and Building Permit Application form
+  -- covers this permit_type end to end -- one authority, one filing, same
+  -- unconditional shape as Surrey's row above.
+  ('00000000-0000-0000-0004-000000000005', '00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0002-000000000005', 1, null,
+   'vancouver/dev-build-app-form.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -163,7 +204,32 @@ values
   ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'ApplicantEmail', 'applicant.email', true, null, null, null),
   ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'Project Address', 'application.projectAddress', true, null, null, null),
   ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null),
-  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'DescriptionOfProposedWork', 'application.projectDescription', false, null, null, null);
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'DescriptionOfProposedWork', 'application.projectDescription', false, null, null, null),
+  -- Vancouver's dev-build-app-form.pdf is a real 158-field AcroForm
+  -- (jurisdiction-expansion follow-up, pdf-lib inspection --
+  -- JURISDICTION_EXPANSION_SCOPE.md SS4), hand-verified field names below.
+  -- Restrained subset, same discipline as Toronto/Surrey above. Like
+  -- Surrey's form, pdf-lib's field.isRequired() reports false for every
+  -- field here too (checked, not assumed) -- is_required below is again a
+  -- product judgment, not a PDF-sourced fact.
+  --
+  -- Lower-confidence flag: the form repeats the same contact-block fields
+  -- (name/address/phone/email) seven times for different roles (Applicant,
+  -- Owner, Contractor, etc.), distinguished only by a numeric suffix
+  -- (_2 through _7) with no on-form section label recoverable without an
+  -- OCR/layout tool this environment doesn't have (same limitation hit on
+  -- Surrey's form). The mapping below assumes the FIRST, unsuffixed block is
+  -- "Applicant" based on field order alone -- it directly follows the
+  -- "Permit account email" field, which is itself labelled as the email used
+  -- to log into the City's own CAPermitApply portal. This is an inference,
+  -- not a verified label; flagged here rather than silently presented as
+  -- fact, per this session's proposal to the user.
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Permit account email The one you use to log into vancouvercapermitapply', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'First name', 'applicant.firstName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Last name', 'applicant.lastName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Address and street name', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Estimated value of building construction including cost of plans materials labour', 'application.estimatedJobValueDollars', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Describe the proposed work', 'application.projectDescription', false, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project
