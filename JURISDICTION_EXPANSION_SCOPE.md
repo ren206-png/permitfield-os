@@ -144,6 +144,59 @@ are still live and linked, not confirmed dead. Net effect either way:
 Winnipeg doesn't look cheaper than Edmonton anymore — flat-PDF bottleneck at
 minimum, possibly also a portal-shape problem on top.
 
+**This speculation is now resolved — see §3d.** The portal turns out to be
+login-gated, not a PDF-free alternative; the legacy PDFs are still very much
+alive (one of them redirects into the new portal, the other, `legacy.
+winnipeg.ca`, still serves the actual form documents directly).
+
+### 3d. Winnipeg — portal confirmed login-gated, third form confirmed flat
+
+Follow-up pass (browser tools, since `WebFetch` 403'd on `winnipeg.ca`
+directly — same bot-detection pattern already worked around for
+`vancouver.ca`). Two things resolved:
+
+1. **A third Winnipeg form, the real CTI analog, also comes back flat.**
+   `winnipeg.ca`'s "Permits Online" landing page (`/building-development/
+   permits-applications/permits-online`) links out to
+   `legacy.winnipeg.ca/ppd/Documents/Permits/CommercialAlterationDesignSummary/
+   Commercial-Alteration-Design-Summary.pdf` — the **Commercial Alteration
+   Design Summary**, Winnipeg's actual form for "interior and/or exterior
+   alterations and change of use," the closest structural match to the
+   Toronto/Surrey/Vancouver Commercial Tenant Improvement permit_type used
+   elsewhere in this schema (11 pages, 476KB, downloaded via direct `curl`
+   with a browser user-agent — no bot-detection on `legacy.winnipeg.ca`
+   itself). pdf-lib inspection: **0 AcroForm fields**. That's three Winnipeg
+   forms now, across residential and commercial, all flat — the same
+   "jurisdiction-wide PDF-authoring choice" pattern §3c documents for
+   Edmonton, not a single unlucky form.
+
+2. **The "Permits Online" portal is a real application, but it's
+   login-gated, not a PDF-free path.** The old `ppdportal.winnipeg.ca`
+   (AMANDA/eNtraprise-branded) URL now hard-redirects with a "System
+   Upgrade" notice to `permitsonline.winnipeg.ca`, which is a genuine
+   account-based case-management system — "apply for development
+   applications, permits and other services," "save & return to partially
+   completed applications for up to 30 days," invoices, payments, contractor
+   licensing. But the landing page requires **Login / Create account**
+   before any application screen is reachable; no application form fields
+   are visible unauthenticated, and creating an account wasn't done (out of
+   scope for research, and a permission-gated action regardless). The
+   portal's own help text also says supporting documentation still has to be
+   attached to whatever's entered online — i.e., the flat design-summary PDF
+   above doesn't go away even for portal applicants, it just becomes an
+   attachment inside an authenticated flow instead of an email attachment.
+
+Net effect: Winnipeg isn't a shortcut around Edmonton's blocker. It's
+confirmed flat on the PDF side (3-for-3) *and* its live-portal alternative
+is a different, unproven integration shape (login-gated web-form/session
+automation, not a name-based AcroForm fill) — closer to Halifax's
+portal-mediated problem (§3a) than to a simpler version of Surrey/Vancouver.
+Building against it would mean session/account automation against an
+authenticated system whose internal field structure is currently unknown,
+which is arguably a bigger unknown than the coordinate-overlay path, not a
+smaller one. Per your direction, parked alongside Edmonton — not pursued
+further this session.
+
 This **updates the ranking again**: Vancouver, previously unassessed due to
 a fetch-tooling limitation (not a real property of the jurisdiction), turns
 out to have two real, large AcroForms — the best-verified BC candidate
@@ -197,9 +250,13 @@ than begun unilaterally.
    or deprioritize further in favor of Winnipeg's live portal (§3b) if that
    turns out to be a static-form-free path worth a second integration
    shape.
-4. **Winnipeg, MB** — same tier as Edmonton: both downloaded forms are
-   flat, and a parallel online portal may already be superseding the PDF
-   path for standard submissions.
+4. **Winnipeg, MB** — confirmed same tier as Edmonton (§3d): three
+   downloaded forms are flat (not just the original two), and the parallel
+   "Permits Online" portal turns out to be login-gated case-management
+   software, not a PDF-free static-form alternative — a different and
+   likely bigger integration lift (session/account automation against an
+   unknown authenticated form structure), not a cheaper one. Parked, same as
+   Edmonton, per your direction.
 5. **Technical Safety BC** — newly deprioritized. The only form inspected is
    homeowner-scoped, not contractor-scoped; the real contractor path looks
    portal + FSR-mediated, a different integration shape than this product is
@@ -291,6 +348,15 @@ Not proceeding with either until you pick a direction. §5's still-open item
 (COPY_DECK.md / MARKETING_CAPABILITY_LEDGER.md needing a real edit for
 Surrey, and now Vancouver too) is independent of this and still
 outstanding either way.
+
+**Update:** option (b)(i) has since been checked and closed out — see §3d.
+Winnipeg's portal is login-gated case-management software, not a PDF-free
+static-form path; per your direction ("skip winnipeg for now"), it's parked
+at the same tier as Edmonton, not pursued further. The live decision is now
+narrower: (a) build and prove the coordinate-overlay workflow (against
+Edmonton or Winnipeg, both blocked the same way), or (b)(ii) look at a
+not-yet-researched jurisdiction. Still not proceeding with either
+unilaterally.
 
 ## 5c. Vancouver, BC — shipped
 
