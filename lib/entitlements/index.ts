@@ -1,97 +1,56 @@
-// Lifecycle & Compliance Expansion, Phase 1.1: application-layer
-// entitlements seam.
+// Lifecycle & Compliance Expansion, Phase 1.1 origin; extended by
+// BILLING_PROPOSAL.md's ratified Stripe billing build.
 //
-// *** THIS IS NOT A REAL BILLING/SUBSCRIPTION SYSTEM. *** The master
-// prompt's S4 calls for enforcing plan limits on this phase's new
-// create-project flow via "the existing subscription system"; Phase 0's
-// audit (PHASE_0_FINDINGS.md) found no such system anywhere in this
-// codebase -- no plans/subscriptions table, no billing provider
-// integration, nothing. Building a real one (pricing tiers, a
-// Stripe-or-equivalent integration, upgrade flows) is its own project and
-// out of scope for a project-intake gate. This file is the minimal
-// alternative the spec's requirement still needs satisfied: a single
-// hardcoded default tier applied to every org, exposed through the same
-// `can()`-style pure-function shape lib/authz/index.ts already
-// established -- DB-independent and unit-testable, so a future real
-// billing phase can replace the *implementation* behind `can()`/`limit()`
-// without touching any call site (every caller already asks "can/limit",
-// never "what tier is this org on" directly).
+// This module used to be a stub: "no real billing system exists, hardcode
+// one generous default tier for every org" (see git history for that
+// original header). That is no longer true -- supabase/migrations/
+// 20260806000040_org_subscriptions.sql adds a real per-org subscription
+// table synced from Stripe, and lib/billing/tiers.ts defines the real tier
+// config (Starter/Pro/Enterprise). This module is still the seam every call
+// site goes through (`can()`/`limit()`, never "what tier is this org on"
+// directly) -- what changed is what's behind that seam.
 //
-// Do not read "every org gets the same generous limit" as a pricing
-// decision -- it only means this phase does not implement per-org billing.
-// This module has exactly one call site as of this phase:
-// app/(app)/projects/new/actions.ts's createProject Server Action, which
-// combines this with a live count query (this module has no DB access of
-// its own, same discipline as lib/authz) to decide whether an org may
-// create another active project.
+// Flag-gated (PERMITFIELD_FF_BILLING, lib/flags.ts's isBillingEnabled()):
+// off-path is byte-identical to this file's pre-billing behavior (the old
+// hardcoded DEFAULT_TIER, now LEGACY_DEFAULT_TIER below) -- same "off-path
+// must not change behavior" discipline isMarketingV2Enabled/
+// isJurisdictionPagesEnabled already established elsewhere in this repo.
+// On-path resolves a live org_subscriptions row.
+//
+// can()/limit() are now async (they were sync before) because the on-path
+// requires a DB read -- this is a breaking signature change for both call
+// sites (app/(app)/projects/new/actions.ts, and this file's own test
+// suite), both updated alongside this file.
+//
+// resolveEffectiveTier() is deliberately pure (row + now() in, ResolvedTier
+// out, no Supabase client) and exported specifically so it can be unit
+// tested directly without mocking Supabase -- no vitest test file anywhere
+// in this codebase mocks Supabase, so DB-touching logic (resolveOrgTier)
+// stays a thin wrapper around this pure core rather than being tested
+// itself.
+import { createClient } from '@/lib/supabase/server';
+import { isBillingEnabled } from '@/lib/flags';
+import { BILLING_TIERS, type BillingTierId, type Entitlement, type LimitKey } from '@/lib/billing/tiers';
 
-// 'readiness.checker' / 'readiness.override' added in Gate 1.5
-// (PHASE_0_FINDINGS.md SS O.3): the master prompt's S4 spells these
-// `readiness_checker` / `readiness_override` (its literal key list), but
-// this module's one existing key (`projects.create`) already established a
-// dot-namespaced `resource.action` convention -- SS O.3 is the user's
-// explicit decision to keep extending that convention rather than adopt the
-// master prompt's literal spelling. Neither key has a call site yet: the
-// override role gate itself is enforced in SQL
-// (override_readiness_check(), 20260806000025) since that is the one thing
-// a SECURITY DEFINER RPC actually can enforce; these two keys exist so a
-// future Route Handler/Server Action wrapping that RPC (and the checklist
-// UI generally) has them ready to call, same "declared now, enforced later
-// at the call site" pattern every flag in lib/flags.ts already follows.
-// 'jurisdiction.requirements' added in Gate 1.6's deferred work
-// (PHASE_0_FINDINGS.md SS P.5, confirmed unchanged in SS Q.6): the master
-// prompt's S4 spells this `jurisdiction_requirements` (its literal key
-// list), same divergence SS O.3 already established for
-// `readiness_checker`/`readiness_override` above -- kept dot-namespaced for
-// consistency rather than mixing spelling conventions within this file. No
-// call site yet: neither evaluate_project_permit_requirements() nor
-// review_project_permit_requirement() (20260806000027) enforce role gates
-// via this module -- the review RPC's permit_manager+ check is done in SQL,
-// same "the DB enforces what a DB-layer RPC actually can enforce" reasoning
-// SS O.3's readiness keys already established. This key exists so a future
-// Route Handler/Server Action wrapping either RPC has it ready to call.
-// 'analytics' added in Gate 1.7 (PHASE_0_FINDINGS.md SS S): the master
-// prompt's S4 spells this key literally `analytics` already (no
-// underscore-vs-dot divergence to resolve here, unlike the three keys
-// above). No call site yet: the five dashboard_*() SQL functions
-// (20260806000028) enforce no entitlement of their own (same "the DB
-// enforces what RLS can enforce, the call site enforces the rest" split
-// every prior key here follows) -- this key exists so the future dashboard
-// Route Handler/Server Component gates the whole panel set on one
-// can(orgId, 'analytics') check before calling any of them, consistent with
-// SS S's documented "permission-denied without a query issued" contract.
-// 'ai' added in Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §F,
-// question 4's default: "use your default"). Flat, no dot -- following the
-// 'analytics' precedent immediately above, not the dot-namespaced
-// resource.action convention every other key uses, because the AI-1
-// workstream's task kinds (routing, assistant, token caps -- see
-// lib/ai/router.ts's AiTaskKind) are sub-capabilities of one gate rather
-// than independent resources the way readiness.checker/readiness.override
-// are two genuinely separate actions. No call site yet -- same
-// "declared now, enforced at a later call site" pattern every key in this
-// file already follows. If a future need arises to gate the AI-1.4
-// Pro-escalation path independently from the base assistant/router (e.g.
-// only certain roles may call escalate), that would need a second,
-// dot-namespaced key (`ai.escalate`) rather than overloading this one --
-// flagged in GATE_AI_1_FINDINGS.md §F as a possible follow-up, not built now.
-export type Entitlement =
-  | 'projects.create'
-  | 'readiness.checker'
-  | 'readiness.override'
-  | 'jurisdiction.requirements'
-  | 'analytics'
-  | 'ai';
-export type LimitKey = 'projects.active_max';
+// Re-exported for the one existing call site (and any future one) that
+// imports these types from this module rather than lib/billing/tiers
+// directly -- the types themselves now live in lib/billing/tiers.ts to
+// avoid a circular import (this file imports BILLING_TIERS etc. from
+// there; keeping the types there too keeps the dependency strictly
+// one-way).
+export type { Entitlement, LimitKey };
 
-interface EntitlementTier {
+interface ResolvedTier {
   name: string;
   features: readonly Entitlement[];
   limits: Record<LimitKey, number>;
 }
 
-// The one and only tier. Every org resolves to this today -- see the module
-// header for why.
-const DEFAULT_TIER: EntitlementTier = {
+// The pre-billing hardcoded tier, preserved verbatim as the off-path
+// (PERMITFIELD_FF_BILLING=false) fallback -- every org got every feature
+// and a 50-project limit before this build, and must continue to when the
+// flag is off.
+const LEGACY_DEFAULT_TIER: ResolvedTier = {
   name: 'default',
   features: [
     'projects.create',
@@ -106,17 +65,76 @@ const DEFAULT_TIER: EntitlementTier = {
   },
 };
 
-// orgId is accepted (not swallowed as `_orgId`-only-for-signature) even
-// though the current implementation never branches on it, so every call
-// site is already shaped correctly for the day a real per-org tier lookup
-// replaces the hardcoded constant below -- no call site would need to
-// change, only this function's body.
-export function can(orgId: string, entitlement: Entitlement): boolean {
-  void orgId;
-  return DEFAULT_TIER.features.includes(entitlement);
+// What an org resolves to when it has no usable subscription: no row at
+// all (predates this migration in an environment that reset/seeded around
+// it), a canceled subscription, or an expired trial with no card on file.
+// Zero features, zero project headroom -- read-only, not an error; existing
+// data stays visible (nothing here deletes or hides rows), only
+// `projects.create` and the rest of the feature set are denied.
+const NO_PLAN_TIER: ResolvedTier = {
+  name: 'no_plan',
+  features: [],
+  limits: {
+    'projects.active_max': 0,
+  },
+};
+
+export interface OrgSubscriptionRow {
+  tier: BillingTierId;
+  status: 'trialing' | 'active' | 'past_due' | 'canceled';
+  trial_ends_at: string | null;
 }
 
-export function limit(orgId: string, key: LimitKey): number {
-  void orgId;
-  return DEFAULT_TIER.limits[key];
+// Pure: no DB access, no Date.now() call of its own (now defaults to
+// `new Date()` but accepts an override so tests can pin a clock). A
+// canceled subscription, or a trialing one whose trial_ends_at has already
+// passed, resolves to NO_PLAN_TIER regardless of which tier column value
+// it still carries -- 'trialing'/'active'/'past_due' with a
+// still-in-the-future (or null) trial_ends_at resolve to that row's actual
+// tier from BILLING_TIERS.
+export function resolveEffectiveTier(row: OrgSubscriptionRow | null, now: Date = new Date()): ResolvedTier {
+  if (!row || row.status === 'canceled') {
+    return NO_PLAN_TIER;
+  }
+  if (row.status === 'trialing' && row.trial_ends_at !== null && new Date(row.trial_ends_at).getTime() <= now.getTime()) {
+    return NO_PLAN_TIER;
+  }
+  return BILLING_TIERS[row.tier];
+}
+
+// DB-touching wrapper around resolveEffectiveTier() -- deliberately thin
+// (one query, one call to the pure function) so the branching logic worth
+// testing stays in the pure function above.
+async function resolveOrgTier(orgId: string): Promise<ResolvedTier> {
+  if (!isBillingEnabled()) {
+    return LEGACY_DEFAULT_TIER;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('org_subscriptions')
+    .select('tier, status, trial_ends_at')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    // Fail closed (no features) rather than throw -- a transient DB error
+    // here must not be interpreted as "grant everything."
+    console.error(`Failed to resolve org_subscriptions for org ${orgId}:`, error.message);
+    return NO_PLAN_TIER;
+  }
+
+  return resolveEffectiveTier(data);
+}
+
+// orgId is accepted (not swallowed) the same way it always was in this
+// file's pre-billing version -- now it's actually used on the on-path.
+export async function can(orgId: string, entitlement: Entitlement): Promise<boolean> {
+  const tier = await resolveOrgTier(orgId);
+  return tier.features.includes(entitlement);
+}
+
+export async function limit(orgId: string, key: LimitKey): Promise<number> {
+  const tier = await resolveOrgTier(orgId);
+  return tier.limits[key];
 }

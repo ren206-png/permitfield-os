@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
-import { isAdminPanelEnabled } from '@/lib/flags';
+import { isAdminPanelEnabled, isBillingEnabled } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
 
@@ -23,6 +23,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // header comment describes for orgId). The flag check happens first so a
   // non-admin environment never even evaluates the allowlist.
   const showAdminLink = isAdminPanelEnabled() && (await isCurrentUserAdmin());
+  // No owner-only check here, unlike showAdminLink above -- the billing page
+  // itself is visible to every org member (org_subscriptions_select's own
+  // RLS policy is member-wide, not owner-only; see that migration's header
+  // comment), it just renders read-only for a non-owner. The owner gate
+  // lives in app/(app)/settings/billing/actions.ts instead.
+  const showBillingLink = isBillingEnabled();
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
@@ -36,6 +42,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <Link href="/applications" className="hover:text-zinc-900">
                 Applications
               </Link>
+              {showBillingLink && (
+                <Link href="/settings/billing" className="hover:text-zinc-900">
+                  Billing
+                </Link>
+              )}
               {showAdminLink && (
                 <Link href="/admin" className="hover:text-zinc-900">
                   Admin

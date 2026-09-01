@@ -77,7 +77,7 @@ export async function createProjectAction(
 
   const data = parsed.data;
 
-  if (!entitlementCan(orgId, 'projects.create')) {
+  if (!(await entitlementCan(orgId, 'projects.create'))) {
     return { error: 'Project creation is not available for this organization.' };
   }
 
@@ -96,7 +96,7 @@ export async function createProjectAction(
     return { error: `Failed to check project limit: ${countError.message}` };
   }
 
-  const maxActiveProjects = limit(orgId, 'projects.active_max');
+  const maxActiveProjects = await limit(orgId, 'projects.active_max');
   if ((count ?? 0) >= maxActiveProjects) {
     return {
       error: `This organization has reached its limit of ${maxActiveProjects} active projects.`,

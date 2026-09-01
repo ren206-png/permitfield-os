@@ -1,7 +1,7 @@
 # Migration rollbacks
 
 One file per migration in `supabase/migrations/`, `20260806000001` through
-`20260806000039` (every migration in the repo as of this update). The first
+`20260806000040` (every migration in the repo as of this update). The first
 28 are the Phase 1 migration set per
 `docs/PERMITFIELD_OS_EXPANSION_MASTER_PROMPT.md` §7 acceptance criteria
 16 ("every migration has documented, tested rollback SQL") and 18 (client
@@ -13,9 +13,14 @@ below used to describe as future work (see `GATE_2_0_FINDINGS.md` §H.7).
 `20260806000039` is a small Gate AI-1 follow-up fixing a service_role grant
 gap on `jurisdiction_code_chunks` found by actually running
 `supabase/tests/jurisdiction_code_chunks_dimensions.test.sql` (that test's
-own header admits it had never been executed before). Any migration added
-after `20260806000039` still needs its own rollback file here, following
-the same convention, before it can be considered closed out the way this
+own header admits it had never been executed before). `20260806000040` is
+the billing build (`BILLING_PROPOSAL.md`) -- the `org_subscriptions` table
+and the `create_organization_with_owner()` extension that inserts a trial
+row alongside every new org; its rollback restores that function to its
+pre-billing body before dropping the table, see that rollback file's own
+header for why order matters here specifically. Any migration added after
+`20260806000040` still needs its own rollback file here, following the
+same convention, before it can be considered closed out the way this
 directory's own acceptance criterion expects.
 
 ## Convention
@@ -92,6 +97,31 @@ schema:
   rollback restores the state 34 left behind before 34's own rollback runs
   against it. Verified as part of the full 38 -> 1 walk above, not in
   isolation.
+
+Extended to 40 (billing build, `BILLING_PROPOSAL.md`): verified via
+`--start-at 40 --stop-at 40` in isolation, then the full 40 -> 1 walk with
+the same empty-end-state checks as above, then `npm run test:sql` (all 18
+files, including the new `org_subscriptions.test.sql`, pass). That new test
+file's own first run against a live database surfaced two real bugs, both
+fixed directly in the test file (not the migration -- the schema/grants it
+exercises were correct on first try):
+- `create_organization_with_owner()` inserts into `org_members` with
+  `user_id = auth.uid()`, which carries a real FK to `auth.users` -- the
+  test's two synthetic user ids had no fixture row there yet (unlike
+  seed.sql's Org A/Org B owners), so the very first RPC call failed
+  `org_members_user_id_fkey`. Fixed by inserting throwaway `auth.users`
+  rows for both synthetic users first, same pattern
+  `lifecycle_intake.test.sql` already uses for its own synthetic org-C
+  member.
+- The test's own `create temporary table _test_org_ids` (used to stash the
+  RPC's `gen_random_uuid()`'d return values across `set local role`
+  boundaries, since a real placeholder id isn't knowable ahead of time) is
+  owned by `postgres`, but every `do` block that reads/writes it runs as
+  `authenticated` or `service_role` -- neither has an implicit grant on a
+  table it doesn't own, so an explicit `grant select, insert on
+  _test_org_ids to authenticated, service_role` was needed right after
+  creating it. No other test file in this suite uses a temp table this way
+  yet, so there was no existing precedent for this grant.
 
 ## Re-running this test
 

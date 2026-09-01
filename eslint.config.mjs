@@ -80,11 +80,44 @@ const geminiClientRestriction = {
   },
 };
 
+// Billing build (BILLING_PROPOSAL.md §3), same shape and mechanism as
+// geminiClientRestriction above (a no-restricted-imports rule scoped by
+// files/ignores), applied to the bare `stripe` npm package instead of a
+// relative-path module -- `patterns` (glob-matched relative/aliased
+// specifiers) can't match a bare package name, so this uses `paths`
+// instead, matching the specifier string exactly. Only
+// lib/billing/subscriptions.ts may import it -- every other file,
+// including app/**, is forbidden, whether by the "@/" alias or a direct
+// `from 'stripe'` import, so this build fails if a future author wires the
+// Stripe secret key into a route handler, Server Action, or any other
+// end-user-facing module. Same "only one designated module reads this
+// credential" discipline as STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own
+// .env.example comments.
+const stripeClientRestriction = {
+  files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+  ignores: ["lib/billing/subscriptions.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "stripe",
+            message:
+              "The stripe package (STRIPE_SECRET_KEY) may only be imported from lib/billing/subscriptions.ts -- see that module's header comment and BILLING_PROPOSAL.md §3.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   clientPortalServiceClientRestriction,
   geminiClientRestriction,
+  stripeClientRestriction,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

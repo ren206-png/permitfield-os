@@ -281,3 +281,22 @@ export function isAiTokenCapsEnabled(): boolean {
 export function isOrgDocumentRetrievalEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_ORG_DOCUMENT_RETRIEVAL');
 }
+
+// Billing (BILLING_PROPOSAL.md). Gates three things at once, same "one flag,
+// several coordinated call sites" shape as isClientPortalEnabled() above:
+// (1) app/api/webhooks/stripe/route.ts returns 404 when this is off, before
+// verifying any signature or touching Stripe; (2) app/(app)/settings/billing/
+// (page + Server Actions) 404s the same way; (3) lib/entitlements's
+// can()/limit() check this first -- off means they return the exact legacy
+// behavior (the old hardcoded DEFAULT_TIER, byte-identical), on means they do
+// a live org_subscriptions lookup by orgId. That third point is why this
+// flag is checked from a foundation module (lib/entitlements) and not just a
+// route, unlike every flag above it -- see lib/entitlements/index.ts's own
+// header comment for why an async, DB-aware can()/limit() was the
+// anticipated (not novel) next step. Default OFF per the same global
+// engineering rule as every flag in this file: no environment is affected by
+// this build until STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET are configured
+// AND this is explicitly turned on.
+export function isBillingEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_BILLING');
+}
