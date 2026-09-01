@@ -50,6 +50,13 @@ values
   -- direct BC Building Code + Bylaw 7230 review.
   ('00000000-0000-0000-0001-000000000007', 'CA', 'BC', 'Richmond', null, 'metric',
    'https://www.richmond.ca/business-development/building-approvals/permits.htm',
+   'assisted', null),
+  -- Jurisdiction-expansion follow-up, Coquitlam pass (see
+  -- JURISDICTION_EXPANSION_SCOPE.md SS8). 'assisted', same bar as
+  -- Surrey/Vancouver/Richmond -- real, cited process/bylaw research below,
+  -- not a direct BC Building Code + Bylaw 3598 review.
+  ('00000000-0000-0000-0001-000000000008', 'CA', 'BC', 'Coquitlam', null, 'metric',
+   'https://www.coquitlam.ca/517/Tenant-Improvements',
    'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
@@ -99,7 +106,22 @@ values
   ('00000000-0000-0000-0002-000000000006', 'City of Richmond - Building Approvals', 'municipal', 'BC',
    '00000000-0000-0000-0001-000000000007',
    'https://www.richmond.ca/business-development/building-approvals.htm',
-   'pdf_email');
+   'pdf_email'),
+  -- City of Coquitlam Building Bylaw No. 3598, 2003 (confirmed via the City's
+  -- own consolidated bylaw text, publicdocs.coquitlam.ca, title page reads
+  -- "CITY OF COQUITLAM BUILDING BYLAW NO. 3598, 2003" -- not a search-snippet
+  -- guess). filing_mechanism is 'portal': the City runs "Coquitlam QFile," a
+  -- City-branded electronic file-transfer service it describes as accepting
+  -- "electronic applications for all permit types... 24/7" -- closer to
+  -- Toronto/Surrey/Vancouver's City-run online submission systems than to
+  -- Richmond's plain email-the-PDF flow. Worth noting the distinction though:
+  -- QFile is a document-upload channel, not a web-form-data-entry portal --
+  -- applicants still fill out and submit the same real PDF below, just
+  -- through QFile instead of an email address.
+  ('00000000-0000-0000-0002-000000000007', 'City of Coquitlam - Building Permits Division', 'municipal', 'BC',
+   '00000000-0000-0000-0001-000000000008',
+   'https://www.coquitlam.ca/478/Building-Construction',
+   'portal');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
 -- electrical service upgrade needs a City of Toronto building permit ONLY when
@@ -156,6 +178,24 @@ values
   ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0001-000000000007',
    'Commercial Tenant Improvement', 'richmond/building-permit-application-addition-alterations.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Coquitlam's general "Permit Application Form" (jurisdiction-expansion
+  -- follow-up, JURISDICTION_EXPANSION_SCOPE.md SS8) -- linked directly from
+  -- the City's own live "Tenant Improvements" page, same as every other row
+  -- here. Scoping note: unlike Surrey's form (an explicit "Tenant
+  -- Improvement" checkbox), Coquitlam's form has no dedicated TI checkbox --
+  -- project type is selected via two separate checkbox groups, building type
+  -- (Commercial/Institutional/Industrial/etc.) and work type (New
+  -- Building/Addition/Renovation/Demolition/Relocating), so a commercial TI
+  -- job would presumably check "Commercial" + "Renovation". No City
+  -- instruction found explicitly confirming that exact pairing (the City's
+  -- own TI-specific guide covers drawing requirements only, not
+  -- form-checkbox selection) -- flagged as a real ambiguity, not silently
+  -- assumed as fact. Consistent with every other jurisdiction here, the
+  -- restrained field map below doesn't touch these checkboxes at all.
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0001-000000000008',
+   'Commercial Tenant Improvement', 'coquitlam/permit-application-form.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
 -- Explicit ids (Phase 4) so permit_form_fields rows below can reference a
@@ -193,7 +233,12 @@ values
   -- rows above. filing_mechanism on the authority row is 'pdf_email', not
   -- 'portal' -- see that row's comment.
   ('00000000-0000-0000-0004-000000000006', '00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0002-000000000006', 1, null,
-   'richmond/building-permit-application-addition-alterations.pdf');
+   'richmond/building-permit-application-addition-alterations.pdf'),
+  -- Coquitlam's Permit Application Form covers this permit_type end to end --
+  -- one authority, one filing, same unconditional shape as
+  -- Surrey/Vancouver/Richmond's rows above.
+  ('00000000-0000-0000-0004-000000000007', '00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0002-000000000007', 1, null,
+   'coquitlam/permit-application-form.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -291,7 +336,24 @@ values
   ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'ApplEmail', 'applicant.email', true, null, null, null),
   ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'ProjectStreetAddr', 'application.projectAddress', true, null, null, null),
   ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'WorkDesc', 'application.projectDescription', false, null, null, null),
-  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'IntValue', 'application.estimatedJobValueDollars', true, null, null, null);
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'IntValue', 'application.estimatedJobValueDollars', true, null, null, null),
+  -- Coquitlam's Permit Application Form is a real 95-field AcroForm
+  -- (jurisdiction-expansion follow-up, pdf-lib inspection --
+  -- JURISDICTION_EXPANSION_SCOPE.md SS8), hand-verified field names below.
+  -- Restrained subset, same discipline as Toronto/Surrey/Vancouver/Richmond
+  -- above. Like those forms, pdf-lib's field.isRequired() reports false for
+  -- every field here too (checked, not assumed) -- is_required below is
+  -- again a product judgment, not a PDF-sourced fact.
+  --
+  -- Unlike Vancouver's repeated contact blocks or Richmond's ambiguous
+  -- multi-value fields, this form's 5 mapped fields are single-instance and
+  -- unambiguously named -- no inference flag needed for this row, unlike
+  -- every other jurisdiction added since Toronto.
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Applicant Name', 'applicant.fullName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Applicant Email Address', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Site Address', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Summary of Project Proposed', 'application.projectDescription', false, null, null, null),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project

@@ -482,3 +482,61 @@ next pick):**
 5. Burnaby, BC (§7c) — ruled out, no downloadable-PDF path for the target
    permit type.
 6. Defer: Halifax, NS and Montreal/QC — unchanged from §4.
+
+## 8. Coquitlam, BC — confirmed and written, cleanest field names yet
+
+Richmond (§7d) has since been written to `supabase/seed.sql` and shipped.
+Looking for the next candidate, checked two more BC municipalities before
+committing to Mississauga's harder generic-field-name verification path
+(§7b): Kelowna (site blocks direct `WebFetch`/`curl`, same bot-detection
+shape as vancouver.ca/winnipeg.ca — not pursued further this pass) and
+**Coquitlam, BC**, which turned out to be the strongest candidate found
+since Vancouver.
+
+**Authority citation:** verified against the City's own consolidated bylaw
+text (`publicdocs.coquitlam.ca`, not a search-snippet guess) — title page
+reads **"CITY OF COQUITLAM BUILDING BYLAW NO. 3598, 2003"** (consolidated
+with amendments through Bylaw 5189, 2022).
+
+**Form:** Coquitlam's general **"Permit Application Form"**, linked directly
+from the City's live **Tenant Improvements** page
+(`coquitlam.ca/517/Tenant-Improvements`). Downloaded and pdf-lib-inspected:
+a real **95-field AcroForm, 3 pages**, `field.isRequired()` reports `false`
+throughout (checked, not assumed, same as every other real form here).
+
+Field names are the cleanest set found since Toronto — fully descriptive,
+single-instance, no ambiguity to flag: `Applicant Name`, `Applicant Email
+Address`, `Site Address`, `Summary of Project Proposed`, `Construction
+Value`. Unlike Vancouver's repeated seven-times contact blocks or Richmond's
+three-way `IntValue`/`ExtValue`/`AdditionValue` ambiguity, none of these 5
+mapped fields needed an inference call.
+
+**Scoping note — a real ambiguity, flagged not glossed over:** unlike
+Surrey's form (an explicit "Tenant Improvement" checkbox), Coquitlam's form
+has no dedicated TI checkbox. Project scope is selected via two *separate*
+checkbox groups: building type (`Commercial`, `Institutional`, `Industrial`,
+etc.) and work type (`New Building`, `Addition`, `Renovation`, `Demolition`,
+`Relocating`). A commercial TI job would presumably check `Commercial` +
+`Renovation`, but no City instruction was found explicitly confirming that
+exact pairing — the City's own Tenant Improvements Guide PDF covers drawing
+requirements only, not form-checkbox selection. The restrained field map
+written to `seed.sql` doesn't touch these checkboxes at all (consistent with
+every other jurisdiction here), so this doesn't block anything today, but
+it's a real gap worth knowing about rather than asserting a pairing as fact.
+
+**Filing mechanism:** Coquitlam runs **"Coquitlam QFile,"** a City-branded
+electronic file-transfer service the City itself describes as accepting
+"electronic applications for all permit types... 24/7." Applicants fill out
+the same real PDF, then upload it (with checklists/drawings) through QFile
+rather than a web-form-entry portal. Classified as `filing_mechanism:
+'portal'` (closer to Toronto/Surrey/Vancouver's City-run online submission
+systems than to Richmond's plain email-the-PDF flow) with a comment noting
+the upload-vs-webform distinction, since the schema's `filing_mechanism` enum
+(`portal` / `pdf_email` / `in_person` / `api`) has no dedicated "upload"
+value.
+
+**Status:** researched, proposed, and written to `supabase/seed.sql` plus
+companion files (`docs-reference-forms/coquitlam-permit-application-form.pdf`,
+`scripts/seed-storage-templates.ts`, `README.md`) in the same turn — the
+user's "yes write all" covered both the research proposal and the write,
+unlike Richmond's separate log-then-confirm-then-write sequence.
