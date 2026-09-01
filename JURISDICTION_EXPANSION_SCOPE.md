@@ -352,11 +352,8 @@ outstanding either way.
 **Update:** option (b)(i) has since been checked and closed out — see §3d.
 Winnipeg's portal is login-gated case-management software, not a PDF-free
 static-form path; per your direction ("skip winnipeg for now"), it's parked
-at the same tier as Edmonton, not pursued further. The live decision is now
-narrower: (a) build and prove the coordinate-overlay workflow (against
-Edmonton or Winnipeg, both blocked the same way), or (b)(ii) look at a
-not-yet-researched jurisdiction. Still not proceeding with either
-unilaterally.
+at the same tier as Edmonton, not pursued further. Option (b)(ii) is now
+resolved too — see §7: Richmond, BC is a confirmed, real candidate.
 
 ## 5c. Vancouver, BC — shipped
 
@@ -377,3 +374,111 @@ The applicant-contact-block field mapping is flagged in `seed.sql` itself
 as a lower-confidence inference (7 repeated, suffix-only-differentiated
 contact blocks, no OCR/layout tool available to resolve section labels).
 Committed and pushed.
+
+## 7. New-jurisdiction pass — Toronto freshness watch, Ontario "one-form" hypothesis disproved, Richmond BC confirmed
+
+Three findings from resuming §6's "look at a not-yet-researched jurisdiction"
+option, in order of how they surfaced.
+
+**7a. Toronto's shipped form — a freshness watch item, not a live problem.**
+While researching whether Ontario has one province-wide fillable form (see
+§7b), found that the Ontario government updated the standard "Application
+for a Permit to Construct or Demolish" form, effective **February 16,
+2026**, per Ontario Building Officials Association CodeNews Issue 377 — the
+current version hosted at `ontario.ca` (dated 2026-01-27) is materially
+larger than what's shipped today (133 fields / 4 pages, including new
+Designer and Sewage System Installer sections, vs. our 71 fields / 2 pages).
+Checked whether this makes our shipped Toronto data stale relative to its
+real source: it does not — Toronto's own live Building Forms Index page
+still links, byte-for-byte identical (SHA-256 verified), to the exact
+Oct-2025 PDF already in `docs-reference-forms/toronto-permit-application.pdf`.
+So the City of Toronto itself hasn't adopted the province's mandated update
+yet; our data accurately mirrors the actual current authoritative source, not
+a stale copy of it. Also confirmed the 3 fields already mapped in `seed.sql`
+("Applicant Last name", "Applicant First name", "Project value estimated (in
+dollars)") are unchanged in the new provincial version, so nothing breaks if
+Toronto adopts it later. No action taken — flagged here as something worth
+re-checking periodically (Toronto's forms index page), not a regression.
+
+**7b. Ontario "one province-wide form" hypothesis — tested, disproved.**
+Hypothesis: since "Application for a Permit to Construct or Demolish" is a
+single province-approved form, other Ontario municipalities might host the
+*same* AcroForm, letting Toronto's already-verified field map (§ above)
+transfer to a new ON jurisdiction near-free. Downloaded Mississauga's real
+copy (linked from its own current publication page, dated 2026/02) and
+pdf-lib-inspected it: **87 fields, but a completely different AcroForm** —
+generic auto-numbered field names (`Text1`, `Text6`, `Check Box14`, etc.),
+none matching Toronto's field names. Each municipality re-authors its own
+AcroForm around the legislated content; the underlying document/legal
+content is standardized, but the actual fillable PDF and field names are
+not. Correcting course before this became a wrong assumption baked into
+seed data: a new Ontario jurisdiction still needs its own from-scratch
+AcroForm verification, same cost as Surrey/Vancouver — and Mississauga's
+generic field names would need visual (not name-based) matching against the
+rendered page to verify with confidence, a harder version of the ambiguity
+already flagged for Vancouver's repeated contact blocks. Not pursued
+further this pass; Mississauga remains a real, technically-viable candidate
+for a future pass willing to take on that harder verification method.
+
+**7c. Burnaby, BC — checked, ruled out.** Burnaby is phasing out its
+downloadable commercial-building PDF entirely: its own site states paper
+applications for new commercial buildings stop being accepted January 2,
+2026 (already passed) in favour of "My Permits Portal," and — more directly
+relevant — **commercial tenant improvement applications must be applied for
+in-person at City Hall**, no downloadable-PDF path at all for our target
+permit type. Same practical blocker shape as Winnipeg/Edmonton (no
+AcroForm-fill path available today), for a different reason (deliberate
+portal migration + in-person-only TI process, not a flat/scanned PDF).
+Not pursued further.
+
+**7d. Richmond, BC — confirmed candidate, real AcroForm.** Richmond's own
+live **"Commercial TI Building Permit Requirements"** page
+(`richmond.ca/business-development/building-approvals/permits.htm`) directly
+lists and links **PL-43, "Building Permit Application Form - Addition and
+Alterations"** as the current application form for commercial tenant
+improvements. Downloaded and pdf-lib-inspected: a real **117-field AcroForm,
+4 pages**, with descriptive field names matching the applicant/owner/
+contractor/value/description pattern already used for Toronto/Surrey/
+Vancouver — `ProjectStreetAddr`, `WorkDesc`, `ApplName`/`ApplTel`/
+`ApplEmail`, `POName`/`POTel`/`POEmail` (property owner), `ConName`/
+`ConBizLic` (contractor), `IntValue`/`ExtValue` (interior/exterior alteration
+value). `isRequired()` reports false for every field, consistent with every
+other real form checked to date — checked, not assumed, same as Surrey/
+Vancouver's own note on this.
+
+Checked the obvious risk before treating this as settled: Richmond also runs
+a MyPermit online portal (`richmond.ca/business-development/e-plan/
+mypermit.htm`), so confirmed PL-43 is genuinely today's live path and not a
+legacy artifact next to a mandatory portal (the same trap Burnaby fell into,
+§7c). MyPermit's own page explicitly lists **"Building Permit,
+Addition/Alteration, Tenant Improvement, all buildings"** under **"Coming
+Soon (2026/2027)"** — not yet available online as of this research pass.
+PL-43 is confirmed as the current, primary submission path for exactly our
+target permit type.
+
+This is the best-evidenced new candidate found since Vancouver: comparable
+scale to Surrey (80 fields), better-labeled than Mississauga's generic
+fields, and no portal-migration risk in the near term (the relevant
+application type is explicitly not scheduled to move online before 2027).
+Not yet written to `supabase/seed.sql` — real research pass done, field map
+not yet drafted, per the same propose-then-confirm pattern used for
+Surrey/Vancouver.
+
+**Revised ranking (supersedes §4's Edmonton/Winnipeg/TSBC ordering for the
+next pick):**
+
+1. **Richmond, BC** — real 117-field AcroForm, confirmed PDF-primary today,
+   closest-pattern match to Surrey/Vancouver of any candidate found since.
+   Next in line if you want to proceed with a full research-and-field-map
+   pass, same shape as Surrey/Vancouver.
+2. Mississauga, ON (§7b) — real 87-field AcroForm, but generic field names
+   requiring visual (not name-based) verification; technically viable, more
+   labor per field than Richmond.
+3. Edmonton, AB / Winnipeg, MB — both confirmed flat across all real forms
+   found (3-for-3 each); blocked on the unproven coordinate-overlay
+   workflow. No change from §4/§3d.
+4. Technical Safety BC — still deprioritized (§3a), no confirmed
+   contractor-facing static form.
+5. Burnaby, BC (§7c) — ruled out, no downloadable-PDF path for the target
+   permit type.
+6. Defer: Halifax, NS and Montreal/QC — unchanged from §4.
