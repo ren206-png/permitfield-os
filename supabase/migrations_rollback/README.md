@@ -1,13 +1,22 @@
-# Migration rollbacks (Phase 1, gates 1.0-1.7)
+# Migration rollbacks
 
-One file per migration in `supabase/migrations/20260806000001` through
-`20260806000028` -- the Phase 1 migration set per
+One file per migration in `supabase/migrations/`, `20260806000001` through
+`20260806000039` (every migration in the repo as of this update). The first
+28 are the Phase 1 migration set per
 `docs/PERMITFIELD_OS_EXPANSION_MASTER_PROMPT.md` §7 acceptance criteria
 16 ("every migration has documented, tested rollback SQL") and 18 (client
-portal explicitly excluded from Phase 1). Migrations `20260806000029`
-onward are Gate 2.0 (client portal / lifecycle expansion) and deliberately
-have **no** rollback file here -- that is a Gate 2.0 closeout deliverable,
-not this one.
+portal explicitly excluded from Phase 1). `20260806000029` through
+`20260806000038` are Gate 2.0 (client portal / lifecycle expansion) and
+Gate AI-1 (adapter, router, retrieval schema) -- rollback SQL for that range
+was added later, closing the gap this file's own "one caveat" section
+below used to describe as future work (see `GATE_2_0_FINDINGS.md` §H.7).
+`20260806000039` is a small Gate AI-1 follow-up fixing a service_role grant
+gap on `jurisdiction_code_chunks` found by actually running
+`supabase/tests/jurisdiction_code_chunks_dimensions.test.sql` (that test's
+own header admits it had never been executed before). Any migration added
+after `20260806000039` still needs its own rollback file here, following
+the same convention, before it can be considered closed out the way this
+directory's own acceptance criterion expects.
 
 ## Convention
 
@@ -25,43 +34,64 @@ orphaning a row that already uses one of the values being removed.
 
 ## How this was tested
 
-`scripts/test-migration-rollbacks.sh` runs `supabase db reset`, then walks
-rollback 28 -> 1 in that same strict reverse order via `psql`, stopping
+`scripts/test-migration-rollbacks.sh` runs `supabase db reset` (applying
+every migration currently in `supabase/migrations/`), then walks the
+rollback chain in strict reverse order via `psql` -- from the
+highest-numbered migration present down to 1 by default -- stopping
 immediately on the first error, then runs `supabase db reset` again to
 confirm the manual walk didn't leave the local Postgres container in a
 state that breaks a subsequent clean forward apply.
 
-Verified (Phase 1 closeout, 2026-08-15): all 28 rollbacks apply cleanly in
-strict reverse order, and the fully-rolled-back state is genuinely empty
--- zero tables, zero enum types, zero functions, and zero storage buckets
-left in `public`/`storage` (confirmed directly via `\dt`, `pg_type`,
-`pg_proc`, and `storage.buckets` queries against the live container after
-the walk), not just "no SQL errors." `supabase db reset` afterward
-re-applies all 33 of today's migrations without issue.
+Verified (Phase 1 closeout, 2026-08-15): all 28 Phase 1 rollbacks apply
+cleanly in strict reverse order, and the fully-rolled-back state is
+genuinely empty -- zero tables, zero enum types, zero functions, and zero
+storage buckets left in `public`/`storage`, not just "no SQL errors."
 
-### One caveat, not a defect: migrations 29+ are not rollback-neutral
+Re-verified with the full chain (Gate 2.0 / Gate AI-1 closeout,
+2026-09-01): all 38 rollbacks -- the original 28 plus the 10 added for
+migrations 29-38 -- apply cleanly in strict reverse order from today's
+full `supabase/migrations/` HEAD, confirmed directly via `\dt`, `pg_type`,
+`\df`, and `storage.buckets` queries against the live container after the
+walk (zero tables/types/functions/buckets left), and `supabase db reset`
+re-applies all 38 migrations without issue afterward. The rollback-18
+enum-narrowing conflict the "one caveat" section below used to describe
+no longer reproduces, because rollback 29 (which drops the CHECK
+constraint that conflicted with 18's `org_role` type rename) now runs
+ahead of 18 in the same walk, exactly as that section predicted it would
+once this range's rollback SQL existed.
 
-This set was tested in isolation (`20260806000029` onward temporarily
-moved out of `supabase/migrations/` for the test run, then restored) --
-running the reverse walk against **today's full HEAD** (all 33 migrations
-applied, 29-33 left in place) fails at rollback 18 specifically:
-`20260806000029_org_members_role_not_client_user.sql` adds
-`check (role <> 'client_user')` on `org_members.role`, and 18's rollback
-renames the `org_role` enum type as part of narrowing it back to its
-original two values -- the CHECK constraint's compiled expression is bound
-to the old type's OID, and Postgres can't compare `org_role <>
-org_role_old` once the column itself is recast to the new (renamed-back)
-type.
+Extended the same day to 39: running the full test suite
+(`npm run test:sql`) after the above closeout surfaced a real gap --
+`jurisdiction_code_chunks_dimensions.test.sql` failed with "permission
+denied for table jurisdiction_code_chunks" because `service_role` had
+only ever been granted SELECT on that table (20260806000015), never
+INSERT, and that test's own fixture setup (seeding rows as `service_role`,
+the same role a real ingestion job would use) had never actually been run
+before. `20260806000039` grants the missing privilege; its rollback
+revokes it. Verified via `--start-at 39 --stop-at 39` in isolation, then
+the full 39 -> 1 walk with the same empty-end-state checks as above, then
+`npm run test:sql` (all 17 files, including the previously-failing one,
+pass).
 
-This is expected, not a bug in 18's rollback: migration 29 is Gate 2.0,
-outside Phase 1's scope, and nothing in Phase 1 promised to stay
-rollback-compatible with migrations gate 2.0 hadn't been written yet when
-this rollback set was authored. A genuine historical rollback from
-today's tip back past migration 18 would first need rollback SQL for
-29-33 (their own gate's closeout responsibility) to run ahead of 18's,
-exactly the same reverse-order discipline this whole directory already
-follows -- there is nothing to fix here, only to note for whoever writes
-that rollback set later.
+Two of the new files are worth calling out specifically, since they
+depend on the *data* in the database at rollback time, not just its
+schema:
+
+- **`20260806000030`'s rollback** (`audit_logs_external_actor`) guards
+  with a `raise exception` if any `audit_logs` row has already been
+  written through the external-actor branch this migration added --
+  restoring `NOT NULL` on `actor_user_id`/`actor_role` would otherwise
+  orphan that row's attribution. No such row exists in any environment
+  tested here (the client-portal bridge layer has zero live callers, per
+  `GATE_3_0_FINDINGS.md` §C.1), so this guard has not yet been exercised
+  against a real violation -- only confirmed to not false-positive against
+  today's empty case.
+- **`20260806000034`/`20260806000035`** must roll back together, in that
+  order (35 then 34) -- 35 corrects 34 in the forward direction (tightens
+  an `anon`-readable base-table grant down to two curated views), so 35's
+  rollback restores the state 34 left behind before 34's own rollback runs
+  against it. Verified as part of the full 38 -> 1 walk above, not in
+  isolation.
 
 ## Re-running this test
 
@@ -72,5 +102,8 @@ bash scripts/test-migration-rollbacks.sh
 
 Use `--stop-at N` to stop the walk after rolling back migration N
 (inclusive) instead of going all the way to 1 -- useful while iterating on
-one file without re-running the whole chain. Use `--skip-initial-reset` if
-the stack is already at a known-good, fully-forward-applied state.
+one file without re-running the whole chain. Use `--start-at N` to start
+the walk below the highest migration present (e.g. `--start-at 38
+--stop-at 29` to test only the Gate 2.0/AI-1 range in isolation). Use
+`--skip-initial-reset` if the stack is already at a known-good,
+fully-forward-applied state.

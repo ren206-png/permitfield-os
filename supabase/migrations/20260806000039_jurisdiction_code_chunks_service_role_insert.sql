@@ -1,0 +1,27 @@
+-- Gate AI-1 follow-up. supabase/tests/jurisdiction_code_chunks_dimensions.test.sql
+-- (added alongside 20260806000037, per that migration's own header) seeds
+-- fixture rows into jurisdiction_code_chunks as service_role -- the same
+-- role a real ingestion job would run as -- and fails with "permission
+-- denied for table jurisdiction_code_chunks" because 20260806000015
+-- ("service_role_grants") only ever granted SELECT on this table, never
+-- INSERT. That test file's own header admits it was written but not
+-- executed in this environment, which is how this gap went uncaught until
+-- `npm run test:sql` was actually run against it.
+--
+-- Same anticipatory-grant reasoning 20260806000038 used for
+-- application_document_chunks (grant service_role INSERT now, before any
+-- ingestion pipeline exists, so that pipeline's own future PR is a
+-- schema-change-free no-op on the grants front): jurisdiction_code_chunks
+-- has no ingestion pipeline yet either (20260806000037's header: corpus is
+-- still empty in every environment), but a future corpus-loading job will
+-- need to write to this table as service_role, and there is no reason a
+-- test seeding the same shape of row a real pipeline would write should be
+-- blocked by a grant gap that pipeline will need closed anyway.
+--
+-- Explicit grant only (20260806000011...sql's own "explicit grants only,
+-- never implicit defaults" convention) -- UPDATE/DELETE are deliberately
+-- NOT included here: unlike application_document_chunks (org-owned content,
+-- re-ingested/replaced per document), jurisdiction_code_chunks is a shared
+-- public-record corpus versioned by corpus_version (20260806000008), so its
+-- intended write pattern is append-only per version, not in-place mutation.
+grant insert on jurisdiction_code_chunks to service_role;

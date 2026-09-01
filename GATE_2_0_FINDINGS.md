@@ -538,6 +538,23 @@ listing, not assumed. Not a Gate 2.0/2.1 blocker (2.1 touches project 2 only, no
 at all), but flagged because it's a live, verifiable gap in an established repo convention, found in
 the course of this check rather than asserted from an unverified source.
 
+> **Closure — Owning sub-phase: none named at the time this finding was written (deferred as "a Gate
+> 2.0 closeout deliverable" per `supabase/migrations_rollback/README.md`'s original text). Status:
+> Executed 2026-09-01, after Gate AI-1 had also shipped migrations 30-38 on top of the single migration
+> (29) this finding named — closed for the full 29-38 range in one pass rather than 29 alone, so the
+> gap didn't reopen the moment AI-1.1's migrations landed. All 10 new rollback files verified via
+> `scripts/test-migration-rollbacks.sh` walking 38 -> 1 against a live local Postgres (the same
+> discipline the original 28 were verified with): every rollback applies cleanly in strict reverse
+> order, the fully-rolled-back state is genuinely empty, and a subsequent `supabase db reset` succeeds.
+> See `supabase/migrations_rollback/README.md`'s "How this was tested" section for the full account,
+> including two call-outs specific to this range (30's data-dependent guard, and 34/35's must-roll-
+> back-together ordering). Same day, running the full `npm run test:sql` suite (not previously run in
+> this engagement) surfaced one further gap this closeout pass caught rather than missed: `service_role`
+> had never been granted INSERT on `jurisdiction_code_chunks`, so its own dimensions test (added
+> alongside migration 37, never actually executed until this run) failed on fixture setup. Migration 39
+> grants it, with its own rollback file, extending this same closure to 29-39. All 17 SQL test files
+> pass after.**
+
 **H.8 — Working tree on `main` is not clean; two uncommitted, unrelated changes exist outside Gate
 2.0's scope.** `app/(app)/contractors/new/new-contractor-form.tsx` and
 `app/(app)/projects/new/new-project-form.tsx` both have uncommitted diffs changing
