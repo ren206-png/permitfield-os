@@ -238,16 +238,25 @@ begin
 end $$;
 
 -- Reference data (jurisdictions) stays readable to any authenticated user
--- regardless of org, but should NOT be readable to anon.
+-- regardless of org, but should NOT be readable to anon -- and, as of
+-- 20260806000035, "not readable" means a hard permission-denied error, not
+-- an RLS-filtered empty result. That migration REVOKEs anon's table-level
+-- SELECT grant on jurisdictions outright (superseding 20260806000034's
+-- narrower anon policy/grant, added and then intentionally walked back the
+-- same day once the public_jurisdictions/public_permit_types views shipped
+-- as the sanctioned public-read path instead -- see that migration's own
+-- header). So anon querying the base table now fails at the grant check
+-- before RLS is even evaluated, same insufficient_privilege mechanism
+-- exercised elsewhere in this suite (e.g. bridge_read_grants.test.sql).
 do $$
 declare
   jurisdiction_count int;
 begin
   select count(*) into jurisdiction_count from jurisdictions;
-  if jurisdiction_count <> 0 then
-    raise exception 'FAIL: anon role could read % jurisdictions rows', jurisdiction_count;
-  end if;
-  raise notice 'PASS: anon role sees zero jurisdictions rows';
+  raise exception 'FAIL: anon role could read % jurisdictions rows (expected permission denied)', jurisdiction_count;
+exception
+  when insufficient_privilege then
+    raise notice 'PASS: anon role correctly denied SELECT on jurisdictions (permission denied). (%)', sqlerrm;
 end $$;
 
 rollback;
