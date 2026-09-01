@@ -5,6 +5,13 @@ import Link from 'next/link';
 // deliberately worded "cut down manual data entry," not "auto-fills your
 // application," since §2's own evidence forbids claiming compliance or
 // completeness the model doesn't assert).
+//
+// PHASE 1 (LP workstream, see LP_PHASE_0_FINDINGS.md §0.2): subhead no
+// longer names cities in prose. It states the jurisdiction count (verified
+// against the coverage registry -- supabase/seed.sql:14-27, mirrored in
+// sections/coverage.tsx's JURISDICTIONS array) and links to #coverage,
+// where tiers are disclosed. Prevents the copy from going stale the next
+// time coverage changes without someone remembering to edit this file.
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
@@ -32,8 +39,14 @@ export function Hero() {
         <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
           PermitField OS keeps your permit applications, documents, and filing
           status in one place — with AI-assisted extraction to cut down manual
-          data entry. Built for contractors working in Toronto and Calgary
-          today.
+          data entry. Built for contractors in the 4 Canadian jurisdictions we{' '}
+          <a
+            href="#coverage"
+            className="underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900 dark:hover:text-white"
+          >
+            cover today
+          </a>
+          .
         </p>
         <div className="mt-8 flex items-center justify-center gap-4">
           <Link
