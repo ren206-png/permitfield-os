@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { isMarketingV2Enabled } from '@/lib/flags';
+import { isMarketingV2Enabled, isJurisdictionPagesEnabled } from '@/lib/flags';
 
 // Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` (same
 // runtime behavior, new file/export name -- see
@@ -74,8 +74,25 @@ export async function proxy(request: NextRequest) {
   // affected -- this is scoped to exactly these two well-known,
   // content-self-gated filenames.
   const isPublicSeoRoute = pathname === '/robots.txt' || pathname === '/sitemap.xml';
+  // LP workstream, Phase 3 (jurisdiction SEO pages, PERMITFIELD_FF_JURISDICTION_PAGES).
+  // Same allowlist pattern as isPublicMarketingRoute above: only reachable
+  // unauthenticated while the flag is on, and app/coverage/page.tsx +
+  // app/permits/ca/[region]/[city]/page.tsx each independently 404 (not just
+  // redirect) when the flag is off, per this file's own "proxy checks are
+  // never a substitute for a Server Component's own check" discipline. Only
+  // these two path shapes -- no other route under /permits or elsewhere is
+  // affected.
+  const isPublicJurisdictionRoute =
+    isJurisdictionPagesEnabled() &&
+    (pathname === '/coverage' || pathname.startsWith('/permits/ca/'));
 
-  if (!user && !isAuthRoute && !isPublicMarketingRoute && !isPublicSeoRoute) {
+  if (
+    !user &&
+    !isAuthRoute &&
+    !isPublicMarketingRoute &&
+    !isPublicSeoRoute &&
+    !isPublicJurisdictionRoute
+  ) {
     const redirectUrl = new URL('/login', request.url);
     return NextResponse.redirect(redirectUrl);
   }

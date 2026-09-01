@@ -196,3 +196,36 @@ export function isMarketingV2Enabled(): boolean {
 export function isAdminPanelEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_ADMIN_PANEL');
 }
+
+// LP workstream, Phase 3 (jurisdiction SEO pages, LP_PHASE_0_FINDINGS.md
+// SS0.5). Gates app/coverage/page.tsx and
+// app/permits/ca/[region]/[city]/page.tsx (each independently calls
+// notFound() when this is off, and each independently returns {} from its
+// own generateMetadata()), the matching allowlist entries in proxy.ts and
+// app/robots.ts, and the jurisdiction-URL entries in app/sitemap.ts.
+//
+// Building the route required resolving a real data-access blocker first:
+// jurisdictions/authorities/permit_types RLS granted SELECT to
+// `authenticated` only, and lib/supabase/service-client.ts's own header
+// explicitly forbids using the service-role bypass from an end-user-facing
+// route. Two resolution options were put to Ren; the reply was "build both
+// options" -- see supabase/migrations/20260806000034_public_jurisdiction_directory_read.sql
+// (Option A, the default) and lib/supabase/service-client.ts's header
+// (Option B, dormant unless PERMITFIELD_JURISDICTION_DATA_STRATEGY=service-role
+// is set) for both. A follow-up self-review found 20260806000034's anon
+// policies were broader than intended (full-table read via PostgREST, plus
+// an unused grant on `authorities`); 20260806000035_public_jurisdiction_directory_views.sql
+// tightens this to two narrow, pre-filtered views
+// (public_jurisdictions/public_permit_types) -- see that migration's header.
+// lib/jurisdictions/public-directory.ts is the one module permitted to read
+// jurisdiction/permit-type data on behalf of a public request, and is the
+// only thing the two new routes call for data.
+//
+// Distinct from isJurisdictionsEnabled() (PERMITFIELD_FF_JURISDICTIONS)
+// above, which gates an unrelated, already-shipped backend
+// jurisdiction-directory schema (Lifecycle & Compliance workstream) --
+// flagged as a naming-collision risk in Phase 0, kept apart here on
+// purpose.
+export function isJurisdictionPagesEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_JURISDICTION_PAGES');
+}
