@@ -540,3 +540,52 @@ companion files (`docs-reference-forms/coquitlam-permit-application-form.pdf`,
 `scripts/seed-storage-templates.ts`, `README.md`) in the same turn — the
 user's "yes write all" covered both the research proposal and the write,
 unlike Richmond's separate log-then-confirm-then-write sequence.
+
+## 9. Port Coquitlam, BC — dedicated TI form, first real `in_person` row
+
+Checked a few more BC candidates before this one: Kelowna (blocked by the
+same bot-detection shape as vancouver.ca/winnipeg.ca, not pursued),
+New Westminster (has a "Tenant Improvement Permit Application Package" but
+it reads as a checklist/guide bundle, not confirmed as a distinct fillable
+AcroForm -- not pursued this pass), and Abbotsford (requires creating a
+"Building Permit Portal account" before application submission, suggesting
+the application itself may be portal-native rather than PDF-based -- not
+pursued this pass). **Port Coquitlam, BC** turned out to be the strongest of
+the batch.
+
+**Authority citation:** verified against the City's own hosted bylaw PDF
+(`portcoquitlam.ca`, not a search-snippet guess) -- title text reads "This
+Bylaw may be cited for all purposes as the **'Building and Plumbing Bylaw,
+2009, No. 3710'**."
+
+**Form:** a **dedicated** "Building Permit Application - Tenant Improvement"
+form, linked directly from the City's live Tenant Improvement page.
+Downloaded and pdf-lib-inspected: a real **74-field AcroForm, 4 pages**,
+`field.isRequired()` reports `false` throughout (checked, not assumed).
+Because this form is dedicated specifically to tenant improvements (not a
+generic multi-purpose form like Coquitlam's, §8), there is no
+building-type/work-type checkbox scoping ambiguity to flag at all -- a step
+cleaner than Coquitlam's row. Restrained field map: `Applicant Name`,
+`Applicant email`, `Building Site Address`, `Proposed Work`, `Estimated
+Construction Value` -- all single-instance, unambiguous, no inference flag
+needed. The remaining ~69 fields are mostly a 16-row `Applicant Initial N` /
+`Comments N` acknowledgment table, out of scope for this restrained set.
+
+**Filing mechanism -- our first genuine `in_person` row:** the City's own
+Tenant Improvement page states the form is submitted in-person at the
+Building Division offices. Checked the obvious "coming soon" trap (the same
+one that caught Burnaby, §7c, and nearly caught Richmond, §7d) by directly
+checking Port Coquitlam's `eApply` online portal: its own page lists exactly
+which permit types it covers -- Plumbing, Fire Sprinkler, BBQ, Multi-Family,
+Single-Family, Two-Family Building, and Small-Scale Multi-Unit Housing --
+and states "More permit applications will be accepted online soon." Tenant
+Improvement/commercial is confirmed absent from that list, so `in_person` is
+a checked finding, not an assumption. This is the first time this project's
+seed data has used the `in_person` value of the `filing_mechanism` enum
+(defined in `20260806000004_jurisdictions_and_authorities.sql` alongside
+`portal`/`pdf_email`/`api`, previously unused).
+
+**Status:** researched, proposed, and written to `supabase/seed.sql` plus
+companion files (`docs-reference-forms/port-coquitlam-ti-application.pdf`,
+`scripts/seed-storage-templates.ts`, `README.md`) in the same turn, same
+"yes write all" pattern as Coquitlam (§8).

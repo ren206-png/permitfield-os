@@ -57,6 +57,13 @@ values
   -- not a direct BC Building Code + Bylaw 3598 review.
   ('00000000-0000-0000-0001-000000000008', 'CA', 'BC', 'Coquitlam', null, 'metric',
    'https://www.coquitlam.ca/517/Tenant-Improvements',
+   'assisted', null),
+  -- Jurisdiction-expansion follow-up, Port Coquitlam pass (see
+  -- JURISDICTION_EXPANSION_SCOPE.md SS9). 'assisted', same bar as
+  -- Surrey/Vancouver/Richmond/Coquitlam -- real, cited process/bylaw
+  -- research below, not a direct BC Building Code + Bylaw 3710 review.
+  ('00000000-0000-0000-0001-000000000009', 'CA', 'BC', 'Port Coquitlam', null, 'metric',
+   'https://www.portcoquitlam.ca/business-development/property-development-building/building-permits/tenant-improvement',
    'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
@@ -121,7 +128,24 @@ values
   ('00000000-0000-0000-0002-000000000007', 'City of Coquitlam - Building Permits Division', 'municipal', 'BC',
    '00000000-0000-0000-0001-000000000008',
    'https://www.coquitlam.ca/478/Building-Construction',
-   'portal');
+   'portal'),
+  -- City of Port Coquitlam Building and Plumbing Bylaw, 2009, No. 3710
+  -- (confirmed via the City's own hosted bylaw PDF, title text reads "This
+  -- Bylaw may be cited for all purposes as the 'Building and Plumbing
+  -- Bylaw, 2009, No. 3710'" -- not a search-snippet guess). filing_mechanism
+  -- is 'in_person' -- our first real use of that enum value: the City's own
+  -- Tenant Improvement page states the form is submitted in-person at the
+  -- Building Division offices, and the City's "eApply" online portal
+  -- explicitly does NOT cover Tenant Improvement/commercial permits (its own
+  -- page lists covered types -- Plumbing, Fire Sprinkler, BBQ, Multi/Single/
+  -- Two-Family Building, Small-Scale Multi-Unit Housing -- and says "More
+  -- permit applications will be accepted online soon"). Checked, not
+  -- assumed, same "coming soon" trap that caught Richmond's/Burnaby's
+  -- portal evaluations (SS7c/SS7d).
+  ('00000000-0000-0000-0002-000000000008', 'City of Port Coquitlam - Building Division', 'municipal', 'BC',
+   '00000000-0000-0000-0001-000000000009',
+   'https://www.portcoquitlam.ca/business-development/property-development-building/building-permits/tenant-improvement',
+   'in_person');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
 -- electrical service upgrade needs a City of Toronto building permit ONLY when
@@ -196,6 +220,17 @@ values
   ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0001-000000000008',
    'Commercial Tenant Improvement', 'coquitlam/permit-application-form.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Port Coquitlam's dedicated "Building Permit Application - Tenant
+  -- Improvement" form (jurisdiction-expansion follow-up,
+  -- JURISDICTION_EXPANSION_SCOPE.md SS9) -- linked directly from the City's
+  -- own live Tenant Improvement page. Unlike Coquitlam's generic
+  -- multi-purpose form (SS8), this is a form dedicated specifically to
+  -- tenant improvements, so there's no building-type/work-type checkbox
+  -- scoping ambiguity to flag here at all.
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0001-000000000009',
+   'Commercial Tenant Improvement', 'port-coquitlam/building-permit-application-tenant-improvement.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
 -- Explicit ids (Phase 4) so permit_form_fields rows below can reference a
@@ -238,7 +273,12 @@ values
   -- one authority, one filing, same unconditional shape as
   -- Surrey/Vancouver/Richmond's rows above.
   ('00000000-0000-0000-0004-000000000007', '00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0002-000000000007', 1, null,
-   'coquitlam/permit-application-form.pdf');
+   'coquitlam/permit-application-form.pdf'),
+  -- Port Coquitlam's dedicated Tenant Improvement application form covers
+  -- this permit_type end to end -- one authority, one filing, same
+  -- unconditional shape as Surrey/Vancouver/Richmond/Coquitlam's rows above.
+  ('00000000-0000-0000-0004-000000000008', '00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0002-000000000008', 1, null,
+   'port-coquitlam/building-permit-application-tenant-improvement.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -353,7 +393,24 @@ values
   ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Applicant Email Address', 'applicant.email', true, null, null, null),
   ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Site Address', 'application.projectAddress', true, null, null, null),
   ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Summary of Project Proposed', 'application.projectDescription', false, null, null, null),
-  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null);
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0004-000000000007', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null),
+  -- Port Coquitlam's dedicated Tenant Improvement application form is a real
+  -- 74-field AcroForm (jurisdiction-expansion follow-up, pdf-lib inspection
+  -- -- JURISDICTION_EXPANSION_SCOPE.md SS9), hand-verified field names
+  -- below. Restrained subset, same discipline as every jurisdiction above.
+  -- pdf-lib's field.isRequired() reports false for every field here too
+  -- (checked, not assumed) -- is_required below is again a product
+  -- judgment, not a PDF-sourced fact.
+  --
+  -- Like Coquitlam's row, this form's 5 mapped fields are single-instance
+  -- and unambiguously named -- no inference flag needed. The remaining ~69
+  -- fields are mostly a 16-row "Applicant Initial N" / "Comments N"
+  -- acknowledgment table, out of scope for this restrained set.
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Applicant Name', 'applicant.fullName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Applicant email', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Building Site Address', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Proposed Work', 'application.projectDescription', false, null, null, null),
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Estimated Construction Value', 'application.estimatedJobValueDollars', true, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project
