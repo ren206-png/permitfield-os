@@ -28,15 +28,30 @@ anchor rather than a separate route, so there's no unfinished page to 404.
 **Headline:**
 > Permit applications, organized from intake to filing.
 
-**Subhead:**
+**Subhead (updated — see note below):**
 > PermitField OS keeps your permit applications, documents, and filing
 > status in one place — with AI-assisted extraction to cut down manual data
-> entry. Built for contractors working in Toronto and Calgary today.
+> entry. Built for contractors in the Canadian jurisdictions we [cover
+> today](#coverage).
 
 Grounding: §1 (intake/tracking, SHIPPED), §2 (AI extraction, SHIPPED —
-qualified), jurisdiction table (Toronto/Calgary verified). "Cut down manual
-data entry" is used instead of "auto-fills your application" per §2's
-explicit qualification against overclaiming compliance/completeness.
+qualified), jurisdiction table (now 6 jurisdictions across ON/AB/BC, not
+just Toronto/Calgary verified). "Cut down manual data entry" is used
+instead of "auto-fills your application" per §2's explicit qualification
+against overclaiming compliance/completeness.
+
+**Note (jurisdiction-expansion follow-up):** originally this subhead named
+"Toronto and Calgary" directly in prose. Rewritten when Ottawa/Hamilton
+were added, then again now that Surrey and Vancouver (BC) are seeded too —
+naming cities in the subhead is exactly the same drift risk the
+`coverage.tsx` section's old hardcoded `JURISDICTIONS` array was: a literal
+city list here would need a manual edit on every future jurisdiction add,
+and would silently go stale if missed. The wording above is what actually
+shipped in `app/(marketing)/sections/hero.tsx` — no city names, an anchor
+link to `#coverage` where tiers (and now Surrey/Vancouver) are disclosed —
+this document is being corrected to match reality rather than left stale.
+The jurisdiction *count* is deliberately not stated either, same reasoning,
+one word smaller — see that file's own header comment.
 
 **Primary CTA:** Create your account
 **Secondary CTA:** See how it works (in-page anchor to §3 below)
@@ -66,9 +81,11 @@ implementation as a code comment (not shown to visitors):
 - **AI-assisted document extraction** — key fields pulled from your
   uploads for review, not blind auto-fill. (§2)
 - **Form auto-fill where supported** — for the Toronto Electrical Service
-  Upgrade form today, with more forms being added over time. (§3 — worded
-  as current + narrow, per ledger's qualified-claim language, not "fills
-  any permit form")
+  Upgrade, Surrey Commercial Tenant Improvement, and Vancouver Commercial
+  Tenant Improvement forms today, with more forms being added over time.
+  (§3 — worded as current + narrow, per ledger's qualified-claim language,
+  not "fills any permit form"; updated by the jurisdiction-expansion
+  follow-up, which added the Surrey and Vancouver field maps)
 - **Organization-level data isolation** — your applications are scoped to
   your organization, enforced at the database layer. (§10)
 
@@ -83,9 +100,22 @@ own tier language exactly — that component's header comment calls
 miscommunicating coverage tiers "the single most likely way this product
 injures a customer," so this section does not soften or rename the tiers:
 
+**Note (jurisdiction-expansion follow-up):** this section's rows below were
+originally written as static Phase 1 design copy — 4 hardcoded rows. The
+actual Phase 2 implementation (`app/(marketing)/sections/coverage.tsx`) does
+**not** hardcode this list; it queries `lib/jurisdictions/public-directory.ts`
+live against the same `public_jurisdictions`/`public_permit_types` views
+`/coverage` and the sitemap use, specifically so this list can never drift
+from what the database actually contains (see
+`JURISDICTION_EXPANSION_SCOPE.md` §5 for why the old hardcoded array was a
+bug, not a feature). The rows below are therefore an illustrative snapshot
+of current data, not literal component copy to re-type on every add:
+
 > **Toronto, ON** — Verified coverage
 > **Calgary, AB** — Verified coverage
 > **Ottawa, ON** — Assisted (AI audit off)
+> **Surrey, BC** — Assisted (AI audit off)
+> **Vancouver, BC** — Assisted (AI audit off)
 > **Hamilton, ON** — Listed only (not yet covered)
 
 Supporting line:
@@ -130,7 +160,14 @@ rather than forced in. Draft text if used:
 **Title:** PermitField OS — Permit application tracking for contractors
 **Description:** Organize permit applications, documents, and filing status
 in one place, with AI-assisted document extraction. Currently covering
-Toronto and Calgary.
+select Canadian jurisdictions — see /#coverage for the current list.
+
+(Note, jurisdiction-expansion follow-up: originally drafted as "Currently
+covering Toronto and Calgary" — corrected here for the same reason as §2's
+hero subhead: a hardcoded city list in draft metadata copy is a second
+place this same drift could reappear later. Now 6 jurisdictions across
+ON/AB/BC are seeded; naming any fixed subset risks going stale again on
+the next add.)
 
 No Open Graph image, no structured data (`schema.org`/JSON-LD) in this
 phase — both explicitly belong to Phase 3 per the master prompt's own phase
