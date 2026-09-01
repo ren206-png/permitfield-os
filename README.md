@@ -377,9 +377,20 @@ npm install
 cp .env.example .env.local   # fill in Supabase/Anthropic/Voyage/Inngest credentials
 supabase start                # requires Docker
 supabase db reset             # applies migrations/20260806*.sql + seed.sql
+npm run seed:storage          # uploads real template PDFs into Storage -- see below
 npm run dev
 npm run eval                  # offline extraction/audit/PDF-fill checks (see "Audit engine", "PDF filler")
 ```
+
+**`npm run seed:storage`** (`scripts/seed-storage-templates.ts`) uploads the 5 real government PDFs
+already committed under `docs-reference-forms/` into the `permitfield-form-templates` Storage bucket
+(created empty by migration `20260806000017`), at the exact object paths `seed.sql`'s
+`permit_type_filings.form_template_path` values expect. Without this step, `generate-pdf.ts`'s runtime
+download (`.storage.from(FORM_TEMPLATES_BUCKET).download(...)`) 404s for every jurisdiction, including
+Toronto — this was a real, previously-undocumented gap (found while re-verifying the PDF auto-fill
+capability claim for `MARKETING_CAPABILITY_LEDGER.md`'s jurisdiction-expansion update), not something
+specific to Surrey/Vancouver. Requires `SUPABASE_SERVICE_ROLE_KEY` (private bucket, no anon/authenticated
+read policy — see the migration's own `storage.buckets` insert); idempotent, safe to re-run.
 
 ## Reference forms
 

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "eval": "tsx eval/run.ts",
+    "seed:storage": "tsx scripts/seed-storage-templates.ts",
     "test": "vitest run",
     "test:live": "vitest run --config vitest.live.config.mts",
     "test:sql": "bash scripts/run-sql-tests.sh",
