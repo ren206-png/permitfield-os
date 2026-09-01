@@ -24,7 +24,15 @@ values
    'assisted', null),
   ('00000000-0000-0000-0001-000000000004', 'CA', 'ON', 'Hamilton', null, 'metric',
    'https://www.hamilton.ca/build-invest-grow/building-permits',
-   'listed', null);
+   'listed', null),
+  -- Jurisdiction-expansion follow-up (see JURISDICTION_EXPANSION_SCOPE.md):
+  -- first BC jurisdiction. 'assisted', not 'verified' -- this is real,
+  -- cited process/bylaw research (see the authority + permit_type comments
+  -- below), not a direct BC Building Code review, same bar Ottawa/Hamilton
+  -- were already held to.
+  ('00000000-0000-0000-0001-000000000005', 'CA', 'BC', 'Surrey', null, 'metric',
+   'https://www.surrey.ca/renovating-building-development/building/commercial-building-permits',
+   'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
 -- the concrete example SS0.6 gives for why authorities can't be nested under
@@ -42,6 +50,15 @@ values
   ('00000000-0000-0000-0002-000000000003', 'City of Calgary - Building Permit', 'municipal', 'AB',
    '00000000-0000-0000-0001-000000000002',
    'https://www.calgary.ca/development/permits.html',
+   'portal'),
+  -- Surrey Building Bylaw, 2012, No. 17850 -- confirmed via the City's own
+  -- Building Fee Schedule PDF, a Dec 2012 Council corporate report (RPT
+  -- 2012-R256), and independent bylaw-text mirrors (Canada Commons, Policy
+  -- Commons); not a search-snippet guess. filing_mechanism 'portal' matches
+  -- the City's own online submission flow for commercial building permits.
+  ('00000000-0000-0000-0002-000000000004', 'City of Surrey - Building Division', 'municipal', 'BC',
+   '00000000-0000-0000-0001-000000000005',
+   'https://www.surrey.ca/renovating-building-development/building/commercial-building-permits',
    'portal');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
@@ -56,6 +73,21 @@ values
    1, now(), 'phase-1-seed'),
   ('00000000-0000-0000-0003-000000000002', '00000000-0000-0000-0001-000000000002',
    'Commercial Tenant Improvement', 'calgary/commercial-building-project-application.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Same title as Calgary's row, deliberately: this is Surrey's real
+  -- "Tenant and Landlord Improvement Building Permit"
+  -- (surrey.ca/.../tenant-and-landlord-improvement-building-permit), scoped
+  -- to the tenant-improvement side only -- landlord improvement (base
+  -- building work by the property owner, a different trigger/audience) is
+  -- NOT covered by this row. Surrey requires a Coordinating Registered
+  -- Professional (Architect/AIBC or Engineer/EGBC) on these applications
+  -- per the City's own checklist (tenant-landlord-improvement-checklist.pdf)
+  -- -- a real process requirement, not yet encoded as an enforced
+  -- compliance_rules key since the app doesn't check for one today; noted
+  -- here so it isn't lost.
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0001-000000000005',
+   'Commercial Tenant Improvement', 'surrey/building-permit-application.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
@@ -75,7 +107,15 @@ values
   ('00000000-0000-0000-0004-000000000002', '00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0002-000000000002', 2, null,
    'esa/icia-low-voltage.pdf'),
   ('00000000-0000-0000-0004-000000000003', '00000000-0000-0000-0003-000000000002', '00000000-0000-0000-0002-000000000003', 1, null,
-   'calgary/commercial-building-project-application.pdf');
+   'calgary/commercial-building-project-application.pdf'),
+  -- Surrey uses one generic multi-purpose "Building Permit Application"
+  -- form for New Building/Addition/Exterior Renovation/Tenant
+  -- Improvement/Landlord Improvement/Demolition alike (a "Tenant
+  -- Improvement" checkbox selects the project type on the same document) --
+  -- unlike Toronto's dedicated per-permit-type form, so a single
+  -- unconditional filing, not a multi-authority/conditional chain.
+  ('00000000-0000-0000-0004-000000000004', '00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0002-000000000004', 1, null,
+   'surrey/building-permit-application.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -108,7 +148,22 @@ insert into permit_form_fields (permit_type_id, permit_type_filing_id, pdf_field
 values
   ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0004-000000000001', 'Applicant Last name', 'applicant.lastName', true, null, null, null),
   ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0004-000000000001', 'Applicant First name', 'applicant.firstName', true, null, null, null),
-  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0004-000000000001', 'Project value estimated (in dollars)', 'application.estimatedJobValueDollars', true, null, null, null);
+  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0004-000000000001', 'Project value estimated (in dollars)', 'application.estimatedJobValueDollars', true, null, null, null),
+  -- Surrey's BuildingPermitApplication.pdf is a real 80-field AcroForm
+  -- (jurisdiction-expansion follow-up, pdf-lib inspection --
+  -- JURISDICTION_EXPANSION_SCOPE.md SS3), hand-verified field names below.
+  -- Restrained subset, same discipline as Toronto's 3-of-many rows above --
+  -- not attempting all 80. is_required here is a product judgment (this
+  -- data is plainly necessary for any application), same basis as Toronto's
+  -- rows: pdf-lib's own field.isRequired() reports false for every field on
+  -- this form (the AcroForm itself doesn't encode requiredness -- checked,
+  -- not assumed), so unlike the bylaw citation this column isn't
+  -- PDF-sourced fact.
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'Applicant', 'applicant.fullName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'ApplicantEmail', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'Project Address', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0004-000000000004', 'DescriptionOfProposedWork', 'application.projectDescription', false, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project

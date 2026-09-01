@@ -61,9 +61,10 @@ Seed jurisdictions and their real sources (full detail in `PHASE_0_FINDINGS.md`)
 | Toronto, ON | City of Toronto — Building Division | [Municipal Code Ch. 363](https://www.toronto.ca/legdocs/municode/1184_363.pdf), [permit application form](https://www.toronto.ca/wp-content/uploads/2025/10/94e5-14-0094-Final-Application-for-a-Permit-to-Construct-or-Demolish.pdf) |
 | Ontario (province-wide) | Electrical Safety Authority (ESA) | [Forms hub](https://esasafe.com/fees-and-forms/forms/), [notification requirement guidance](https://esasafe.com/notifications-and-inspections/do-i-need-to-file-a-notification/) |
 | Calgary, AB | City of Calgary — Building Permit | [Commercial application](https://www.calgary.ca/content/dam/www/pda/pd/documents/carls/building-permit/commercial.pdf), [CARLs requirements](https://www.calgary.ca/development/permits/carl-application-requirements.html) — full text of Bylaw 64M94 has no stable static URL, sourced via [publicaccess.calgary.ca](https://publicaccess.calgary.ca) (open question, see Phase 0 findings) |
+| Surrey, BC | City of Surrey — Building Division | [Surrey Building Bylaw, 2012, No. 17850](https://www.surrey.ca/sites/default/files/media/documents/BuildingFeeSchedule.pdf) (fee schedule citing the bylaw; full bylaw text via the City's [Building Bulletins, Bylaws & Policies](https://www.surrey.ca/renovating-building-development/building-construction-bulletin-board/building-bulletins-bylaws-policies) page), [Tenant and Landlord Improvement Building Permit](https://www.surrey.ca/renovating-building-development/building/commercial-building-permits/tenant-and-landlord-improvement-building-permit), [checklist](https://www.surrey.ca/sites/default/files/media/documents/tenant-landlord-improvement-checklist.pdf) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`), seeded `assisted`, not `verified` (no direct BC Building Code review yet) |
 
-**Limits:** the MVP corpus covers 4 seed jurisdictions (2 `verified`, 1 `assisted`, 1 `listed`) across
-2 provinces. Quebec is out of scope entirely (RBQ licensing + French-language obligations — not
+**Limits:** the MVP corpus covers 5 seed jurisdictions (2 `verified`, 2 `assisted`, 1 `listed`) across
+3 provinces. Quebec is out of scope entirely (RBQ licensing + French-language obligations — not
 seeded). No US jurisdiction, code family, or terminology exists in this codebase; four columns
 (`jurisdictions.country`, `jurisdictions.unit_system`, `permit_applications.currency_code`,
 `authorities.authority_level`) exist specifically to make a future US phase a migration rather than a
@@ -381,9 +382,12 @@ npm run eval                  # offline extraction/audit/PDF-fill checks (see "A
 
 ## Reference forms
 
-`docs-reference-forms/` contains the 3 real government permit PDFs downloaded (with explicit
-permission) during Phase 0 to run an actual `pdf-lib` AcroForm field inspection rather than guess.
-Findings: Toronto's form has 71 real AcroForm fields, Calgary's commercial form has 15, and ESA's ICIA
+`docs-reference-forms/` contains the 4 real government permit PDFs downloaded (with explicit
+permission) to run an actual `pdf-lib` AcroForm field inspection rather than guess: the original 3
+from Phase 0, plus `surrey-building-permit-application.pdf` added during the jurisdiction-expansion
+follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`). Findings: Toronto's form has 71 real AcroForm
+fields, Calgary's commercial form has 15, Surrey's generic building-permit form has 80, and ESA's ICIA
 Low Voltage notification form has **zero** — it's a flattened Excel export, so Phase 4's PDF filler
 needs the coordinate-overlay path (`permit_form_fields.overlay_page/x/y`) from day one, not just
-AcroForm mapping. See `PHASE_0_FINDINGS.md` §4 for the full inspection output.
+AcroForm mapping. See `PHASE_0_FINDINGS.md` §4 for the full Phase 0 inspection output and
+`JURISDICTION_EXPANSION_SCOPE.md` §3 for Surrey's.
