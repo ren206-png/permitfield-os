@@ -64,6 +64,20 @@ values
   -- research below, not a direct BC Building Code + Bylaw 3710 review.
   ('00000000-0000-0000-0001-000000000009', 'CA', 'BC', 'Port Coquitlam', null, 'metric',
    'https://www.portcoquitlam.ca/business-development/property-development-building/building-permits/tenant-improvement',
+   'assisted', null),
+  -- Jurisdiction-expansion follow-up, Maple Ridge pass (see
+  -- JURISDICTION_EXPANSION_SCOPE.md SS10). 'assisted', same bar as
+  -- Surrey/Vancouver/Richmond/Coquitlam/Port Coquitlam -- real, cited
+  -- process/bylaw research below, not a direct BC Building Code + Building
+  -- Bylaw No. 8097-2026 review. Picked up after Mississauga -- the
+  -- previously-ranked next candidate (SS4/SS7d) -- was re-checked live and
+  -- found to have since moved building permit applications to a mandatory
+  -- ePlans portal with no downloadable PDF path at all, the same
+  -- no-AcroForm-fill-path disqualifier that already ruled out Burnaby/
+  -- Abbotsford; Mississauga should now be considered ruled out too, not
+  -- shipped.
+  ('00000000-0000-0000-0001-00000000000a', 'CA', 'BC', 'Maple Ridge', null, 'metric',
+   'https://www.mapleridge.ca/build-do-business/construction-development-permits/commercial-renovations-tenantlandlord',
    'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
@@ -145,7 +159,21 @@ values
   ('00000000-0000-0000-0002-000000000008', 'City of Port Coquitlam - Building Division', 'municipal', 'BC',
    '00000000-0000-0000-0001-000000000009',
    'https://www.portcoquitlam.ca/business-development/property-development-building/building-permits/tenant-improvement',
-   'in_person');
+   'in_person'),
+  -- City of Maple Ridge Building Bylaw No. 8097-2026 (confirmed via the
+  -- City's own Building Permits & Inspections page, which links directly to
+  -- "Building Bylaw No. 8097-2026" -- not a search-snippet guess).
+  -- filing_mechanism is 'portal': the City's own Tenant/Landlord
+  -- Improvement page links "Apply Now" straight to the Citizen Portal
+  -- (citizenportal.mapleridge.ca), the same upload-based shape already used
+  -- for Toronto/Coquitlam (fill the real PDF form below, then upload it +
+  -- drawings through the portal) -- not the Mississauga-shape "no PDF,
+  -- native web-form-entry-only" disqualifier (see the jurisdiction row's
+  -- own comment above).
+  ('00000000-0000-0000-0002-000000000009', 'City of Maple Ridge - Building Permits', 'municipal', 'BC',
+   '00000000-0000-0000-0001-00000000000a',
+   'https://www.mapleridge.ca/build-do-business/construction-development-permits/commercial-renovations-tenantlandlord',
+   'portal');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
 -- electrical service upgrade needs a City of Toronto building permit ONLY when
@@ -231,6 +259,17 @@ values
   ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0001-000000000009',
    'Commercial Tenant Improvement', 'port-coquitlam/building-permit-application-tenant-improvement.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Maple Ridge's dedicated "Tenant/Landlord Improvement Permit
+  -- Application" form (jurisdiction-expansion follow-up,
+  -- JURISDICTION_EXPANSION_SCOPE.md SS10) -- linked directly from the
+  -- City's own live Commercial Renovations (Tenant/Landlord Improvement)
+  -- page. Same as Port Coquitlam's row, this is a form dedicated
+  -- specifically to tenant/landlord improvements, so there's no
+  -- building-type/work-type checkbox scoping ambiguity to flag here.
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0001-00000000000a',
+   'Commercial Tenant Improvement', 'maple-ridge/tenant-landlord-improvement-permit-application.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
 -- Explicit ids (Phase 4) so permit_form_fields rows below can reference a
@@ -278,7 +317,13 @@ values
   -- this permit_type end to end -- one authority, one filing, same
   -- unconditional shape as Surrey/Vancouver/Richmond/Coquitlam's rows above.
   ('00000000-0000-0000-0004-000000000008', '00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0002-000000000008', 1, null,
-   'port-coquitlam/building-permit-application-tenant-improvement.pdf');
+   'port-coquitlam/building-permit-application-tenant-improvement.pdf'),
+  -- Maple Ridge's dedicated Tenant/Landlord Improvement application form
+  -- covers this permit_type end to end -- one authority, one filing, same
+  -- unconditional shape as Surrey/Vancouver/Richmond/Coquitlam/Port
+  -- Coquitlam's rows above.
+  ('00000000-0000-0000-0004-000000000009', '00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0002-000000000009', 1, null,
+   'maple-ridge/tenant-landlord-improvement-permit-application.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -410,7 +455,28 @@ values
   ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Applicant email', 'applicant.email', true, null, null, null),
   ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Building Site Address', 'application.projectAddress', true, null, null, null),
   ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Proposed Work', 'application.projectDescription', false, null, null, null),
-  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Estimated Construction Value', 'application.estimatedJobValueDollars', true, null, null, null);
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0004-000000000008', 'Estimated Construction Value', 'application.estimatedJobValueDollars', true, null, null, null),
+  -- Maple Ridge's Tenant/Landlord Improvement Permit Application is a real
+  -- 29-field AcroForm, single page (jurisdiction-expansion follow-up,
+  -- pdf-lib inspection -- JURISDICTION_EXPANSION_SCOPE.md SS10),
+  -- hand-verified field names below. Restrained subset, same discipline as
+  -- every jurisdiction above. pdf-lib's field.isRequired() reports false
+  -- for every field here too (checked, not assumed) -- is_required below
+  -- is again a product judgment, not a PDF-sourced fact.
+  --
+  -- Single-instance, unambiguously named fields, same as Coquitlam's/Port
+  -- Coquitlam's rows -- no inference flag needed. The form also has an
+  -- "Over 200 amps" checkbox and floor-area fields (Area of 1st Floor/2nd
+  -- Floor/Mezzanine/Total) not mapped here, out of scope for this
+  -- restrained set -- flagged as a good future target for a deeper field
+  -- map (this form's field names line up with this product's own
+  -- electrical_amps/square_footage extraction schema more closely than any
+  -- other jurisdiction's form inspected so far), not built now.
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0004-000000000009', 'Applicant Name', 'applicant.fullName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0004-000000000009', 'Applicants Email', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0004-000000000009', 'Construction Address', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0004-000000000009', 'Scope of work explain in detail what you are doing 1', 'application.projectDescription', false, null, null, null),
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0004-000000000009', 'Construction Value', 'application.estimatedJobValueDollars', true, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project

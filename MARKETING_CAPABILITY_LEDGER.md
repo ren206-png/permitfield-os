@@ -16,10 +16,10 @@ directly against `app/api/applications/[id]/submit/route.ts` and
 |---|---|---|---|---|
 | 1 | Permit application creation / intake flow | **SHIPPED** | `app/(app)/projects/new/actions.ts:32-172` (`createProjectAction`), RPC `create_project_with_intake` at :122, flag-gated by `isIntakeEnabled()` at :36 | Yes — "Create and track permit applications from intake through submission." |
 | 2 | AI-powered document/permit-data extraction | **SHIPPED** (extraction only) | `lib/ai/extract-permit-data.ts:137-228` (live Anthropic `messages.create`, tool-forced structured output, Zod-validated, fails closed); `lib/inngest/functions/extract.ts:20-209` (Inngest trigger `permit/application.documents_ready`) | Yes, narrowly — "AI extracts key permit-application data from uploaded documents." **Not** permitted: any claim it determines compliance or fully "auto-fills your application" (system prompt at `extract-permit-data.ts:17-19` explicitly forbids the model asserting compliance). |
-| 3 | PDF auto-fill / AcroForm field-filling | **PARTIAL** | `lib/pdf/fill-acroform.ts:32-59` (real `pdf-lib` fill mechanism); `supabase/seed.sql:190-233` — jurisdiction-expansion follow-up added two more forms with verified AcroForm fields: Surrey Commercial Tenant Improvement (5 fields) and Vancouver Commercial Tenant Improvement (6 fields), joining Toronto Electrical Service Upgrade's original 3 — 14 verified fields across 3 forms total; Calgary/ESA forms still explicitly have no verified field maps. Caveat found during this update, applied equally to all three forms (not newly introduced by adding Surrey/Vancouver): `lib/inngest/functions/generate-pdf.ts:186-188` downloads the actual template PDF from the `permitfield-form-templates` Storage bucket at runtime, and the bucket is created empty by migration `20260806000017` with no upload step anywhere. **Fixed**: `scripts/seed-storage-templates.ts` (`npm run seed:storage`, see `README.md` Setup) now uploads all 5 real `docs-reference-forms/` PDFs — including Calgary's and ESA's, which have no field-map rows but still need real bytes at their path — to the exact object paths `seed.sql` references. Not yet run against a live Supabase project in this session (no project connected here); still needs a real `SUPABASE_SERVICE_ROLE_KEY` run before this claim is true end-to-end in any given deployment, local or hosted. | Qualified only — "Auto-fills supported AcroForm permit forms (currently Toronto Electrical Service Upgrade, Surrey Commercial Tenant Improvement, and Vancouver Commercial Tenant Improvement)." **Not** permitted: "automatically fills official permit forms" as a general claim. |
+| 3 | PDF auto-fill / AcroForm field-filling | **PARTIAL** | `lib/pdf/fill-acroform.ts:32-59` (real `pdf-lib` fill mechanism); `supabase/seed.sql:355-479` — jurisdiction-expansion follow-up has now added verified AcroForm field maps for Surrey (5 fields), Vancouver (6), Richmond (5), Coquitlam (5), Port Coquitlam (5), and Maple Ridge (5) Commercial Tenant Improvement forms, joining Toronto Electrical Service Upgrade's original 3 — **34 verified fields across 7 forms total**; Calgary's and ESA's forms still explicitly have no verified field maps (Calgary flagged in Phase 0 as needing manual page-by-page review; ESA's ICIA-LV form has zero AcroForm fields at all). Caveat first found when Surrey/Vancouver were added, still true today: `lib/inngest/functions/generate-pdf.ts:186-188` downloads the actual template PDF from the `permitfield-form-templates` Storage bucket at runtime, and the bucket is created empty by migration `20260806000017` with no upload step anywhere. **Fixed**: `scripts/seed-storage-templates.ts` (`npm run seed:storage`, see `README.md` Setup) now uploads all 9 real `docs-reference-forms/` PDFs — including Calgary's and ESA's, which have no field-map rows but still need real bytes at their path — to the exact object paths `seed.sql` references. Not yet run against a live Supabase project in this session (no project connected here); still needs a real `SUPABASE_SERVICE_ROLE_KEY` run before this claim is true end-to-end in any given deployment, local or hosted. | Qualified only — "Auto-fills supported AcroForm permit forms (currently Toronto Electrical Service Upgrade, and Commercial Tenant Improvement in Surrey, Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge)." **Not** permitted: "automatically fills official permit forms" as a general claim. |
 | 4 | E-signature | **NOT BUILT** | Repo-wide search for signature/DocuSign/e-sign functionality: no matches. Only hits are unrelated Supabase Storage `createSignedUrl()` calls (`app/(app)/applications/[id]/page.tsx:142,149`) | No. |
 | 5 | Automatic / API-based municipal submission | **NOT BUILT — confirmed by direct read** | `app/api/applications/[id]/submit/route.ts:1-51` — handler comment states verbatim it is "Deliberately has no corresponding lib/inngest/client.ts event... nothing in the system acts on 'submitted'"; body only runs `supabase.from('permit_applications').update({ status: 'submitted' })`. No outbound call, no Inngest `.send()`, no portal integration anywhere in the file | No — "automatically submits to the city" is fabricated. Honest phrasing: "Track your permit's filing status" / "Mark applications as submitted once you've filed." |
-| 6 | Jurisdiction / permit-requirements database, coverage tiers | **PARTIAL** — real engine, narrow coverage | `supabase/seed.sql:14-46` (6 jurisdiction rows, updated by the jurisdiction-expansion follow-up — added Surrey and Vancouver, BC); `supabase/migrations/20260806000026_permit_requirements_engine.sql`, `...000027_permit_requirements_evaluator.sql`; tier gate exercised at `lib/inngest/functions/audit.ts:78,100` | Yes, narrowly — see jurisdiction table below for exact wording. Never "nationwide" or "all of Canada." |
+| 6 | Jurisdiction / permit-requirements database, coverage tiers | **PARTIAL** — real engine, narrow coverage | `supabase/seed.sql:14-81` (10 jurisdiction rows, updated by the jurisdiction-expansion follow-up — added Surrey, Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge, all BC); `supabase/migrations/20260806000026_permit_requirements_engine.sql`, `...000027_permit_requirements_evaluator.sql`; tier gate exercised at `lib/inngest/functions/audit.ts:78,100` | Yes, narrowly — see jurisdiction table below for exact wording. Never "nationwide" or "all of Canada." |
 | 7 | Readiness checker / pre-submission checklist | **PARTIAL** — DB-enforced, no UI | `supabase/migrations/20260806000025_readiness_checklist.sql:1-205` (`permit_requirement_checklist` table, `readiness_checklist_complete()`); zero matches for "readiness" under `app/` or `components/` | No, as a user-facing "checklist feature" (nothing to show a screenshot of). May say "the system enforces required checklist items before an application can move to ready-to-submit," scoped to the backend gate only. |
 | 8 | Readiness override / permit_manager review workflow | **PARTIAL** — DB-enforced, no UI | `override_readiness_check()` at `20260806000025_readiness_checklist.sql:267-324` (role-gated, reason ≥20 chars, audit-logged); `review_project_permit_requirement()` at `20260806000027_permit_requirements_evaluator.sql:391-446`; no call site in `app/` | No — not reachable by any user today. |
 | 9 | Multi-tenant org/team structure with roles | **PARTIAL** | 8-role enum at `supabase/migrations/20260806000018_lifecycle_rbac_roles_and_audit_log.sql:26-33`; but `lib/auth/org-context.ts:19-23` types `OrgContext.role` as only `'owner' \| 'member'`, and onboarding (`app/onboarding/actions.ts:19-49`) only ever creates single-owner orgs — no invite/member-management UI exists anywhere under `app/` | Qualified — "multi-tenant with role-based permissions" is honest at the data layer. **Not** permitted: "invite your team and assign roles" (no such UI exists). |
@@ -34,13 +34,18 @@ directly against `app/api/applications/[id]/submit/route.ts` and
 | 18 | Audit trail / activity log | **SHIPPED**, scoped | `lib/audit/log.ts:74-105` (`writeAuditLog`); real call sites at `app/(app)/projects/new/actions.ts:155-163` (project creation) and `lib/bridge/client-portal.ts:923` (document upload); DB-enforced via CHECK constraint | Yes, scoped to actions actually wired (project creation, document upload, readiness overrides) — not "every action in the app" until more call sites exist. |
 | 19 | Public API access for third-party integrations | **NOT BUILT** | All 5 `app/api/*` routes require a logged-in browser session via cookie-based `createClient()` (e.g. `submit/route.ts:13,16-17`); no API-key issuance, no `Authorization: Bearer` scheme, no OpenAPI docs anywhere in the repo | No. |
 
-## Jurisdiction coverage (the only jurisdiction data in the repo — `supabase/seed.sql:14-46`)
+## Jurisdiction coverage (the only jurisdiction data in the repo — `supabase/seed.sql:14-81`)
 
 Table below updated post-Phase-0 by the jurisdiction-expansion follow-up
-(see `JURISDICTION_EXPANSION_SCOPE.md` §5b, §5c): Surrey and Vancouver, BC
-added, each with real cited research (bylaw citations, hand-verified
-AcroForm field names) to the same bar Ottawa/Hamilton were held to, not to
-Toronto/Calgary's direct-code-review bar.
+(see `JURISDICTION_EXPANSION_SCOPE.md` §5b, §5c, §7d, §8, §9, §10): Surrey,
+Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge, BC added
+in successive passes, each with real cited research (bylaw citations,
+hand-verified AcroForm field names) to the same bar Ottawa/Hamilton were
+held to, not to Toronto/Calgary's direct-code-review bar. (Mississauga, ON
+was researched as a candidate and re-checked in the Maple Ridge pass — it
+has since moved building-permit applications to a mandatory no-PDF ePlans
+portal and is disqualified, same as Burnaby/Abbotsford; it was never
+seeded and is not in the table below.)
 
 | Jurisdiction | Province | Coverage tier | Verified? |
 |---|---|---|---|
@@ -50,30 +55,38 @@ Toronto/Calgary's direct-code-review bar.
 | Hamilton | ON | **listed** | No (never verified) |
 | Surrey | BC | **assisted** | No (never verified) |
 | Vancouver | BC | **assisted** | No (never verified) |
+| Richmond | BC | **assisted** | No (never verified) |
+| Coquitlam | BC | **assisted** | No (never verified) |
+| Port Coquitlam | BC | **assisted** | No (never verified) |
+| Maple Ridge | BC | **assisted** | No (never verified) |
 
 Plus one non-municipal authority attached only to the Toronto Electrical
 Service Upgrade permit type: Electrical Safety Authority (ESA), Ontario,
-filing mechanism `pdf_email` (`seed.sql:57-60`) — not itself a jurisdiction
+filing mechanism `pdf_email` (`seed.sql:92-95`) — not itself a jurisdiction
 row.
 
-**4 permit types** are seeded in total (`seed.sql:88-128`): Electrical
-Service Upgrade (Toronto), and Commercial Tenant Improvement in three
-jurisdictions — Calgary, Surrey, and Vancouver (same title, three separate
-permit_type rows and three separate forms — not one shared row). Of those,
-**14 AcroForm fields across 3 forms** are verified/mapped
-(`seed.sql:190-233`): 3 on Toronto's Electrical Service Upgrade form, 5 on
-Surrey's Building Permit Application, 6 on Vancouver's Development and
-Building Permit Application. Calgary's and ESA's forms still have no
-verified field maps, and the seed file itself contains a comment saying
-fabricating coordinates "would misrepresent them as verified when they are
-not."
+**8 permit types** are seeded in total (`seed.sql:182-273`): Electrical
+Service Upgrade (Toronto), and Commercial Tenant Improvement in seven
+jurisdictions — Calgary, Surrey, Vancouver, Richmond, Coquitlam, Port
+Coquitlam, and Maple Ridge (same title, seven separate permit_type rows
+and seven separate forms — not one shared row). Of those, **34 AcroForm
+fields across 7 forms** are verified/mapped (`seed.sql:355-479`): 3 on
+Toronto's Electrical Service Upgrade form, 5 on Surrey's Building Permit
+Application, 6 on Vancouver's Development and Building Permit Application,
+5 on Richmond's PL-43 form, 5 on Coquitlam's Permit Application Form, 5 on
+Port Coquitlam's Tenant Improvement form, and 5 on Maple Ridge's
+Tenant/Landlord Improvement Permit Application. Calgary's and ESA's forms
+still have no verified field maps, and the seed file itself contains a
+comment saying fabricating coordinates "would misrepresent them as
+verified when they are not."
 
 **Honest homepage phrasing:** "PermitField OS currently supports permit
 filing guidance for Toronto and Calgary (fully verified), with
-assisted-tier support for Ottawa, Surrey, and Vancouver, and listed-only
-support for Hamilton — Ontario, Alberta, and British Columbia."
+assisted-tier support for Ottawa, Surrey, Vancouver, Richmond, Coquitlam,
+Port Coquitlam, and Maple Ridge, and listed-only support for Hamilton —
+Ontario, Alberta, and British Columbia."
 **Forbidden:** any claim of nationwide, all-of-Canada, or multi-province-at-scale
-coverage; any claim of US coverage; any claim of coverage beyond the 6
+coverage; any claim of US coverage; any claim of coverage beyond the 10
 seeded, 3-provinces-only jurisdictions in the table above.
 
 ## Zero-tolerance fabrication list (explicitly confirmed absent from the codebase)
@@ -88,7 +101,7 @@ that a reasonable reader would take as a present-tense claim:
 - "Automatically submits your permit to the city" (§5 above)
 - "AI auto-fills your entire application" unqualified (§2, §3 above)
 - Any pricing, "Free Trial," "No credit card required," or plan-comparison copy (§15 above)
-- "Nationwide," "all of Canada," or any coverage claim beyond the 6 seeded, 3-provinces-only jurisdictions (see table above)
+- "Nationwide," "all of Canada," or any coverage claim beyond the 10 seeded, 3-provinces-only jurisdictions (see table above)
 - "Get notified" / "we'll alert you" copy of any kind (§12, §17 above — no notification system exists)
 - "Invite your team" / role-assignment UI copy (§9 above — no such UI exists)
 - Integration/API marketplace claims (§19 above)
@@ -98,12 +111,12 @@ that a reasonable reader would take as a present-tense claim:
 
 1. Permit application intake and status tracking, end to end (§1)
 2. AI-assisted extraction of application data from uploaded documents, with human review (§2)
-3. Automatic form-filling for supported forms today (Toronto Electrical Service Upgrade, Surrey Commercial Tenant Improvement, Vancouver Commercial Tenant Improvement), expandable over time (§3, stated honestly as current + narrow)
+3. Automatic form-filling for supported forms today (Toronto Electrical Service Upgrade, and Commercial Tenant Improvement in Surrey, Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge), expandable over time (§3, stated honestly as current + narrow)
 4. Organization-scoped data isolation via row-level security (§10)
 5. Automated background processing for extraction, compliance audit, and PDF generation (§13)
 6. Secure, organized document storage per application (§14)
 7. An audit trail covering key actions (project creation, document upload, readiness overrides) (§18)
-8. Coverage today in Toronto and Calgary (verified), with Ottawa, Surrey, and Vancouver in the assisted tier and Hamilton listed-only (jurisdiction table above)
+8. Coverage today in Toronto and Calgary (verified), with Ottawa, Surrey, Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge in the assisted tier and Hamilton listed-only (jurisdiction table above)
 
 ---
 

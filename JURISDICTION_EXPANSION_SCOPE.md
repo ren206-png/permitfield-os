@@ -589,3 +589,73 @@ seed data has used the `in_person` value of the `filing_mechanism` enum
 companion files (`docs-reference-forms/port-coquitlam-ti-application.pdf`,
 `scripts/seed-storage-templates.ts`, `README.md`) in the same turn, same
 "yes write all" pattern as Coquitlam (§8).
+
+## 10. Mississauga disqualified on re-check; Maple Ridge, BC shipped instead
+
+§4/§7d had ranked Mississauga, ON as the next candidate after the BC cluster
+(real 87-field AcroForm, found via an earlier pass, not yet written to
+`seed.sql`). Before starting that write, re-checked it live rather than
+trusting the earlier finding as still current: Mississauga's own Building
+Permit Application Process page now states "All building permit
+applications must be submitted online through our ePlans portal," with no
+downloadable PDF application form referenced anywhere on that page or the
+Building Documents and Forms page. This is the same shape that already
+ruled out Burnaby (§7c, in-person-only, no PDF) and Abbotsford (§9, portal
+account required before submission, application itself likely portal-native)
+-- not a cheaper integration than a static AcroForm, and no PDF-fill path
+for this product to build against. **Mississauga is now disqualified**,
+same bar as Burnaby/Abbotsford/Technical Safety BC/Edmonton/Winnipeg; the
+87-field form found in the earlier pass is stale and should not be shipped.
+
+Checked a few Fraser Valley candidates as replacements: Delta (application
+form submitted by email per `development@delta.ca`, plausible but not
+pdf-lib-inspected this pass) and New Westminster (already parked at §9,
+checklist bundle, not confirmed as a distinct fillable AcroForm). **Maple
+Ridge, BC** turned out to be the strongest candidate checked.
+
+**Authority citation:** verified against the City's own Building Permits &
+Inspections page, which links directly to **"Building Bylaw No.
+8097-2026"** -- not a search-snippet guess, and cross-confirmed on the
+Commercial Renovations (Tenant/Landlord Improvement) page independently.
+
+**Form:** a **dedicated** "Tenant/Landlord Improvement Permit Application"
+form, linked directly from the City's live Commercial Renovations page.
+Downloaded and pdf-lib-inspected (not inferred from a garbled text
+extraction -- the raw PDF was fetched and loaded with `pdf-lib` directly):
+a real **29-field AcroForm, single page**, `field.isRequired()` reports
+`false` throughout (checked, not assumed). Because this form is dedicated
+specifically to tenant/landlord improvements, there is no building-type/
+work-type checkbox scoping ambiguity to flag, same as Port Coquitlam's row
+(§9). Restrained field map: `Applicant Name`, `Applicants Email`,
+`Construction Address`, `Scope of work explain in detail what you are
+doing 1` (of 5 numbered lines), `Construction Value` -- all single-instance
+and unambiguous, no inference flag needed, same cleanliness as Coquitlam's/
+Port Coquitlam's rows. Notably, the remaining unmapped fields include an
+`Over 200 amps` checkbox and `Area of 1st Floor`/`Area of 2nd Floor`/`Area
+of Mezzanine or Loft`/`Total Floor Area` fields -- the closest match to
+this product's own `electrical_amps`/`square_footage` extraction schema of
+any jurisdiction's form inspected to date. Flagged as a good target for a
+deeper field map in a future pass, not built now (same restrained-subset
+discipline as every other jurisdiction here).
+
+**Filing mechanism:** `portal`. The City's own Tenant/Landlord Improvement
+page links "Apply Now" directly to the Citizen Portal
+(`citizenportal.mapleridge.ca`), which requires an account and accepts
+digital file uploads (drawings up to 50MB/file). This is the same
+upload-based shape already used for Toronto/Coquitlam -- applicants still
+fill out and submit the real PDF form above, just through the portal
+instead of email/in-person -- not the Mississauga-shape disqualifier from
+earlier in this section (no PDF at all, data entered natively into portal
+web fields). Checked directly, not assumed from the "portal" label alone,
+given this section's own finding minutes earlier that a portal can mean
+either shape.
+
+**Status:** researched, proposed, and written to `supabase/seed.sql` plus
+companion files
+(`docs-reference-forms/maple-ridge-tenant-landlord-improvement-application.pdf`,
+`scripts/seed-storage-templates.ts`, `README.md`) in the same turn, same
+"yes write all" pattern as Coquitlam/Port Coquitlam (§8/§9). New jurisdiction
+id `00000000-0000-0000-0001-00000000000a` -- the first jurisdiction id in
+this project to need a hex digit beyond `9`, since this is the 10th seed
+jurisdiction (existing rows never needed one, running `...0001` through
+`...0009`).

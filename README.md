@@ -66,8 +66,9 @@ Seed jurisdictions and their real sources (full detail in `PHASE_0_FINDINGS.md`)
 | Richmond, BC | City of Richmond — Building Approvals | [Commercial TI Building Permit Requirements](https://www.richmond.ca/business-development/building-approvals/permits.htm) (citing Building Regulation Bylaw No. 7230), [PL-43 Building Permit Application Form — Addition and Alterations](https://www.richmond.ca/__shared/assets/pl4356639.pdf), [MyPermit portal](https://www.richmond.ca/business-development/e-plan/mypermit.htm) (lists this permit type as "Coming Soon (2026/2027)", confirming PL-43 + email is today's real path, not a portal) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md` §7d), seeded `assisted`, not `verified` (no direct Building Regulation Bylaw No. 7230 review yet) |
 | Coquitlam, BC | City of Coquitlam — Building Permits Division | [Tenant Improvements page](https://www.coquitlam.ca/517/Tenant-Improvements) (citing Building Bylaw No. 3598, 2003, confirmed via the City's own consolidated bylaw text), [Permit Application Form](https://www.coquitlam.ca/DocumentCenter/View/14133/Permit-Application-Form), [Coquitlam QFile](https://www.coquitlam.ca/478/Building-Construction) (City-run electronic file-transfer service for permit submissions — "portal" here means upload-based, not web-form-entry) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md` §8), seeded `assisted`, not `verified` (no direct Building Bylaw No. 3598 review yet) |
 | Port Coquitlam, BC | City of Port Coquitlam — Building Division | [Tenant Improvement page](https://www.portcoquitlam.ca/business-development/property-development-building/building-permits/tenant-improvement) (citing Building and Plumbing Bylaw, 2009, No. 3710, confirmed via the City's own hosted bylaw PDF), [dedicated Tenant Improvement application form](https://www.portcoquitlam.ca/media/file/building-permit-application-icim-final-pdf-fillable-august-2021) — filing_mechanism `in_person`, confirmed the City's `eApply` online portal explicitly does not cover this permit type — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md` §9), seeded `assisted`, not `verified` (no direct Bylaw No. 3710 review yet) |
+| Maple Ridge, BC | City of Maple Ridge — Building Permits | [Commercial Renovations (Tenant/Landlord Improvement) page](https://www.mapleridge.ca/build-do-business/construction-development-permits/commercial-renovations-tenantlandlord) (citing Building Bylaw No. 8097-2026), [Tenant/Landlord Improvement Permit Application](https://www.mapleridge.ca/media/file/tenant-improvement-permit-application) (real 29-field AcroForm, pdf-lib-verified), [Citizen Portal](https://citizenportal.mapleridge.ca/citizenportal/app/landing) (upload-based `portal`, same shape as Toronto/Coquitlam — not a native-web-form-entry system) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md` §10), seeded `assisted`, not `verified` (no direct Building Bylaw No. 8097-2026 review yet). Replaces Mississauga, ON as the ranked-next candidate — re-checked live and found to have moved to a mandatory ePlans portal with no downloadable PDF path at all (§10) |
 
-**Limits:** the MVP corpus covers 9 seed jurisdictions (2 `verified`, 6 `assisted`, 1 `listed`) across
+**Limits:** the MVP corpus covers 10 seed jurisdictions (2 `verified`, 7 `assisted`, 1 `listed`) across
 3 provinces. Quebec is out of scope entirely (RBQ licensing + French-language obligations — not
 seeded). No US jurisdiction, code family, or terminology exists in this codebase; four columns
 (`jurisdictions.country`, `jurisdictions.unit_system`, `permit_applications.currency_code`,
@@ -385,7 +386,7 @@ npm run dev
 npm run eval                  # offline extraction/audit/PDF-fill checks (see "Audit engine", "PDF filler")
 ```
 
-**`npm run seed:storage`** (`scripts/seed-storage-templates.ts`) uploads the 8 real government PDFs
+**`npm run seed:storage`** (`scripts/seed-storage-templates.ts`) uploads the 9 real government PDFs
 already committed under `docs-reference-forms/` into the `permitfield-form-templates` Storage bucket
 (created empty by migration `20260806000017`), at the exact object paths `seed.sql`'s
 `permit_type_filings.form_template_path` values expect. Without this step, `generate-pdf.ts`'s runtime
@@ -397,22 +398,26 @@ read policy — see the migration's own `storage.buckets` insert); idempotent, s
 
 ## Reference forms
 
-`docs-reference-forms/` contains 8 real government permit PDFs downloaded (with explicit
+`docs-reference-forms/` contains 9 real government permit PDFs downloaded (with explicit
 permission) to run an actual `pdf-lib` AcroForm field inspection rather than guess: the original 3
 from Phase 0, plus `surrey-building-permit-application.pdf`, `vancouver-dev-build-app-form.pdf`,
-`richmond-pl43-addition-alterations.pdf`, `coquitlam-permit-application-form.pdf`, and
-`port-coquitlam-ti-application.pdf` added during the jurisdiction-expansion follow-up (see
-`JURISDICTION_EXPANSION_SCOPE.md`). Findings: Toronto's form has 71 real AcroForm fields, Calgary's
-commercial form has 15, Surrey's generic building-permit form has 80, Vancouver's general Development
-and Building Permit Application form has **158** (the largest inspected so far — pdf-lib's
-`field.isRequired()` reports `false` for every field on it too, same as Surrey's), Richmond's PL-43
-Addition and Alterations form has 117, Coquitlam's general Permit Application Form has 95, and Port
-Coquitlam's dedicated Tenant Improvement form has 74 (all also `field.isRequired() === false`
-throughout — checked, not assumed, same as every other real form here; Coquitlam's and Port
-Coquitlam's mapped fields are notably the cleanest yet, no repeated-block or multi-value ambiguity --
-Port Coquitlam's is a dedicated TI form so it also has no building/work-type checkbox scoping
-ambiguity), and ESA's ICIA Low Voltage notification form has **zero** — it's a flattened Excel export,
-so Phase 4's PDF filler needs the coordinate-overlay path (`permit_form_fields.overlay_page/x/y`) from
-day one, not just AcroForm mapping. See `PHASE_0_FINDINGS.md` §4 for the full Phase 0 inspection
-output and `JURISDICTION_EXPANSION_SCOPE.md` §3/§4/§7d/§8/§9 for Surrey's, Vancouver's, Richmond's,
-Coquitlam's, and Port Coquitlam's.
+`richmond-pl43-addition-alterations.pdf`, `coquitlam-permit-application-form.pdf`,
+`port-coquitlam-ti-application.pdf`, and
+`maple-ridge-tenant-landlord-improvement-application.pdf` added during the jurisdiction-expansion
+follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`). Findings: Toronto's form has 71 real AcroForm
+fields, Calgary's commercial form has 15, Surrey's generic building-permit form has 80, Vancouver's
+general Development and Building Permit Application form has **158** (the largest inspected so far —
+pdf-lib's `field.isRequired()` reports `false` for every field on it too, same as Surrey's),
+Richmond's PL-43 Addition and Alterations form has 117, Coquitlam's general Permit Application Form
+has 95, Port Coquitlam's dedicated Tenant Improvement form has 74, and Maple Ridge's dedicated
+Tenant/Landlord Improvement form has 29 — the smallest and cleanest inspected so far, single page,
+no repeated-block or multi-value ambiguity, and (unique among every jurisdiction here) field names
+that line up directly with this product's own `electrical_amps`/`square_footage` extraction schema
+(`Over 200 amps` checkbox, `Area of 1st Floor`/`2nd Floor`/`Mezzanine`/`Total Floor Area` fields, not
+yet mapped in `permit_form_fields` — flagged as a good future target, not built now) — all also
+`field.isRequired() === false` throughout (checked, not assumed, same as every other real form here),
+and ESA's ICIA Low Voltage notification form has **zero** — it's a flattened Excel export, so Phase
+4's PDF filler needs the coordinate-overlay path (`permit_form_fields.overlay_page/x/y`) from day
+one, not just AcroForm mapping. See `PHASE_0_FINDINGS.md` §4 for the full Phase 0 inspection output
+and `JURISDICTION_EXPANSION_SCOPE.md` §3/§4/§7d/§8/§9/§10 for Surrey's, Vancouver's, Richmond's,
+Coquitlam's, Port Coquitlam's, and Maple Ridge's.
