@@ -9,3 +9,21 @@
 // NEXT_PUBLIC_SITE_URL so a preview/staging deploy doesn't emit production
 // URLs into its own sitemap/canonical tags.
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.permitfieldos.com';
+
+// LP workstream, Phase 2 (LP_PHASE_0_FINDINGS.md SS0.4, §5). Homepage title
+// and description live here, not in app/page.tsx, so
+// app/(marketing)/structured-data.tsx can import HOMEPAGE_DESCRIPTION for
+// its SoftwareApplication node without a circular import
+// (page.tsx -> MarketingHomepage -> StructuredData -> page.tsx). Both
+// PRODUCT_NAME (lib/brand.ts) and this file are already leaf modules with
+// no app/ imports, so this keeps that property.
+//
+// Title front-loads the primary commercial keyword per the master prompt's
+// own candidate direction (previous title was exactly 60 chars, the
+// ceiling, zero margin). Description no longer hardcodes "Toronto and
+// Calgary" -- same staleness pattern already fixed in the hero subhead in
+// Phase 1 (see app/(marketing)/sections/hero.tsx).
+export const HOMEPAGE_TITLE = 'Permit application software for contractors — Canada';
+export const HOMEPAGE_DESCRIPTION =
+  'Organize permit applications, documents, and filing status in one place, ' +
+  'with AI-assisted extraction to cut manual data entry. Create your account today.';

@@ -2,14 +2,9 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { isMarketingV2Enabled } from '@/lib/flags';
-import { SITE_URL } from '@/lib/seo';
+import { SITE_URL, HOMEPAGE_TITLE, HOMEPAGE_DESCRIPTION } from '@/lib/seo';
 import { PRODUCT_NAME } from '@/lib/brand';
 import { MarketingHomepage } from './(marketing)/marketing-homepage';
-
-const HOMEPAGE_TITLE = `${PRODUCT_NAME} — Permit application tracking for contractors`;
-const HOMEPAGE_DESCRIPTION =
-  'Organize permit applications, documents, and filing status in one place, ' +
-  'with AI-assisted document extraction. Currently covering Toronto and Calgary.';
 
 // Marketing Homepage v2, Phase 3 (COPY_DECK.md SS8). Co-located with the
 // page rather than in app/layout.tsx so it only ever overrides the
@@ -18,10 +13,15 @@ const HOMEPAGE_DESCRIPTION =
 // empty object, which Next.js merges with (i.e. does not change)
 // app/layout.tsx's existing metadata, keeping this file's off-path
 // byte-identical the same way every other flag-gated change in this repo
-// is. No `images` field on openGraph/twitter -- no real product screenshot
-// or logo asset exists yet (MARKETING_PHASE_0_FINDINGS.md SS3, SS7), and
-// pointing OG tags at a placeholder would be exactly the kind of fabricated
-// product visual the master prompt's anti-fabrication rule forbids.
+// is. No explicit `images` field on openGraph/twitter below -- Next.js
+// auto-populates og:image/twitter:image from the co-located
+// opengraph-image.tsx / twitter-image.tsx route files (LP workstream,
+// Phase 2) instead. Those render a generated branded card (product name +
+// the same description already live, ungated, in app/layout.tsx), not a
+// product screenshot -- no real screenshot or logo asset exists
+// (MARKETING_PHASE_0_FINDINGS.md SS3, SS7), and pointing OG tags at a
+// placeholder screenshot would be exactly the kind of fabricated product
+// visual the master prompt's anti-fabrication rule forbids.
 export async function generateMetadata(): Promise<Metadata> {
   if (!isMarketingV2Enabled()) {
     return {};
@@ -41,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
       type: 'website',
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title: HOMEPAGE_TITLE,
       description: HOMEPAGE_DESCRIPTION,
     },
