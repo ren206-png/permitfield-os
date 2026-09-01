@@ -63,8 +63,9 @@ Seed jurisdictions and their real sources (full detail in `PHASE_0_FINDINGS.md`)
 | Calgary, AB | City of Calgary — Building Permit | [Commercial application](https://www.calgary.ca/content/dam/www/pda/pd/documents/carls/building-permit/commercial.pdf), [CARLs requirements](https://www.calgary.ca/development/permits/carl-application-requirements.html) — full text of Bylaw 64M94 has no stable static URL, sourced via [publicaccess.calgary.ca](https://publicaccess.calgary.ca) (open question, see Phase 0 findings) |
 | Surrey, BC | City of Surrey — Building Division | [Surrey Building Bylaw, 2012, No. 17850](https://www.surrey.ca/sites/default/files/media/documents/BuildingFeeSchedule.pdf) (fee schedule citing the bylaw; full bylaw text via the City's [Building Bulletins, Bylaws & Policies](https://www.surrey.ca/renovating-building-development/building-construction-bulletin-board/building-bulletins-bylaws-policies) page), [Tenant and Landlord Improvement Building Permit](https://www.surrey.ca/renovating-building-development/building/commercial-building-permits/tenant-and-landlord-improvement-building-permit), [checklist](https://www.surrey.ca/sites/default/files/media/documents/tenant-landlord-improvement-checklist.pdf) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`), seeded `assisted`, not `verified` (no direct BC Building Code review yet) |
 | Vancouver, BC | City of Vancouver — Development and Building Services Centre | [Building Permit page](https://vancouver.ca/home-property-development/building-permit.aspx) (citing Vancouver Building By-law No. 14343, effective 2025-09-15 — the only Canadian municipality that enacts its own building code rather than adopting the provincial code directly), [Tenant Improvement Program (TIPs)](https://vancouver.ca/home-property-development/tenant-improvement-program.aspx) (a narrower, separate fast-track stream, out of scope for this row) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`), seeded `assisted`, not `verified` (no direct Vancouver Building By-law review yet) |
+| Richmond, BC | City of Richmond — Building Approvals | [Commercial TI Building Permit Requirements](https://www.richmond.ca/business-development/building-approvals/permits.htm) (citing Building Regulation Bylaw No. 7230), [PL-43 Building Permit Application Form — Addition and Alterations](https://www.richmond.ca/__shared/assets/pl4356639.pdf), [MyPermit portal](https://www.richmond.ca/business-development/e-plan/mypermit.htm) (lists this permit type as "Coming Soon (2026/2027)", confirming PL-43 + email is today's real path, not a portal) — jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md` §7d), seeded `assisted`, not `verified` (no direct Building Regulation Bylaw No. 7230 review yet) |
 
-**Limits:** the MVP corpus covers 6 seed jurisdictions (2 `verified`, 3 `assisted`, 1 `listed`) across
+**Limits:** the MVP corpus covers 7 seed jurisdictions (2 `verified`, 4 `assisted`, 1 `listed`) across
 3 provinces. Quebec is out of scope entirely (RBQ licensing + French-language obligations — not
 seeded). No US jurisdiction, code family, or terminology exists in this codebase; four columns
 (`jurisdictions.country`, `jurisdictions.unit_system`, `permit_applications.currency_code`,
@@ -382,7 +383,7 @@ npm run dev
 npm run eval                  # offline extraction/audit/PDF-fill checks (see "Audit engine", "PDF filler")
 ```
 
-**`npm run seed:storage`** (`scripts/seed-storage-templates.ts`) uploads the 5 real government PDFs
+**`npm run seed:storage`** (`scripts/seed-storage-templates.ts`) uploads the 6 real government PDFs
 already committed under `docs-reference-forms/` into the `permitfield-form-templates` Storage bucket
 (created empty by migration `20260806000017`), at the exact object paths `seed.sql`'s
 `permit_type_filings.form_template_path` values expect. Without this step, `generate-pdf.ts`'s runtime
@@ -394,15 +395,17 @@ read policy — see the migration's own `storage.buckets` insert); idempotent, s
 
 ## Reference forms
 
-`docs-reference-forms/` contains 5 real government permit PDFs downloaded (with explicit
+`docs-reference-forms/` contains 6 real government permit PDFs downloaded (with explicit
 permission) to run an actual `pdf-lib` AcroForm field inspection rather than guess: the original 3
-from Phase 0, plus `surrey-building-permit-application.pdf` and `vancouver-dev-build-app-form.pdf`
-added during the jurisdiction-expansion follow-up (see `JURISDICTION_EXPANSION_SCOPE.md`). Findings:
-Toronto's form has 71 real AcroForm fields, Calgary's commercial form has 15, Surrey's generic
-building-permit form has 80, Vancouver's general Development and Building Permit Application form has
-**158** (the largest inspected so far — pdf-lib's `field.isRequired()` reports `false` for every field
-on it too, same as Surrey's), and ESA's ICIA Low Voltage notification form has **zero** — it's a
-flattened Excel export, so Phase 4's PDF filler needs the coordinate-overlay path
+from Phase 0, plus `surrey-building-permit-application.pdf`, `vancouver-dev-build-app-form.pdf`, and
+`richmond-pl43-addition-alterations.pdf` added during the jurisdiction-expansion follow-up (see
+`JURISDICTION_EXPANSION_SCOPE.md`). Findings: Toronto's form has 71 real AcroForm fields, Calgary's
+commercial form has 15, Surrey's generic building-permit form has 80, Vancouver's general Development
+and Building Permit Application form has **158** (the largest inspected so far — pdf-lib's
+`field.isRequired()` reports `false` for every field on it too, same as Surrey's), Richmond's PL-43
+Addition and Alterations form has 117 (also `field.isRequired() === false` throughout — checked, not
+assumed, same as every other real form here), and ESA's ICIA Low Voltage notification form has
+**zero** — it's a flattened Excel export, so Phase 4's PDF filler needs the coordinate-overlay path
 (`permit_form_fields.overlay_page/x/y`) from day one, not just AcroForm mapping. See
 `PHASE_0_FINDINGS.md` §4 for the full Phase 0 inspection output and `JURISDICTION_EXPANSION_SCOPE.md`
-§3/§4 for Surrey's and Vancouver's.
+§3/§4/§7d for Surrey's, Vancouver's, and Richmond's.

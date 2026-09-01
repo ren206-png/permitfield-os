@@ -14,7 +14,7 @@
 // values in supabase/seed.sql's `permit_type_filings` insert, paired with
 // the real government PDF already committed at that path under
 // docs-reference-forms/ (downloaded and pdf-lib-inspected per
-// PHASE_0_FINDINGS.md and JURISDICTION_EXPANSION_SCOPE.md). Uploads all 5,
+// PHASE_0_FINDINGS.md and JURISDICTION_EXPANSION_SCOPE.md). Uploads all 6,
 // including ESA's and Calgary's -- those two have no `permit_form_fields`
 // rows (no verified AcroForm map, ESA's form is flat/scanned, Calgary's
 // needs manual review first per seed.sql's own comment), but the bucket
@@ -66,6 +66,10 @@ const TEMPLATE_MANIFEST: TemplateUpload[] = [
   {
     bucketPath: 'vancouver/dev-build-app-form.pdf',
     localFile: 'vancouver-dev-build-app-form.pdf',
+  },
+  {
+    bucketPath: 'richmond/building-permit-application-addition-alterations.pdf',
+    localFile: 'richmond-pl43-addition-alterations.pdf',
   },
 ];
 

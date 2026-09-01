@@ -43,6 +43,13 @@ values
   -- since it's the reason this jurisdiction's authority isn't just "BC".
   ('00000000-0000-0000-0001-000000000006', 'CA', 'BC', 'Vancouver', null, 'metric',
    'https://vancouver.ca/home-property-development/building-permit.aspx',
+   'assisted', null),
+  -- Jurisdiction-expansion follow-up, Richmond pass (see
+  -- JURISDICTION_EXPANSION_SCOPE.md SS7d). 'assisted', same bar as
+  -- Surrey/Vancouver -- real, cited process/bylaw research below, not a
+  -- direct BC Building Code + Bylaw 7230 review.
+  ('00000000-0000-0000-0001-000000000007', 'CA', 'BC', 'Richmond', null, 'metric',
+   'https://www.richmond.ca/business-development/building-approvals/permits.htm',
    'assisted', null);
 
 -- ESA is province-wide (jurisdiction_id null), independent of any single city --
@@ -79,7 +86,20 @@ values
   ('00000000-0000-0000-0002-000000000005', 'City of Vancouver - Development and Building Services Centre', 'municipal', 'BC',
    '00000000-0000-0000-0001-000000000006',
    'https://vancouver.ca/home-property-development/building-permit.aspx',
-   'portal');
+   'portal'),
+  -- City of Richmond Building Regulation Bylaw No. 7230 (confirmed via the
+  -- City's own bylaw PDF). filing_mechanism is deliberately 'pdf_email', NOT
+  -- 'portal' like Surrey/Vancouver -- Richmond's MyPermit portal explicitly
+  -- lists "Building Permit, Addition/Alteration, Tenant Improvement, all
+  -- buildings" as "Coming Soon (2026/2027)", not yet available online. The
+  -- City's own PL-59 "Electronic Building Permit Application - Quick Start
+  -- Guide" (rev. Mar 10, 2026) confirms the current path: email the
+  -- completed application form to BuildingApplications@richmond.ca with
+  -- drawings via a file-sharing link.
+  ('00000000-0000-0000-0002-000000000006', 'City of Richmond - Building Approvals', 'municipal', 'BC',
+   '00000000-0000-0000-0001-000000000007',
+   'https://www.richmond.ca/business-development/building-approvals.htm',
+   'pdf_email');
 
 -- Demonstrates the multi-authority filing model end to end (SS0.6): a Toronto
 -- electrical service upgrade needs a City of Toronto building permit ONLY when
@@ -125,6 +145,17 @@ values
   ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0001-000000000006',
    'Commercial Tenant Improvement', 'vancouver/dev-build-app-form.pdf',
    '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
+   1, now(), 'phase-1-seed'),
+  -- Richmond's PL-43 "Building Permit Application Form - Addition and
+  -- Alterations" (jurisdiction-expansion follow-up, JURISDICTION_EXPANSION_SCOPE.md
+  -- SS7d) -- confirmed via the City's own "Commercial TI Building Permit
+  -- Requirements" page as the specific form linked for this permit type, and
+  -- confirmed via the MyPermit portal's "Coming Soon (2026/2027)" listing to
+  -- still be the live, primary submission path (see the authorities row's
+  -- comment above).
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0001-000000000007',
+   'Commercial Tenant Improvement', 'richmond/building-permit-application-addition-alterations.pdf',
+   '{"requires_document_kinds": ["scope_of_work", "blueprint"]}'::jsonb,
    1, now(), 'phase-1-seed');
 
 -- Explicit ids (Phase 4) so permit_form_fields rows below can reference a
@@ -156,7 +187,13 @@ values
   -- covers this permit_type end to end -- one authority, one filing, same
   -- unconditional shape as Surrey's row above.
   ('00000000-0000-0000-0004-000000000005', '00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0002-000000000005', 1, null,
-   'vancouver/dev-build-app-form.pdf');
+   'vancouver/dev-build-app-form.pdf'),
+  -- Richmond's PL-43 form covers this permit_type end to end -- one
+  -- authority, one filing, same unconditional shape as Surrey/Vancouver's
+  -- rows above. filing_mechanism on the authority row is 'pdf_email', not
+  -- 'portal' -- see that row's comment.
+  ('00000000-0000-0000-0004-000000000006', '00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0002-000000000006', 1, null,
+   'richmond/building-permit-application-addition-alterations.pdf');
 
 -- Field maps, from the Phase 0 pdf-lib inspection (PHASE_0_FINDINGS.md SS4):
 -- Toronto's form has real AcroForm fields, so its 3 rows below use
@@ -229,7 +266,32 @@ values
   ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Last name', 'applicant.lastName', true, null, null, null),
   ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Address and street name', 'application.projectAddress', true, null, null, null),
   ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Estimated value of building construction including cost of plans materials labour', 'application.estimatedJobValueDollars', true, null, null, null),
-  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Describe the proposed work', 'application.projectDescription', false, null, null, null);
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0004-000000000005', 'Describe the proposed work', 'application.projectDescription', false, null, null, null),
+  -- Richmond's PL-43 "Building Permit Application Form - Addition and
+  -- Alterations" is a real 117-field AcroForm (jurisdiction-expansion
+  -- follow-up, pdf-lib inspection -- JURISDICTION_EXPANSION_SCOPE.md SS7d),
+  -- hand-verified field names below. Restrained subset, same discipline as
+  -- Toronto/Surrey/Vancouver above. Like those forms, pdf-lib's
+  -- field.isRequired() reports false for every field here too (checked, not
+  -- assumed) -- is_required below is again a product judgment, not a
+  -- PDF-sourced fact.
+  --
+  -- Lower-confidence flag: the form has three separate dollar-value fields
+  -- (IntValue, ExtValue, AdditionValue) without a directly adjacent on-form
+  -- label recoverable in this environment. IntValue is used below as the
+  -- best-inference match for "estimated job value" based on field order
+  -- (it's the first of the three, directly following the work-description
+  -- block) and its name reading as "interior [construction] value" for an
+  -- interior tenant-improvement scope -- ExtValue ("exterior") and
+  -- AdditionValue (building additions) both read as out of scope for a pure
+  -- TI job. This is an inference, not a verified label; flagged here rather
+  -- than silently presented as fact, per this session's proposal to the
+  -- user.
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'ApplName', 'applicant.fullName', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'ApplEmail', 'applicant.email', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'ProjectStreetAddr', 'application.projectAddress', true, null, null, null),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'WorkDesc', 'application.projectDescription', false, null, null, null),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0004-000000000006', 'IntValue', 'application.estimatedJobValueDollars', true, null, null, null);
 
 -- ============================================================
 -- PART 2: LOCAL DEV / TEST FIXTURES ONLY -- do not run against a shared project
