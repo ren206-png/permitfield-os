@@ -41,9 +41,25 @@ export default async function AdminPage() {
 
   const usersById = new Map(usersResult.data.users.map((u) => [u.id, u]));
   const orgs = orgsResult.data ?? [];
+  const orgNameById = new Map(orgs.map((org) => [org.id, org.name]));
   const members = membersResult.data ?? [];
   const contractors = contractorsResult.data ?? [];
   const applications = applicationsResult.data ?? [];
+
+  // Registered users previously had no way to tell whether a signed-up
+  // auth.users row actually belongs to any organization -- org_members was
+  // already being fetched above (for the Organizations table's owner
+  // lookup) but never joined back onto the per-user rows below. A user with
+  // zero entries here signed up but never created/joined an org (e.g.
+  // abandoned onboarding, or an invite that was never accepted) -- surfaced
+  // explicitly rather than left indistinguishable from an active member.
+  const membershipsByUserId = new Map<string, { orgName: string; role: string }[]>();
+  for (const member of members) {
+    const list = membershipsByUserId.get(member.user_id) ?? [];
+    list.push({ orgName: orgNameById.get(member.org_id) ?? member.org_id, role: member.role });
+    membershipsByUserId.set(member.user_id, list);
+  }
+  const usersWithNoOrg = usersResult.data.users.filter((u) => !membershipsByUserId.has(u.id)).length;
 
   const rows = orgs.map((org) => {
     const orgMembers = members.filter((m) => m.org_id === org.id);
@@ -107,27 +123,43 @@ export default async function AdminPage() {
       </div>
 
       <h2 className="mt-10 text-lg font-semibold text-zinc-900">Registered users</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        {usersWithNoOrg > 0
+          ? `${usersWithNoOrg} user${usersWithNoOrg === 1 ? '' : 's'} signed up but never joined or created an organization.`
+          : 'Every registered user belongs to at least one organization.'}
+      </p>
       <div className="mt-4 overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-zinc-200 text-sm">
           <thead className="bg-zinc-50">
             <tr>
               <th className="px-4 py-2 text-left font-medium text-zinc-600">Email</th>
+              <th className="px-4 py-2 text-left font-medium text-zinc-600">Organization(s)</th>
               <th className="px-4 py-2 text-left font-medium text-zinc-600">Confirmed</th>
               <th className="px-4 py-2 text-left font-medium text-zinc-600">Last sign-in</th>
               <th className="px-4 py-2 text-left font-medium text-zinc-600">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {usersResult.data.users.map((u) => (
-              <tr key={u.id}>
-                <td className="px-4 py-2 font-medium text-zinc-900">{u.email ?? '—'}</td>
-                <td className="px-4 py-2 text-zinc-600">{u.email_confirmed_at ? 'Yes' : 'No'}</td>
-                <td className="px-4 py-2 text-zinc-500">
-                  {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : 'Never'}
-                </td>
-                <td className="px-4 py-2 text-zinc-500">{new Date(u.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
+            {usersResult.data.users.map((u) => {
+              const memberships = membershipsByUserId.get(u.id) ?? [];
+              return (
+                <tr key={u.id}>
+                  <td className="px-4 py-2 font-medium text-zinc-900">{u.email ?? '—'}</td>
+                  <td className="px-4 py-2 text-zinc-600">
+                    {memberships.length > 0 ? (
+                      memberships.map((m) => `${m.orgName} (${m.role})`).join(', ')
+                    ) : (
+                      <span className="text-amber-700">No organization</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-zinc-600">{u.email_confirmed_at ? 'Yes' : 'No'}</td>
+                  <td className="px-4 py-2 text-zinc-500">
+                    {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : 'Never'}
+                  </td>
+                  <td className="px-4 py-2 text-zinc-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
