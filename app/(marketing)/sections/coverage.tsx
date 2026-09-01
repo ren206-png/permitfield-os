@@ -1,4 +1,11 @@
+import Link from 'next/link';
 import { CoverageBadge } from '@/components/coverage-badge';
+import { isJurisdictionPagesEnabled } from '@/lib/flags';
+import {
+  getPublicJurisdictionsForIndex,
+  provinceSlug,
+  municipalitySlug,
+} from '@/lib/jurisdictions/public-directory';
 
 // COPY_DECK.md §5. Deliberately reuses components/coverage-badge.tsx's own
 // component and tier language (verified / assisted -- AI audit off / listed
@@ -8,14 +15,24 @@ import { CoverageBadge } from '@/components/coverage-badge';
 // component directly (not just copying its labels) means this section can't
 // drift from the in-product badge even if that component's wording changes
 // later.
-const JURISDICTIONS = [
-  { name: 'Toronto, ON', level: 'verified' },
-  { name: 'Calgary, AB', level: 'verified' },
-  { name: 'Ottawa, ON', level: 'assisted' },
-  { name: 'Hamilton, ON', level: 'listed' },
-] as const;
+//
+// Gap fix (LP workstream follow-up, jurisdiction-expansion scoping session):
+// this used to be a hardcoded JURISDICTIONS array that happened to match
+// supabase/seed.sql's 4 rows but had no actual link to the database -- any
+// jurisdiction added later would silently not appear here without a second,
+// easy-to-forget manual edit, the same "list would drift from what pages
+// actually render" problem app/coverage/page.tsx and app/sitemap.ts were
+// already built to avoid (LP_PHASE_0_FINDINGS.md's thin-content discipline).
+// Now reads the same lib/jurisdictions/public-directory.ts module and the
+// same public_jurisdictions/public_permit_types views those pages use, so
+// this section, /coverage, and the sitemap can never disagree about what's
+// covered. Async Server Component: Next.js resolves this independently of
+// whether its parent (MarketingHomepage) is itself async -- no other file
+// needs to change for this to render correctly.
+export async function Coverage() {
+  const jurisdictions = await getPublicJurisdictionsForIndex();
+  const jurisdictionPagesEnabled = isJurisdictionPagesEnabled();
 
-export function Coverage() {
   return (
     <section
       id="coverage"
@@ -33,17 +50,40 @@ export function Coverage() {
           variant of their own.
         */}
         <ul className="mt-8 grid gap-4 sm:grid-cols-2">
-          {JURISDICTIONS.map((jurisdiction) => (
-            <li
-              key={jurisdiction.name}
-              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:shadow-none"
-            >
-              <span className="text-sm font-medium text-zinc-900 dark:text-white">
-                {jurisdiction.name}
-              </span>
-              <CoverageBadge coverageLevel={jurisdiction.level} />
-            </li>
-          ))}
+          {jurisdictions.map((jurisdiction) => {
+            const place = `${jurisdiction.municipality}, ${jurisdiction.provinceCode.toUpperCase()}`;
+            const rowClassName =
+              'flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:shadow-none';
+            const row = (
+              <>
+                <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                  {place}
+                </span>
+                <CoverageBadge coverageLevel={jurisdiction.coverageLevel} />
+              </>
+            );
+
+            return (
+              <li key={jurisdiction.id}>
+                {/* Same thin-content discipline as app/coverage/page.tsx:
+                    only link to a detail page that will actually render
+                    (real permit_types content) and only when that route is
+                    itself enabled -- this section's own flag
+                    (isMarketingV2Enabled) is unrelated to
+                    isJurisdictionPagesEnabled, so both must be true. */}
+                {jurisdictionPagesEnabled && jurisdiction.hasDetailPage ? (
+                  <Link
+                    href={`/permits/ca/${provinceSlug(jurisdiction.provinceCode)}/${municipalitySlug(jurisdiction.municipality)}`}
+                    className={rowClassName}
+                  >
+                    {row}
+                  </Link>
+                ) : (
+                  <div className={rowClassName}>{row}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
         <p className="mt-6 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
           PermitField OS is expanding jurisdiction by jurisdiction.

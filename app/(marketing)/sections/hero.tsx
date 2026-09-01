@@ -8,10 +8,15 @@ import Link from 'next/link';
 //
 // PHASE 1 (LP workstream, see LP_PHASE_0_FINDINGS.md §0.2): subhead no
 // longer names cities in prose. It states the jurisdiction count (verified
-// against the coverage registry -- supabase/seed.sql:14-27, mirrored in
-// sections/coverage.tsx's JURISDICTIONS array) and links to #coverage,
-// where tiers are disclosed. Prevents the copy from going stale the next
-// time coverage changes without someone remembering to edit this file.
+// against the coverage registry -- supabase/seed.sql:14-27, read live by
+// sections/coverage.tsx via lib/jurisdictions/public-directory.ts as of the
+// jurisdiction-expansion scoping follow-up, no longer a hardcoded array) and
+// links to #coverage, where tiers are disclosed.
+//
+// No jurisdiction count in this sentence either, for the same reason: a
+// literal "4" here would be exactly the same kind of drift risk the
+// JURISDICTIONS array was, just smaller -- cheaper to drop the number than
+// to make this component async just to fetch a count for one word.
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
@@ -39,7 +44,7 @@ export function Hero() {
         <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
           PermitField OS keeps your permit applications, documents, and filing
           status in one place — with AI-assisted extraction to cut down manual
-          data entry. Built for contractors in the 4 Canadian jurisdictions we{' '}
+          data entry. Built for contractors in the Canadian jurisdictions we{' '}
           <a
             href="#coverage"
             className="underline decoration-zinc-400 underline-offset-2 hover:text-zinc-900 dark:hover:text-white"
