@@ -2,6 +2,26 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import type { User } from '@supabase/supabase-js';
 
+interface OrgRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+interface OrgMemberRow {
+  org_id: string;
+  user_id: string;
+  role: string;
+}
+interface ContractorRow {
+  org_id: string;
+  company_name: string;
+}
+interface ApplicationRow {
+  id: string;
+  org_id: string;
+  status: string;
+}
+
 // Cross-tenant platform overview. Deliberately the only page in this
 // codebase that queries organizations/org_members/contractors/
 // permit_applications without an .eq('org_id', ...) filter -- it uses
@@ -34,38 +54,71 @@ async function listAllUsers(supabase: ReturnType<typeof createServiceClient>): P
   return users;
 }
 
+// Same silent-truncation risk as listAllUsers() above, but for PostgREST
+// rather than the Admin API: Supabase's default `db max rows` config caps a
+// single .select() response at 1000 rows with no error and no indication
+// anything was cut off. This page's four table queries are the only ones in
+// the codebase with no .eq('org_id', ...) filter (see header comment) --
+// every other page's queries are implicitly bounded to one tenant's rows,
+// so this is the one place a genuinely unbounded scan could quietly lose
+// rows once the platform grows past 1000 orgs/members/contractors/
+// applications. Pages via .range() until a short page comes back, ordered
+// by a column (set) that's unique or effectively so per table, since
+// .range() pagination without a deterministic ORDER BY can skip or repeat
+// rows across pages.
+async function fetchAllRows<T>(
+  runPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  errorContext: string
+): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await runPage(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(`Failed to load ${errorContext}: ${error.message}`);
+    }
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) {
+      break;
+    }
+  }
+  return rows;
+}
+
 export default async function AdminPage() {
   await requireAdmin();
 
   const supabase = createServiceClient();
 
-  const [orgsResult, membersResult, contractorsResult, applicationsResult, users] = await Promise.all([
-    supabase.from('organizations').select('id, name, created_at').order('created_at', { ascending: false }),
-    supabase.from('org_members').select('org_id, user_id, role'),
-    supabase.from('contractors').select('org_id, company_name'),
-    supabase.from('permit_applications').select('id, org_id, status'),
+  const [orgs, members, contractors, applications, users] = await Promise.all([
+    fetchAllRows<OrgRow>(
+      (from, to) =>
+        supabase
+          .from('organizations')
+          .select('id, name, created_at')
+          .order('created_at', { ascending: false })
+          .range(from, to),
+      'organizations'
+    ),
+    fetchAllRows<OrgMemberRow>(
+      (from, to) =>
+        supabase.from('org_members').select('org_id, user_id, role').order('org_id').order('user_id').range(from, to),
+      'org members'
+    ),
+    fetchAllRows<ContractorRow>(
+      (from, to) => supabase.from('contractors').select('org_id, company_name').order('org_id').range(from, to),
+      'contractors'
+    ),
+    fetchAllRows<ApplicationRow>(
+      (from, to) => supabase.from('permit_applications').select('id, org_id, status').order('id').range(from, to),
+      'applications'
+    ),
     listAllUsers(supabase),
   ]);
 
-  if (orgsResult.error) {
-    throw new Error(`Failed to load organizations: ${orgsResult.error.message}`);
-  }
-  if (membersResult.error) {
-    throw new Error(`Failed to load org members: ${membersResult.error.message}`);
-  }
-  if (contractorsResult.error) {
-    throw new Error(`Failed to load contractors: ${contractorsResult.error.message}`);
-  }
-  if (applicationsResult.error) {
-    throw new Error(`Failed to load applications: ${applicationsResult.error.message}`);
-  }
-
   const usersById = new Map(users.map((u) => [u.id, u]));
-  const orgs = orgsResult.data ?? [];
   const orgNameById = new Map(orgs.map((org) => [org.id, org.name]));
-  const members = membersResult.data ?? [];
-  const contractors = contractorsResult.data ?? [];
-  const applications = applicationsResult.data ?? [];
 
   // Registered users previously had no way to tell whether a signed-up
   // auth.users row actually belongs to any organization -- org_members was
