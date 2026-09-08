@@ -254,9 +254,17 @@ async function upsertOrgSubscription(
       // write fail the whole upsert.
       'canceled';
 
-  const { error } = await supabase
-    .from('org_subscriptions')
-    .update({
+  // A real .upsert() (onConflict: org_id), not .update() -- an .update() with
+  // no matching row silently affects zero rows and returns no error, so a
+  // webhook event for an org whose org_subscriptions row is missing (e.g. an
+  // org that predates this migration and was never backfilled, or a row
+  // manually deleted) would previously vanish with a 200 sent back to Stripe
+  // as if it had been applied. 20260806000040 already grants service_role
+  // INSERT on this table specifically as "a defense-in-depth backfill path
+  // for an org that predates this migration" -- this upsert is that path.
+  const { error } = await supabase.from('org_subscriptions').upsert(
+    {
+      org_id: input.orgId,
       stripe_customer_id: input.stripeCustomerId,
       stripe_subscription_id: input.stripeSubscriptionId,
       tier: input.tier,
@@ -264,8 +272,9 @@ async function upsertOrgSubscription(
       current_period_end: input.currentPeriodEnd ? new Date(input.currentPeriodEnd * 1000).toISOString() : null,
       trial_ends_at: input.trialEndsAt ? new Date(input.trialEndsAt * 1000).toISOString() : null,
       updated_at: new Date().toISOString(),
-    })
-    .eq('org_id', input.orgId);
+    },
+    { onConflict: 'org_id' }
+  );
 
   if (error) {
     throw new Error(`Failed to upsert org_subscriptions for org ${input.orgId}: ${error.message}`);

@@ -93,10 +93,6 @@ export const SELF_SERVE_TIERS: readonly BillingTierId[] = ['starter', 'pro'];
 export const TRIAL_DAYS = 14;
 export const TRIAL_TIER: BillingTierId = 'pro';
 
-export function findTier(id: BillingTierId): BillingTierInfo {
-  return BILLING_TIERS[id];
-}
-
 export function isBillingTierId(value: string): value is BillingTierId {
   return value === 'starter' || value === 'pro' || value === 'enterprise';
 }

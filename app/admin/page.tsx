@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/auth/admin';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import type { User } from '@supabase/supabase-js';
 
 // Cross-tenant platform overview. Deliberately the only page in this
 // codebase that queries organizations/org_members/contractors/
@@ -10,17 +11,40 @@ import { createServiceClient } from '@/lib/supabase/service-client';
 // flag and the ADMIN_EMAILS allowlist) already ran before this component's
 // body executes, so reaching this point means the caller is explicitly
 // authorized to see every tenant's data.
+
+// listUsers() paginates server-side (max 1000/page per the Supabase Admin
+// API) -- a single `perPage: 1000` call silently truncates once the
+// platform has more than 1000 registered users, with no error and no
+// indication anything was cut off. Pages through until a short page comes
+// back, same "don't trust a single page as the whole result" discipline
+// this codebase already applies to DB queries.
+async function listAllUsers(supabase: ReturnType<typeof createServiceClient>): Promise<User[]> {
+  const perPage = 1000;
+  const users: User[] = [];
+  for (let page = 1; ; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      throw new Error(`Failed to load users: ${error.message}`);
+    }
+    users.push(...data.users);
+    if (data.users.length < perPage) {
+      break;
+    }
+  }
+  return users;
+}
+
 export default async function AdminPage() {
   await requireAdmin();
 
   const supabase = createServiceClient();
 
-  const [orgsResult, membersResult, contractorsResult, applicationsResult, usersResult] = await Promise.all([
+  const [orgsResult, membersResult, contractorsResult, applicationsResult, users] = await Promise.all([
     supabase.from('organizations').select('id, name, created_at').order('created_at', { ascending: false }),
     supabase.from('org_members').select('org_id, user_id, role'),
     supabase.from('contractors').select('org_id, company_name'),
     supabase.from('permit_applications').select('id, org_id, status'),
-    supabase.auth.admin.listUsers({ perPage: 1000 }),
+    listAllUsers(supabase),
   ]);
 
   if (orgsResult.error) {
@@ -35,11 +59,8 @@ export default async function AdminPage() {
   if (applicationsResult.error) {
     throw new Error(`Failed to load applications: ${applicationsResult.error.message}`);
   }
-  if (usersResult.error) {
-    throw new Error(`Failed to load users: ${usersResult.error.message}`);
-  }
 
-  const usersById = new Map(usersResult.data.users.map((u) => [u.id, u]));
+  const usersById = new Map(users.map((u) => [u.id, u]));
   const orgs = orgsResult.data ?? [];
   const orgNameById = new Map(orgs.map((org) => [org.id, org.name]));
   const members = membersResult.data ?? [];
@@ -59,7 +80,7 @@ export default async function AdminPage() {
     list.push({ orgName: orgNameById.get(member.org_id) ?? member.org_id, role: member.role });
     membershipsByUserId.set(member.user_id, list);
   }
-  const usersWithNoOrg = usersResult.data.users.filter((u) => !membershipsByUserId.has(u.id)).length;
+  const usersWithNoOrg = users.filter((u) => !membershipsByUserId.has(u.id)).length;
 
   const rows = orgs.map((org) => {
     const orgMembers = members.filter((m) => m.org_id === org.id);
@@ -140,7 +161,7 @@ export default async function AdminPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {usersResult.data.users.map((u) => {
+            {users.map((u) => {
               const memberships = membershipsByUserId.get(u.id) ?? [];
               return (
                 <tr key={u.id}>

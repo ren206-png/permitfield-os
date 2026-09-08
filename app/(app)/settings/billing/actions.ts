@@ -5,6 +5,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { createCheckoutSessionUrl, createPortalSessionUrl } from '@/lib/billing/subscriptions';
 import { isBillingTierId } from '@/lib/billing/tiers';
+import { isBillingEnabled } from '@/lib/flags';
 
 // BILLING_PROPOSAL.md §3. Both actions re-run requireOrgContext() and their
 // own owner check rather than trusting the calling page already did --
@@ -17,12 +18,26 @@ import { isBillingTierId } from '@/lib/billing/tiers';
 // has no notion of "owner vs member" write gate for this table -- there is
 // no write policy for `authenticated` at all, see that migration's own
 // header comment).
+//
+// Both actions also re-check isBillingEnabled() as their first statement,
+// matching app/(app)/projects/new/actions.ts's isIntakeEnabled() discipline
+// ("flag off means this route 404s/rejects before any of the above runs").
+// The billing *page* gates on the flag too, but a Server Action is directly
+// invokable independent of the page that renders it (same point the header
+// comment above already makes about the owner check) -- without this, a
+// direct POST to either action while PERMITFIELD_FF_BILLING=false would
+// still create a real Stripe Checkout/Portal session in an environment
+// where STRIPE_SECRET_KEY happens to be configured (e.g. a staged rollout).
 
 export interface BillingActionState {
   error?: string;
 }
 
 export async function checkoutAction(_prevState: BillingActionState, formData: FormData): Promise<BillingActionState> {
+  if (!isBillingEnabled()) {
+    return { error: 'Billing is not enabled.' };
+  }
+
   const { orgId, orgName, role } = await requireOrgContext();
   if (role !== 'owner') {
     return { error: 'Only the organization owner can change the billing plan.' };
@@ -80,6 +95,10 @@ export async function checkoutAction(_prevState: BillingActionState, formData: F
 export async function portalAction(prevState: BillingActionState, formData: FormData): Promise<BillingActionState> {
   void prevState;
   void formData;
+  if (!isBillingEnabled()) {
+    return { error: 'Billing is not enabled.' };
+  }
+
   const { orgId, role } = await requireOrgContext();
   if (role !== 'owner') {
     return { error: 'Only the organization owner can manage the billing account.' };

@@ -137,19 +137,37 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   // generated_select policies (migration 20260806000013) gate this the same
   // way they'd gate a direct download, so a signing call for another org's
   // object fails here rather than producing a URL that happens to work.
-  const documentsWithUrls = await Promise.all(
-    (documents ?? []).map(async (doc) => {
-      const { data: signed } = await supabase.storage.from(UPLOADS_BUCKET).createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
-      return { ...doc, signedUrl: signed?.signedUrl ?? null };
-    })
-  );
+  //
+  // Batched via createSignedUrls (one call per bucket) rather than one
+  // createSignedUrl call per document -- an application with N uploads and M
+  // generated documents previously made N+M sequential storage round-trips
+  // here; this is 2 (run concurrently below), regardless of N/M. Results are
+  // matched back to their source row by storage_path since createSignedUrls
+  // doesn't guarantee its response order mirrors the input path order.
+  const documentPaths = (documents ?? []).map((doc) => doc.storage_path);
+  const generatedPaths = (generatedDocs ?? []).map((doc) => doc.storage_path);
 
-  const generatedDocsWithUrls = await Promise.all(
-    (generatedDocs ?? []).map(async (doc) => {
-      const { data: signed } = await supabase.storage.from(GENERATED_BUCKET).createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
-      return { ...doc, signedUrl: signed?.signedUrl ?? null };
-    })
-  );
+  const [signedDocuments, signedGenerated] = await Promise.all([
+    documentPaths.length > 0
+      ? supabase.storage.from(UPLOADS_BUCKET).createSignedUrls(documentPaths, SIGNED_URL_TTL_SECONDS)
+      : Promise.resolve({ data: [] }),
+    generatedPaths.length > 0
+      ? supabase.storage.from(GENERATED_BUCKET).createSignedUrls(generatedPaths, SIGNED_URL_TTL_SECONDS)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const signedUrlByDocumentPath = new Map((signedDocuments.data ?? []).map((s) => [s.path, s.signedUrl]));
+  const signedUrlByGeneratedPath = new Map((signedGenerated.data ?? []).map((s) => [s.path, s.signedUrl]));
+
+  const documentsWithUrls = (documents ?? []).map((doc) => ({
+    ...doc,
+    signedUrl: signedUrlByDocumentPath.get(doc.storage_path) ?? null,
+  }));
+
+  const generatedDocsWithUrls = (generatedDocs ?? []).map((doc) => ({
+    ...doc,
+    signedUrl: signedUrlByGeneratedPath.get(doc.storage_path) ?? null,
+  }));
 
   const documentFilenameById = new Map((documents ?? []).map((d) => [d.id, d.original_filename]));
   const parsedExtraction = extraction?.zod_valid ? (extraction.parsed_data as PermitExtraction | null) : null;

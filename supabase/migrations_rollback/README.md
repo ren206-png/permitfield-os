@@ -1,7 +1,7 @@
 # Migration rollbacks
 
 One file per migration in `supabase/migrations/`, `20260806000001` through
-`20260806000040` (every migration in the repo as of this update). The first
+`20260806000041` (every migration in the repo as of this update). The first
 28 are the Phase 1 migration set per
 `docs/PERMITFIELD_OS_EXPANSION_MASTER_PROMPT.md` §7 acceptance criteria
 16 ("every migration has documented, tested rollback SQL") and 18 (client
@@ -122,6 +122,17 @@ exercises were correct on first try):
   _test_org_ids to authenticated, service_role` was needed right after
   creating it. No other test file in this suite uses a temp table this way
   yet, so there was no existing precedent for this grant.
+
+Extended to 41 (post-billing health-check audit): a pure three-index
+addition (`org_members.user_id`, `contractors.org_id`,
+`permit_types.jurisdiction_id` -- FK columns queried/joined on frequently
+but never indexed in their own migration, `org_members.user_id` backing
+`requireOrgContext()`'s per-request lookup on every `(app)` page render).
+Verified via `--start-at 41 --stop-at 41` in isolation (three `DROP INDEX`
+statements, clean forward `db reset` after), then the full 41 -> 1 walk,
+then `npm run test:sql` (all 18 files pass unchanged -- indexes alone don't
+change any query's result set, only its plan, so no test file needed
+touching).
 
 ## Re-running this test
 
