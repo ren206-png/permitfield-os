@@ -94,6 +94,11 @@ begin;
 -- here (not in seed.sql) the same way jurisdiction_sources.test.sql adds its
 -- own platform_admin fixture -- Org A's two seed owners don't cover the
 -- three role tiers this migration's role-gating needs exercised.
+-- 12/13 (document_reviewer, auditor_readonly) added for the health-check
+-- audit round 3 org-tier role-gap fix below (SS3c) -- neither role is part
+-- of ORG_TIER_ROLES (lib/permit-status/transitions.ts) /
+-- docs/STATUS_TRANSITIONS.md's org-tier role set, so both must be rejected
+-- the same way SS3a already proves plain member IS accepted.
 insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
 values
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-00000000000e', 'authenticated', 'authenticated',
@@ -103,14 +108,20 @@ values
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated',
    'member@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now()),
   ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000011', 'authenticated', 'authenticated',
-   'applicant-contractor@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
+   'applicant-contractor@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000012', 'authenticated', 'authenticated',
+   'document-reviewer@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now()),
+  ('00000000-0000-0000-0000-000000000000', '10000000-0000-0000-0000-000000000013', 'authenticated', 'authenticated',
+   'auditor-readonly@test.permitfield.local', crypt('test-password-not-real', gen_salt('bf')), now(), now(), now())
 on conflict (id) do nothing;
 
 insert into org_members (org_id, user_id, role) values
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000e', 'permit_manager'),
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000f', 'permit_coordinator'),
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000010', 'member'),
-  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000011', 'applicant_contractor')
+  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000011', 'applicant_contractor'),
+  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000012', 'document_reviewer'),
+  ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000013', 'auditor_readonly')
 on conflict (org_id, user_id) do nothing;
 
 -- === 1. Fresh INSERT trigger: seed_permit_status_history() fires automatically ===
@@ -216,6 +227,63 @@ begin
     raise exception 'FAIL: member could not make org-tier move internal_review -> ready_to_submit, got %', result.permit_status;
   end if;
   raise notice 'PASS: member walked the fixture application to ready_to_submit via consecutive org-tier moves';
+end $$;
+
+-- 3c. Org tier, negative case (health-check audit round 3 fix): roles
+-- OUTSIDE the org-tier role set (document_reviewer, auditor_readonly) are
+-- rejected on the exact same kind of move SS3a just proved a plain member
+-- IS allowed to make -- ready_to_submit -> collecting_documents is a legal
+-- edge (Check 1 would pass), so a 42501 here is unambiguously Check 2's
+-- org-tier role branch doing the rejecting, not transition illegality.
+-- Before 20260806000045, this rejection did not happen at all -- Check 2
+-- had no org-tier branch, so both roles could previously make this move.
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000012","role":"authenticated"}';
+
+do $$
+begin
+  begin
+    perform transition_permit_status('40000000-0000-0000-0000-00000000000a', 'collecting_documents');
+    raise exception 'FAIL: document_reviewer was able to make an org-tier move (ready_to_submit -> collecting_documents)';
+  exception
+    when sqlstate '42501' then
+      raise notice 'PASS: document_reviewer correctly rejected on an org-tier move (%)', sqlerrm;
+  end;
+end $$;
+
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000013","role":"authenticated"}';
+
+do $$
+begin
+  begin
+    perform transition_permit_status('40000000-0000-0000-0000-00000000000a', 'collecting_documents');
+    raise exception 'FAIL: auditor_readonly was able to make an org-tier move (ready_to_submit -> collecting_documents)';
+  exception
+    when sqlstate '42501' then
+      raise notice 'PASS: auditor_readonly correctly rejected on an org-tier move (%)', sqlerrm;
+  end;
+end $$;
+
+-- Restore the fixture application back to ready_to_submit (a plain member,
+-- SS3a's role, making the same legal org-tier move SS3a already proved is
+-- allowed) so SS3b below still finds it at the state it expects --
+-- transition_permit_status() never actually wrote collecting_documents
+-- above (both attempts were rejected before the UPDATE), so the app is
+-- still at ready_to_submit; this section intentionally does not rely on
+-- that fact remaining true and re-derives it via a real, allowed
+-- transition instead of asserting on hidden state.
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000010","role":"authenticated"}';
+
+do $$
+declare
+  result permit_applications;
+begin
+  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'collecting_documents');
+  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'internal_review');
+  select * into result from transition_permit_status('40000000-0000-0000-0000-00000000000a', 'ready_to_submit');
+  if result.permit_status <> 'ready_to_submit' then
+    raise exception 'FAIL: could not walk the fixture application back to ready_to_submit ahead of SS3b, got %', result.permit_status;
+  end if;
+  raise notice 'PASS: fixture application walked back to ready_to_submit ahead of SS3b';
 end $$;
 
 -- 3b. Submission tier: the SAME plain member is rejected on the boundary

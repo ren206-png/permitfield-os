@@ -212,8 +212,8 @@ don't.
 | `org_owner` | R,U | C,R,U,A | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
 | `platform_admin` | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R,U,A | C,R | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | C,R,U,A | R | C,R,U,A |
 | `member` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U |
-| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,U,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
-| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,U | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R | C,R,U |
+| `permit_manager` | R | R | C,R,U,A | C,R,U,A | C,R,A | C,R | C,R | R,U | C,R | C,R | R | C,R,U,A | C,R,U,A | C,R,U,A | R | R | C,R,U,A |
+| `permit_coordinator` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R | C,R,U |
 | `document_reviewer` | R | | R | R | C,R,U,A | R | R | R,U | R | C,R | R | R | R | R | R | R | R |
 | `applicant_contractor` | R | | C,R,U | C,R,U | C,R,A | R | R | R,U | R | C,R | R | C,R,U | C,R,U | C,R,U | R | R | C,R,U |
 | `client_user` | | | | R | | | | | R | | | | R | R | | R | R |
@@ -313,6 +313,18 @@ Notes on deliberate asymmetries vs. Table 1:
   notes) for exactly the roles already holding it in this table — Gate 1.4
   makes what Table 2 already claimed actually true at the DB layer for
   `archive`; it does not expand any role's `archive` grant.
+  - **Health-check audit round 3 correction:** `permit_manager` and
+    `permit_coordinator` had ALSO been carrying `U` on `application_documents`
+    (`C,R,U,A` and `C,R,U` respectively) since Phase 1.1, which directly
+    contradicted this bullet's own "every role's cell is unchanged EXCEPT
+    `document_reviewer`" claim above. `application_documents` has no UPDATE
+    policy for anyone at the DB layer except through `document_reviewer`'s
+    review path reasoned above — there was never a design decision granting
+    `permit_manager`/`permit_coordinator` write access to document rows, so
+    this was a matrix bug, not an intentional third exception. Both roles'
+    cells are corrected back to `C,R,A` (matching their pre-existing
+    `permit_applications`-adjacent tier), restoring this bullet's claim to
+    being actually true.
 - **`document_revisions` (new, Gate 1.4) is not modeled as a `lib/authz`
   `Resource`**, same reasoning as `permit_status_transitions`: it has no
   independent write path for any role at all (both its writers are
