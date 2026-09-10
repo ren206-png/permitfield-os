@@ -166,7 +166,23 @@ export const permitGeneratePdf = inngest.createFunction(
       // (Phase 0/4 findings), not a bug in this run.
       if (!filing.form_template_path) continue;
 
-      const result = await step.run(`generate-filing-${filing.id}`, async () => {
+      // Health-check audit finding: this used to be one `generate-filing-*`
+      // step.run() that downloaded/filled/uploaded the PDF AND inserted the
+      // generated_documents row in the same callback, uploading with
+      // `upsert: false`. If the insert threw after the upload already
+      // succeeded, Inngest's retry re-ran the whole callback -- re-uploading
+      // to the exact same content-addressed (sha256-in-path) storage path a
+      // second time, which now fails with a non-tolerated "already exists"
+      // storage error. That made this filing fail deterministically on
+      // every retry, forever, unlike lib/bridge/client-portal.ts's
+      // uploadDocument(), which tolerates that same "duplicate/already
+      // exists" error as a legitimate no-op. Split into two steps instead:
+      // the fill+upload step is memoized once it succeeds, so a retry after
+      // an insert failure replays its result rather than re-uploading; the
+      // upload itself is also switched to `upsert: true` as defense in
+      // depth, since the path is content-addressed and re-uploading
+      // identical bytes to the same path is always a safe no-op.
+      const uploaded = await step.run(`fill-and-upload-filing-${filing.id}`, async () => {
         const { data: fieldRows, error: fieldsError } = await supabase
           .from('permit_form_fields')
           .select('pdf_field_name, maps_to, is_required, overlay_page, overlay_x, overlay_y')
@@ -253,21 +269,27 @@ export const permitGeneratePdf = inngest.createFunction(
 
         const { error: uploadError } = await supabase.storage
           .from(GENERATED_BUCKET)
-          .upload(storagePath, filledBuffer, { contentType: 'application/pdf', upsert: false });
+          .upload(storagePath, filledBuffer, { contentType: 'application/pdf', upsert: true });
         if (uploadError) {
           throw new Error(`Failed to upload generated PDF to ${storagePath}: ${uploadError.message}`);
         }
 
+        return { storagePath, originalFilename, fillMethod, incompleteRequired, incompleteOptional };
+      });
+
+      if (!uploaded) continue;
+
+      const result = await step.run(`insert-generated-document-${filing.id}`, async () => {
         const { data: inserted, error: insertError } = await supabase
           .from('generated_documents')
           .insert({
             application_id: applicationId,
             permit_type_filing_id: filing.id,
-            storage_path: storagePath,
-            original_filename: originalFilename,
-            fill_method: fillMethod,
-            incomplete_required_fields: incompleteRequired,
-            incomplete_optional_fields: incompleteOptional,
+            storage_path: uploaded.storagePath,
+            original_filename: uploaded.originalFilename,
+            fill_method: uploaded.fillMethod,
+            incomplete_required_fields: uploaded.incompleteRequired,
+            incomplete_optional_fields: uploaded.incompleteOptional,
           })
           .select('id')
           .single();
@@ -280,9 +302,7 @@ export const permitGeneratePdf = inngest.createFunction(
         return { generatedDocumentId: inserted.id as string };
       });
 
-      if (result) {
-        generatedDocumentIds.push(result.generatedDocumentId);
-      }
+      generatedDocumentIds.push(result.generatedDocumentId);
     }
 
     // Success means at least one filing actually produced a document.

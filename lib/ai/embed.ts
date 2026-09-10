@@ -1,4 +1,4 @@
-import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL_ID } from './config';
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL_ID, EXTERNAL_API_TIMEOUT_MS } from './config';
 
 // Thin REST client for Voyage AI's embeddings endpoint (PHASE_0_FINDINGS.md
 // SS5: Anthropic serves no embeddings endpoint). No @anthropic-ai/sdk-style
@@ -43,18 +43,30 @@ export async function embedText(text: string, inputType: VoyageInputType): Promi
     throw new Error('embedText requires non-empty text.');
   }
 
-  const response = await fetch(VOYAGE_EMBEDDINGS_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      input: text,
-      model: EMBEDDING_MODEL_ID,
-      input_type: inputType,
-    }),
-  });
+  // AbortSignal.timeout: an unbounded fetch would otherwise hang the caller
+  // (and any Inngest step wrapping it) indefinitely on a stalled upstream
+  // connection -- see EXTERNAL_API_TIMEOUT_MS's own header comment.
+  let response: Response;
+  try {
+    response = await fetch(VOYAGE_EMBEDDINGS_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: text,
+        model: EMBEDDING_MODEL_ID,
+        input_type: inputType,
+      }),
+      signal: AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error(`Voyage embeddings API call timed out after ${EXTERNAL_API_TIMEOUT_MS}ms.`);
+    }
+    throw err;
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '<unreadable body>');

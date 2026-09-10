@@ -150,43 +150,64 @@ export const permitAudit = inngest.createFunction(
       return auditPermitData(client, extraction, retrievedChunks);
     });
 
-    const persisted = await step.run('persist-audit', async () => {
+    // Health-check audit finding: this used to be one single `persist-audit`
+    // step.run() doing the audits insert, the audit_findings/
+    // ai_findings_rejected inserts, and the final status update all in one
+    // callback. step.run() only memoizes on a *successful* return -- if
+    // anything after the audits insert threw (e.g. the audit_findings
+    // insert), Inngest's retry re-ran the WHOLE callback from the top,
+    // re-inserting a second `audits` row (no unique constraint on this
+    // table -- confirmed via 20260806000009_audits_and_findings.sql), and
+    // there was no way for a retry to "resume" partway through. Splitting
+    // into separate steps means a retry after a downstream failure replays
+    // already-succeeded steps from their memoized result instead of
+    // re-executing them, so the audits row can never be double-inserted.
+    if (!modelResult.structurallyValid) {
       // Fail closed (global engineering rule, mirrors extract.ts's
       // zod_valid=false handling): every model attempt failed structural
       // validation, so no audits row is inserted at all -- never a partial
-      // or empty-looking "clean" result.
-      if (!modelResult.structurallyValid) {
+      // or empty-looking "clean" result. A plain .update() is naturally
+      // retry-safe (setting the same status twice is a no-op), so this
+      // doesn't need its own step.run boundary split further.
+      await step.run('mark-audit-failed', async () => {
         const { error: statusError } = await supabase
           .from('permit_applications')
           .update({ status: 'audit_failed' })
           .eq('id', applicationId);
         if (statusError) throw new Error(`Failed to set status=audit_failed: ${statusError.message}`);
-        return { auditId: null as string | null };
-      }
+      });
 
-      // SS4.3: compliance_rules is checked in application code, not by the
-      // AI. This is computed here, deterministically, from data the model
-      // was never even shown -- see lib/ai/audit-permit-data.ts's header
-      // comment for why the model is explicitly forbidden from producing
-      // this finding kind itself.
-      const missingDocumentFindings = computeMissingDocumentFindings(
-        context.complianceRules,
-        new Set(context.presentDocKinds)
-      );
+      await step.sendEvent('emit-audited-event', {
+        name: 'permit/application.audited',
+        data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
+      });
+      return { applicationId, auditId: null, audited: false };
+    }
 
-      // Each retrieved chunk carries its own source table's corpus_version;
-      // when more than one distinct value appears in one retrieval (an
-      // in-progress re-ingestion straddling two versions), all of them are
-      // recorded rather than arbitrarily picking one. 'no-corpus-ingested'
-      // is an honest, explicit sentinel for the current real state of this
-      // codebase -- zero jurisdiction_code_chunks rows exist anywhere yet --
-      // rather than leaving the NOT NULL corpus_version column to a
-      // fabricated-looking value.
-      const corpusVersion =
-        retrievedChunks.length > 0
-          ? [...new Set(retrievedChunks.map((c) => c.corpusVersion))].sort().join('+')
-          : 'no-corpus-ingested';
+    // SS4.3: compliance_rules is checked in application code, not by the
+    // AI. This is computed here, deterministically, from data the model
+    // was never even shown -- see lib/ai/audit-permit-data.ts's header
+    // comment for why the model is explicitly forbidden from producing
+    // this finding kind itself.
+    const missingDocumentFindings = computeMissingDocumentFindings(
+      context.complianceRules,
+      new Set(context.presentDocKinds)
+    );
 
+    // Each retrieved chunk carries its own source table's corpus_version;
+    // when more than one distinct value appears in one retrieval (an
+    // in-progress re-ingestion straddling two versions), all of them are
+    // recorded rather than arbitrarily picking one. 'no-corpus-ingested'
+    // is an honest, explicit sentinel for the current real state of this
+    // codebase -- zero jurisdiction_code_chunks rows exist anywhere yet --
+    // rather than leaving the NOT NULL corpus_version column to a
+    // fabricated-looking value.
+    const corpusVersion =
+      retrievedChunks.length > 0
+        ? [...new Set(retrievedChunks.map((c) => c.corpusVersion))].sort().join('+')
+        : 'no-corpus-ingested';
+
+    const insertedAudit = await step.run('insert-audit-row', async () => {
       const { data: insertedAudit, error: auditInsertError } = await supabase
         .from('audits')
         .insert({
@@ -200,45 +221,55 @@ export const permitAudit = inngest.createFunction(
       if (auditInsertError || !insertedAudit) {
         throw new Error(`Failed to insert audits row: ${auditInsertError?.message ?? 'no row returned'}`);
       }
-      const auditId = insertedAudit.id as string;
+      return { auditId: insertedAudit.id as string };
+    });
+    const auditId = insertedAudit.auditId;
 
+    // Split into two steps (rather than one, like insert-audit-row above)
+    // for the same retry-duplication reason -- neither audit_findings nor
+    // ai_findings_rejected has a unique constraint, so a single combined
+    // step that inserted both and then threw partway would duplicate
+    // whichever insert already succeeded on retry.
+    await step.run('insert-audit-findings', async () => {
       const allFindings: AuditFinding[] = [...missingDocumentFindings, ...modelResult.findings];
-      if (allFindings.length > 0) {
-        const { error: findingsError } = await supabase.from('audit_findings').insert(
-          allFindings.map((f) => ({
-            audit_id: auditId,
-            kind: f.kind,
-            severity: f.severity,
-            issue: f.issue,
-            action_required: f.action_required,
-            code_chunk_id: f.code_chunk_id,
-            confidence: f.confidence,
-          }))
-        );
-        if (findingsError) {
-          throw new Error(`Failed to insert audit_findings rows: ${findingsError.message}`);
-        }
+      if (allFindings.length === 0) return;
+      const { error: findingsError } = await supabase.from('audit_findings').insert(
+        allFindings.map((f) => ({
+          audit_id: auditId,
+          kind: f.kind,
+          severity: f.severity,
+          issue: f.issue,
+          action_required: f.action_required,
+          code_chunk_id: f.code_chunk_id,
+          confidence: f.confidence,
+        }))
+      );
+      if (findingsError) {
+        throw new Error(`Failed to insert audit_findings rows: ${findingsError.message}`);
       }
+    });
 
-      // SS6 citation-validity-rate metric's source table -- rejections are
-      // persisted, never silently dropped, so hallucination rate can
-      // actually be measured (see 20260806000010_ai_findings_rejected.sql).
-      if (modelResult.rejected.length > 0) {
-        const { error: rejectedError } = await supabase.from('ai_findings_rejected').insert(
-          modelResult.rejected.map((r) => ({
-            application_id: applicationId,
-            audit_id: auditId,
-            raw_finding: r.rawFinding as object,
-            rejection_reason: r.reason,
-            model_id: modelResult.modelId,
-            prompt_version: modelResult.promptVersion,
-          }))
-        );
-        if (rejectedError) {
-          throw new Error(`Failed to insert ai_findings_rejected rows: ${rejectedError.message}`);
-        }
+    // SS6 citation-validity-rate metric's source table -- rejections are
+    // persisted, never silently dropped, so hallucination rate can
+    // actually be measured (see 20260806000010_ai_findings_rejected.sql).
+    await step.run('insert-rejected-findings', async () => {
+      if (modelResult.rejected.length === 0) return;
+      const { error: rejectedError } = await supabase.from('ai_findings_rejected').insert(
+        modelResult.rejected.map((r) => ({
+          application_id: applicationId,
+          audit_id: auditId,
+          raw_finding: r.rawFinding as object,
+          rejection_reason: r.reason,
+          model_id: modelResult.modelId,
+          prompt_version: modelResult.promptVersion,
+        }))
+      );
+      if (rejectedError) {
+        throw new Error(`Failed to insert ai_findings_rejected rows: ${rejectedError.message}`);
       }
+    });
 
+    await step.run('mark-ready-for-review', async () => {
       const { error: statusError } = await supabase
         .from('permit_applications')
         .update({ status: 'ready_for_review' })
@@ -246,9 +277,9 @@ export const permitAudit = inngest.createFunction(
       if (statusError) {
         throw new Error(`Failed to set status=ready_for_review: ${statusError.message}`);
       }
-
-      return { auditId };
     });
+
+    const persisted = { auditId: auditId as string | null };
 
     await step.sendEvent('emit-audited-event', {
       name: 'permit/application.audited',

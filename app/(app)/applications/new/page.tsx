@@ -1,38 +1,66 @@
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
+import { fetchAllRows } from '@/lib/supabase/paginate';
 import { NewApplicationForm } from './new-application-form';
 
 // jurisdictions/permit_types/authorities are reference data (select-only for
 // `authenticated`, see migrations 000004/000005) -- readable across orgs, so
 // no org_id filter belongs on these two queries. Only contractors and the
 // eventual insert are org-scoped.
+//
+// Health-check audit finding: jurisdictions/permit_types were previously
+// fetched with no .range() pagination -- a small, fixed dataset today (4
+// jurisdictions in supabase/seed.sql), but the stated product direction is
+// jurisdiction-by-jurisdiction expansion (JURISDICTION_EXPANSION_SCOPE.md),
+// same growth path already flagged for lib/jurisdictions/public-directory.ts.
+// Paginated here too so this wizard doesn't silently start omitting
+// jurisdictions/permit types from its dropdowns once the platform grows past
+// PostgREST's default 1000-row cap. contractors is left as a single
+// unpaginated, org-scoped query -- realistically bounded by one org's own
+// contractor roster, not a cross-tenant reference table.
 export default async function NewApplicationPage() {
   const { orgId } = await requireOrgContext();
   const supabase = await createClient();
 
-  const [{ data: jurisdictions, error: jurisdictionsError }, { data: permitTypes, error: permitTypesError }, { data: contractors, error: contractorsError }] =
-    await Promise.all([
-      supabase
-        .from('jurisdictions')
-        .select('id, municipality, province_code, coverage_level')
-        .order('province_code', { ascending: true })
-        .order('municipality', { ascending: true }),
-      supabase
-        .from('permit_types')
-        .select('id, title, jurisdiction_id')
-        .order('title', { ascending: true }),
-      supabase
-        .from('contractors')
-        .select('id, company_name')
-        .eq('org_id', orgId)
-        .order('company_name', { ascending: true }),
-    ]);
+  const [jurisdictionsResult, permitTypesResult, contractorsResult] = await Promise.allSettled([
+    fetchAllRows<{ id: string; municipality: string; province_code: string; coverage_level: string }>(
+      (from, to) =>
+        supabase
+          .from('jurisdictions')
+          .select('id, municipality, province_code, coverage_level')
+          .order('province_code', { ascending: true })
+          .order('municipality', { ascending: true })
+          .range(from, to),
+      'jurisdictions'
+    ),
+    fetchAllRows<{ id: string; title: string; jurisdiction_id: string }>(
+      (from, to) =>
+        supabase
+          .from('permit_types')
+          .select('id, title, jurisdiction_id')
+          .order('title', { ascending: true })
+          .range(from, to),
+      'permit types'
+    ),
+    supabase.from('contractors').select('id, company_name').eq('org_id', orgId).order('company_name', { ascending: true }),
+  ]);
 
-  if (jurisdictionsError || permitTypesError || contractorsError) {
-    throw new Error(
-      `Failed to load wizard data: ${jurisdictionsError?.message ?? permitTypesError?.message ?? contractorsError?.message}`
-    );
+  if (jurisdictionsResult.status === 'rejected') {
+    throw new Error(`Failed to load wizard data: ${jurisdictionsResult.reason}`);
+  }
+  if (permitTypesResult.status === 'rejected') {
+    throw new Error(`Failed to load wizard data: ${permitTypesResult.reason}`);
+  }
+  if (contractorsResult.status === 'rejected') {
+    throw new Error(`Failed to load wizard data: ${contractorsResult.reason}`);
+  }
+  const jurisdictions = jurisdictionsResult.value;
+  const permitTypes = permitTypesResult.value;
+  const { data: contractors, error: contractorsError } = contractorsResult.value;
+
+  if (contractorsError) {
+    throw new Error(`Failed to load wizard data: ${contractorsError.message}`);
   }
 
   // Gate on zero contractors rather than letting the form render with an
@@ -63,8 +91,8 @@ export default async function NewApplicationPage() {
       </p>
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <NewApplicationForm
-          jurisdictions={jurisdictions ?? []}
-          permitTypes={permitTypes ?? []}
+          jurisdictions={jurisdictions}
+          permitTypes={permitTypes}
           contractors={contractors}
         />
       </div>

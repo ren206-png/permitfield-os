@@ -87,3 +87,17 @@ export const GEMINI_CLASSIFICATION_MODEL_ID = 'gemini-2.5-flash';
 // actually shown carefully. No call site reads this yet -- see that
 // module's own header comment.
 export const ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS = 8;
+
+// Health-check audit finding: lib/ai/gemini/client.ts and lib/ai/embed.ts's
+// raw `fetch()` calls (Gemini and Voyage have no installed SDK -- see both
+// files' own headers) had no timeout at all, unlike the Anthropic SDK calls
+// elsewhere in this codebase, which have the SDK's own built-in
+// timeout/retry behavior. A hung upstream request would hang the calling
+// Inngest step indefinitely, bounded only by the platform/Inngest step
+// timeout rather than anything this code controls. Passed to
+// AbortSignal.timeout() at each call site. 30s is generous for a single
+// non-streaming generateContent/embeddings call -- long enough that a
+// merely-slow-but-healthy response isn't cut off, short enough that a
+// genuinely hung request doesn't block a background job step for its full
+// platform-level timeout.
+export const EXTERNAL_API_TIMEOUT_MS = 30_000;

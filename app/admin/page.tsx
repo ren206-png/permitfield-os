@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/auth/admin';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { fetchAllRows } from '@/lib/supabase/paginate';
 import type { User } from '@supabase/supabase-js';
 
 interface OrgRow {
@@ -65,26 +66,7 @@ async function listAllUsers(supabase: ReturnType<typeof createServiceClient>): P
 // applications. Pages via .range() until a short page comes back, ordered
 // by a column (set) that's unique or effectively so per table, since
 // .range() pagination without a deterministic ORDER BY can skip or repeat
-// rows across pages.
-async function fetchAllRows<T>(
-  runPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-  errorContext: string
-): Promise<T[]> {
-  const pageSize = 1000;
-  const rows: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await runPage(from, from + pageSize - 1);
-    if (error) {
-      throw new Error(`Failed to load ${errorContext}: ${error.message}`);
-    }
-    const page = data ?? [];
-    rows.push(...page);
-    if (page.length < pageSize) {
-      break;
-    }
-  }
-  return rows;
-}
+// rows across pages. Shared implementation: lib/supabase/paginate.ts.
 
 export default async function AdminPage() {
   await requireAdmin();

@@ -21,10 +21,12 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
   const [triggerExtraction, setTriggerExtraction] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setWarning(null);
     const files = fileInputRef.current?.files;
     if (!files || files.length === 0) {
       setError('Choose at least one file.');
@@ -41,12 +43,35 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
     try {
       const res = await fetch('/api/documents', { method: 'POST', body: formData });
       const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? 'Upload failed.');
+      // The route now reports per-file outcomes instead of failing the
+      // whole batch on the first bad file (app/api/documents/route.ts), so
+      // a response can be a total failure (no documentIds, res.ok false),
+      // a partial success (some documentIds AND some failures, 207), or a
+      // full success. router.refresh() runs whenever anything actually got
+      // stored, so a partial success is reflected in the document list
+      // immediately rather than looking like nothing happened.
+      const failures: { file: string; error: string }[] = Array.isArray(body.failures) ? body.failures : [];
+      const documentIds: string[] = Array.isArray(body.documentIds) ? body.documentIds : [];
+
+      if (!res.ok && documentIds.length === 0) {
+        setError(
+          failures.length > 0
+            ? `Upload failed: ${failures.map((f) => `${f.file} (${f.error})`).join('; ')}`
+            : (body.error ?? 'Upload failed.')
+        );
         return;
       }
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setTriggerExtraction(false);
+
+      if (failures.length > 0) {
+        setWarning(
+          `${documentIds.length} of ${files.length} file(s) uploaded. Failed: ${failures
+            .map((f) => `${f.file} (${f.error})`)
+            .join('; ')}. Extraction was not started -- retry the failed file(s) first.`
+        );
+      } else {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setTriggerExtraction(false);
+      }
       router.refresh();
     } catch {
       setError('Upload failed -- check your connection and try again.');
@@ -103,6 +128,12 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
       {error && (
         <p role="alert" className="text-sm text-red-600">
           {error}
+        </p>
+      )}
+
+      {warning && (
+        <p role="alert" className="text-sm text-amber-700">
+          {warning}
         </p>
       )}
 

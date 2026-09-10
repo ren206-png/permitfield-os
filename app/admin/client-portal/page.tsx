@@ -1,5 +1,6 @@
 import { requireAdmin } from '@/lib/auth/admin';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { fetchAllRows } from '@/lib/supabase/paginate';
 import { listTokensForApplication } from '@/lib/bridge/client-portal';
 import { isClientPortalEnabled } from '@/lib/flags';
 import { IssueTokenForm } from './issue-token-form';
@@ -17,23 +18,29 @@ export default async function ClientPortalAdminPage() {
   const clientPortalEnabled = isClientPortalEnabled();
 
   const supabase = createServiceClient();
-  const [orgsResult, applicationsResult] = await Promise.all([
-    supabase.from('organizations').select('id, name'),
-    supabase
-      .from('permit_applications')
-      .select('id, org_id, project_title, project_address')
-      .order('created_at', { ascending: false }),
+  // Health-check audit finding: both queries below had no .range() pagination,
+  // so they silently truncated at PostgREST's default 1000-row cap once the
+  // platform grew past 1000 organizations/applications -- same class of bug
+  // fixed in app/admin/page.tsx and lib/jurisdictions/public-directory.ts.
+  // Shared implementation: lib/supabase/paginate.ts.
+  const [orgs, applications] = await Promise.all([
+    fetchAllRows<{ id: string; name: string }>(
+      (from, to) => supabase.from('organizations').select('id, name').order('id').range(from, to),
+      'organizations'
+    ),
+    fetchAllRows<{ id: string; org_id: string; project_title: string; project_address: string }>(
+      (from, to) =>
+        supabase
+          .from('permit_applications')
+          .select('id, org_id, project_title, project_address')
+          .order('created_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      'applications'
+    ),
   ]);
 
-  if (orgsResult.error) {
-    throw new Error(`Failed to load organizations: ${orgsResult.error.message}`);
-  }
-  if (applicationsResult.error) {
-    throw new Error(`Failed to load applications: ${applicationsResult.error.message}`);
-  }
-
-  const orgNameById = new Map((orgsResult.data ?? []).map((org) => [org.id, org.name]));
-  const applications = applicationsResult.data ?? [];
+  const orgNameById = new Map(orgs.map((org) => [org.id, org.name]));
 
   // N+1 across project 2 (one listTokensForApplication call per
   // application) -- acceptable for now: this is an internal, low-volume

@@ -134,6 +134,29 @@ then `npm run test:sql` (all 18 files pass unchanged -- indexes alone don't
 change any query's result set, only its plan, so no test file needed
 touching).
 
+Extended to 42 (health-check audit, round 2): adds
+`org_subscriptions.stripe_event_created_at`, closing a gap in
+`lib/billing/subscriptions.ts`'s webhook handler -- Stripe's delivery is
+at-least-once but explicitly *not* ordered, and `upsertOrgSubscription()`
+previously upserted unconditionally on every event keyed only by `org_id`,
+so an older, out-of-order event could overwrite a newer one's state. The
+handler now compares the incoming event's own `.created` timestamp against
+this column before writing, skipping (and logging) a stale write instead of
+applying it. Rollback drops the column.
+
+Extended to 43 (health-check audit, round 2): adds a
+`before insert on application_documents` trigger
+(`enforce_application_documents_total_bytes()`) that re-checks the
+100 MB-per-application total inside the database, serialized per
+`application_id` via `pg_advisory_xact_lock`. `app/api/documents/route.ts`
+previously enforced `MAX_APPLICATION_TOTAL_BYTES` purely in application
+code with a check-then-act `SELECT sum(byte_size)` followed by uploads/
+inserts -- two concurrent requests for the same application could each read
+a sum still under the cap and both proceed, jointly exceeding it. The
+route's own check is left in place as a fast pre-upload rejection; this
+trigger is the actual source of truth. Rollback drops the trigger and its
+function, restoring the pre-43 check-then-act-only behavior.
+
 ## Re-running this test
 
 ```bash

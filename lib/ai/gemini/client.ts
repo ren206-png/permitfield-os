@@ -22,7 +22,7 @@
 // extract-permit-data.ts/audit-permit-data.ts are deliberately untouched
 // (GATE_AI_1_FINDINGS.md question 2's default).
 
-import { GEMINI_ASSISTANT_MODEL_ID } from '../config';
+import { EXTERNAL_API_TIMEOUT_MS, GEMINI_ASSISTANT_MODEL_ID } from '../config';
 
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -74,20 +74,32 @@ export async function generateContent(
     throw new Error('generateContent requires a non-empty userPrompt.');
   }
 
-  const response = await fetch(
-    `${GEMINI_API_BASE_URL}/models/${encodeURIComponent(modelId)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      }),
+  // AbortSignal.timeout: an unbounded fetch would otherwise hang the caller
+  // (and any Inngest step wrapping it) indefinitely on a stalled upstream
+  // connection -- see EXTERNAL_API_TIMEOUT_MS's own header comment.
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GEMINI_API_BASE_URL}/models/${encodeURIComponent(modelId)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        }),
+        signal: AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS),
+      }
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error(`Gemini generateContent API call timed out after ${EXTERNAL_API_TIMEOUT_MS}ms.`);
     }
-  );
+    throw err;
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '<unreadable body>');

@@ -1,0 +1,15 @@
+-- Health-check audit finding: lib/billing/subscriptions.ts's upsertOrgSubscription()
+-- only ever keyed its upsert on org_id, with no defense against Stripe's
+-- explicitly-at-least-once-but-NOT-ordered webhook delivery -- two events for the
+-- same org processed out of order (e.g. an older customer.subscription.updated
+-- redelivered after a newer one already landed) could silently clobber fresher
+-- subscription state with stale data. This column lets the application layer
+-- compare an incoming event's own `.created` timestamp against the last event that
+-- actually wrote this row, and skip the write if the incoming one is stale --
+-- see lib/billing/subscriptions.ts's upsertOrgSubscription() for the read-compare-
+-- write logic. Nullable with no default: existing rows (created via
+-- create_organization_with_owner(), never via a Stripe webhook) have no prior
+-- Stripe event to compare against, so NULL correctly means "always accept the
+-- next write" rather than defaulting to some fabricated epoch that could wrongly
+-- reject a legitimate first webhook event.
+alter table org_subscriptions add column stripe_event_created_at timestamptz;

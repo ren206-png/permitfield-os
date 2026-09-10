@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { fetchAllRows } from '@/lib/supabase/paginate';
 
 // LP workstream, Phase 3 (jurisdiction SEO pages). This is the one module
 // allowed to read jurisdiction/permit-type data on behalf of an
@@ -86,20 +87,42 @@ export type PublicPermitType = {
 // tier discipline components/coverage-badge.tsx enforces in-product).
 const PUBLIC_COVERAGE_LEVELS: PublicCoverageLevel[] = ['verified', 'assisted'];
 
+// Same silent-truncation risk documented and fixed in lib/supabase/paginate.ts
+// (shared implementation used here): PostgREST's default `db max rows`
+// config caps a single .select() response at 1000 rows with no error and no
+// indication anything was cut off. This module's own comment above already
+// flags the dataset as "small... today" (4 jurisdiction rows in
+// supabase/seed.sql) but it's the backing data source for a growing public
+// SEO jurisdiction directory -- expanding jurisdiction-by-jurisdiction is the
+// explicit product direction (JURISDICTION_EXPANSION_SCOPE.md), so a query
+// that silently drops rows past 1000 would silently de-list
+// jurisdictions/permit-types from the public index with no error surfaced
+// anywhere. Both call sites below already have a deterministic ORDER BY
+// (province_code+municipality) or an implicit one (jurisdiction_id IN filter
+// has no required order since every returned id is later only used to build
+// a Set).
+
 export async function getPublicJurisdictions(): Promise<PublicJurisdiction[]> {
   const supabase = await getReadClient();
-  const { data, error } = await supabase
-    .from('public_jurisdictions')
-    .select('id, province_code, municipality, region, coverage_level, portal_url')
-    .in('coverage_level', PUBLIC_COVERAGE_LEVELS)
-    .order('province_code', { ascending: true })
-    .order('municipality', { ascending: true });
+  const data = await fetchAllRows<{
+    id: string;
+    province_code: string;
+    municipality: string;
+    region: string | null;
+    coverage_level: string;
+    portal_url: string | null;
+  }>((from, to) =>
+    supabase
+      .from('public_jurisdictions')
+      .select('id, province_code, municipality, region, coverage_level, portal_url')
+      .in('coverage_level', PUBLIC_COVERAGE_LEVELS)
+      .order('province_code', { ascending: true })
+      .order('municipality', { ascending: true })
+      .range(from, to),
+    'public jurisdictions'
+  );
 
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []).map((row) => ({
+  return data.map((row) => ({
     id: row.id,
     provinceCode: row.province_code,
     municipality: row.municipality,
@@ -139,19 +162,19 @@ export async function getPublicJurisdictionsForIndex(): Promise<PublicJurisdicti
   }
 
   const supabase = await getReadClient();
-  const { data, error } = await supabase
-    .from('public_permit_types')
-    .select('jurisdiction_id')
-    .in(
-      'jurisdiction_id',
-      jurisdictions.map((j) => j.id)
-    );
+  const data = await fetchAllRows<{ jurisdiction_id: string }>((from, to) =>
+    supabase
+      .from('public_permit_types')
+      .select('jurisdiction_id')
+      .in(
+        'jurisdiction_id',
+        jurisdictions.map((j) => j.id)
+      )
+      .range(from, to),
+    'public permit types for jurisdiction index'
+  );
 
-  if (error) {
-    throw error;
-  }
-
-  const idsWithContent = new Set((data ?? []).map((row) => row.jurisdiction_id as string));
+  const idsWithContent = new Set(data.map((row) => row.jurisdiction_id));
 
   return jurisdictions.map((j) => ({
     ...j,

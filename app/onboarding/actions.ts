@@ -44,6 +44,25 @@ export async function createOrganizationAction(
     return { error: 'Province code must be 2 letters (e.g. ON, AB).' };
   }
 
+  // Health-check audit finding: app/onboarding/page.tsx checks for an
+  // existing org_members row before rendering the form, but that's a
+  // render-time check only -- it doesn't stop this Server Action from being
+  // invoked directly (a second submit from a stale/double-submitted form, a
+  // second browser tab that already had the form open, or a hand-built
+  // POST). create_organization_with_owner() isn't idempotent by user, so an
+  // already-onboarded user hitting this action a second time would create a
+  // redundant second organization with themselves as owner. Re-check here,
+  // inside the action itself, mirroring the page's own query exactly.
+  const { data: existingMembership } = await supabase
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle();
+  if (existingMembership) {
+    redirect('/applications');
+  }
+
   const { data: orgId, error: rpcError } = await supabase.rpc('create_organization_with_owner', {
     org_name: orgName,
   });
@@ -64,6 +83,12 @@ export async function createOrganizationAction(
     // (the RPC isn't idempotent by name and would create a second org);
     // send them to the applications list, which will itself prompt for a
     // contractor before allowing a new application (see applications/new).
+    // Health-check audit finding: this failure was previously swallowed
+    // silently (redirect with no log line at all), unlike the identical
+    // "log then continue" pattern app/(app)/projects/new/actions.ts uses for
+    // its own non-fatal writeAuditLog() failure -- logged now so a pattern
+    // of failed first-contractor inserts is actually visible somewhere.
+    console.error('Failed to create first contractor during onboarding:', contractorError, { orgId });
     redirect('/applications');
   }
 

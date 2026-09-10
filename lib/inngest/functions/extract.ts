@@ -128,7 +128,17 @@ export const permitExtract = inngest.createFunction(
       return extractPermitData(client, preparedDocuments);
     });
 
-    const persisted = await step.run('persist-extraction', async () => {
+    // Health-check audit finding: this used to be one `persist-extraction`
+    // step.run() doing both the `extractions` insert AND the subsequent
+    // permit_applications status update in the same callback. step.run()
+    // only memoizes on a successful return -- if the status update threw
+    // after the insert already succeeded, Inngest's retry re-ran the whole
+    // callback and inserted a second `extractions` row (no unique
+    // constraint on this table, confirmed via
+    // 20260806000007_extractions.sql). Splitting the insert into its own
+    // step means a retry replays that step's memoized result instead of
+    // re-inserting.
+    const persisted = await step.run('insert-extraction-row', async () => {
       // Deterministic, model-free currency conversion (SS7 adversarial check
       // #7): the model only ever supplies the raw printed string via
       // estimated_job_value_raw; parseCurrencyToCents does the arithmetic
@@ -175,10 +185,16 @@ export const permitExtract = inngest.createFunction(
         throw new Error(`Failed to insert extractions row: ${insertError?.message ?? 'no row returned'}`);
       }
 
+      return { extractionId: inserted.id as string };
+    });
+
+    await step.run('update-application-status', async () => {
       // Fail closed (global engineering rule + SS7 check #6): a validation
       // failure never leaves the application looking like extraction is
       // still pending -- it's routed to extraction_failed so a human/retry
-      // path is triggered, and never silently treated as "extracted".
+      // path is triggered, and never silently treated as "extracted". A
+      // plain .update() is naturally retry-safe (setting the same status
+      // twice is a no-op).
       const nextStatus = extraction.zodValid ? 'extracted' : 'extraction_failed';
       const { error: statusError } = await supabase
         .from('permit_applications')
@@ -187,8 +203,6 @@ export const permitExtract = inngest.createFunction(
       if (statusError) {
         throw new Error(`Failed to set status=${nextStatus}: ${statusError.message}`);
       }
-
-      return { extractionId: inserted.id as string };
     });
 
     await step.sendEvent('emit-extracted-event', {

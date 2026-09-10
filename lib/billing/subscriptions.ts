@@ -185,7 +185,34 @@ export async function handleStripeWebhookEvent(rawBody: string, signature: strin
       status: subscription.status,
       currentPeriodEnd: subscription.items.data[0]?.current_period_end ?? null,
       trialEndsAt: subscription.trial_end,
+      eventCreated: event.created,
     });
+    return;
+  }
+
+  // invoice.payment_failed's event.data.object is a Stripe.Invoice, NOT a
+  // Stripe.Subscription -- an invoice's own `.metadata` is the invoice's
+  // metadata, never the subscription's org_id/tier snapshot. That snapshot
+  // instead lives at `invoice.parent.subscription_details.metadata` (only
+  // populated for invoices created on/after 2023-06-29, per Stripe's own
+  // type docs). This must be handled as its own branch, before the
+  // customer.subscription.* cast below, or `orgId`/`tierMeta` silently
+  // resolve to undefined and the dedicated log line for this event type
+  // never runs (found in the health-check audit: the old code cast every
+  // non-checkout event to Stripe.Subscription unconditionally, so this
+  // branch was unreachable dead code). No separate upsert here -- Stripe
+  // also sends customer.subscription.updated for the same failure (status
+  // transitions to 'past_due'), which the branch below mirrors. Dunning
+  // emails / an in-app banner are explicitly out of scope for this build
+  // (BILLING_PROPOSAL.md §3), future work.
+  if (event.type === 'invoice.payment_failed') {
+    const invoice = event.data.object as Stripe.Invoice;
+    const subscriptionDetails =
+      invoice.parent?.type === 'subscription_details' ? invoice.parent.subscription_details : null;
+    const orgId = subscriptionDetails?.metadata?.org_id;
+    const subscriptionRef = subscriptionDetails?.subscription;
+    const subscriptionId = typeof subscriptionRef === 'string' ? subscriptionRef : subscriptionRef?.id;
+    console.error('Stripe webhook: invoice.payment_failed', { orgId, subscriptionId, invoiceId: invoice.id });
     return;
   }
 
@@ -219,17 +246,8 @@ export async function handleStripeWebhookEvent(rawBody: string, signature: strin
     status: event.type === 'customer.subscription.deleted' ? 'canceled' : subscription.status,
     currentPeriodEnd: subscription.items.data[0]?.current_period_end ?? null,
     trialEndsAt: subscription.trial_end,
+    eventCreated: event.created,
   });
-
-  // invoice.payment_failed is handled by the customer.subscription.updated
-  // event Stripe also sends for the same failure (status transitions to
-  // 'past_due'), so no separate branch is needed here -- this function
-  // still logs it for operator visibility. Dunning emails / an in-app
-  // banner are explicitly out of scope for this build (BILLING_PROPOSAL.md
-  // §3), future work.
-  if (event.type === 'invoice.payment_failed') {
-    console.error('Stripe webhook: invoice.payment_failed', { orgId, subscriptionId: subscription.id });
-  }
 }
 
 interface UpsertOrgSubscriptionInput {
@@ -240,6 +258,13 @@ interface UpsertOrgSubscriptionInput {
   status: string;
   currentPeriodEnd: number | null;
   trialEndsAt: number | null;
+  // Unix seconds from the Stripe Event's own `.created` field (NOT
+  // client-observed time) -- Stripe guarantees at-least-once delivery, not
+  // ordered delivery, so two events for the same org can arrive out of
+  // order. Compared against the stored row's own last-processed event
+  // timestamp (stripe_event_created_at) before overwriting, so a stale
+  // retry/out-of-order event can never clobber fresher subscription state.
+  eventCreated: number;
 }
 
 async function upsertOrgSubscription(
@@ -253,6 +278,38 @@ async function upsertOrgSubscription(
       // fail closed to 'canceled' rather than let an unrecognized status
       // write fail the whole upsert.
       'canceled';
+
+  // Out-of-order guard: if a row already exists for this org and it was
+  // last updated by a Stripe event created at or after this one, this event
+  // is a stale redelivery/race and must not overwrite the fresher row.
+  // Read-then-write here is a best-effort check (not a DB-level constraint,
+  // since org_subscriptions has no per-row version/xmin exposed to
+  // PostgREST) -- acceptable because the two realistic ways this fires
+  // (Stripe's own at-least-once retries, or two closely-spaced real events)
+  // both settle to the correct final state on the *next* delivery of the
+  // newer event, whereas silently applying stale data has no such
+  // self-correction.
+  const { data: existing, error: fetchError } = await supabase
+    .from('org_subscriptions')
+    .select('stripe_event_created_at')
+    .eq('org_id', input.orgId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(`Failed to read existing org_subscriptions row for org ${input.orgId}: ${fetchError.message}`);
+  }
+
+  if (existing?.stripe_event_created_at) {
+    const existingEventCreated = Math.floor(new Date(existing.stripe_event_created_at).getTime() / 1000);
+    if (existingEventCreated >= input.eventCreated) {
+      console.error('Stripe webhook: skipping stale/out-of-order event for org_subscriptions', {
+        orgId: input.orgId,
+        incomingEventCreated: input.eventCreated,
+        existingEventCreated,
+      });
+      return;
+    }
+  }
 
   // A real .upsert() (onConflict: org_id), not .update() -- an .update() with
   // no matching row silently affects zero rows and returns no error, so a
@@ -271,6 +328,7 @@ async function upsertOrgSubscription(
       status: mirroredStatus,
       current_period_end: input.currentPeriodEnd ? new Date(input.currentPeriodEnd * 1000).toISOString() : null,
       trial_ends_at: input.trialEndsAt ? new Date(input.trialEndsAt * 1000).toISOString() : null,
+      stripe_event_created_at: new Date(input.eventCreated * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'org_id' }
