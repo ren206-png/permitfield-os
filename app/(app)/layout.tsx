@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
-import { isAdminPanelEnabled, isBillingEnabled } from '@/lib/flags';
+import { isAdminPanelEnabled, isBillingEnabled, isFailureNotificationsEnabled } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
+import { createClient } from '@/lib/supabase/server';
 
 // Shared chrome for every authenticated, org-scoped page. requireOrgContext()
 // is the single gate every (app) route passes through: no session -> /login,
@@ -15,7 +16,7 @@ import { signOutAction } from '@/app/actions/auth';
 // a prop or context provider that could go stale across a client-side
 // navigation.
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const { orgName } = await requireOrgContext();
+  const { orgId, orgName } = await requireOrgContext();
   // Cheap enough to check on every (app) page load (one env var read plus a
   // getUser() call that's already been made by requireOrgContext() above --
   // requireUser() inside isCurrentUserAdmin() re-hits auth.getUser(), same
@@ -30,6 +31,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // lives in app/(app)/settings/billing/actions.ts instead.
   const showBillingLink = isBillingEnabled();
 
+  // Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS, see
+  // lib/flags.ts's isFailureNotificationsEnabled() header comment). Flag
+  // checked first, same as showAdminLink above -- an environment with the
+  // flag off never queries the notifications table at all, byte-identical
+  // to before this build. A fresh createClient() call rather than threading
+  // one down from requireOrgContext(), matching this file's own header
+  // comment's "re-derive from the DB, don't thread trust through props"
+  // habit; a `head: true` count avoids fetching any row body just to get a
+  // number, and needs no pagination guard the way a real .select() would
+  // (PostgREST's 1000-row cap only bounds returned rows, not a count).
+  let unreadNotificationCount = 0;
+  if (isFailureNotificationsEnabled()) {
+    const supabase = await createClient();
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('read_at', null);
+    unreadNotificationCount = count ?? 0;
+  }
+
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
       <header className="border-b border-zinc-200 bg-white">
@@ -42,6 +64,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <Link href="/applications" className="hover:text-zinc-900">
                 Applications
               </Link>
+              {isFailureNotificationsEnabled() && (
+                <Link href="/notifications" className="hover:text-zinc-900">
+                  Notifications
+                  {unreadNotificationCount > 0 && (
+                    <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-white">
+                      {unreadNotificationCount}
+                    </span>
+                  )}
+                </Link>
+              )}
               {showBillingLink && (
                 <Link href="/settings/billing" className="hover:text-zinc-900">
                   Billing
