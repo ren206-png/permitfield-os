@@ -130,7 +130,15 @@ begin
     values ('20000000-0000-0000-0000-00000000000a', 'assistant', 'gemini', 'test-model', 'succeeded', 1, 1);
     raise exception 'FAIL: authenticated was able to INSERT an ai_jobs row (should be service_role only)';
   exception
-    when insufficient_privilege or others then
+    -- Deliberately NOT "or others" here (see notifications.test.sql's own
+    -- version of this same assertion for the full reasoning) -- `others`
+    -- would also match the `raise exception 'FAIL...'` line immediately
+    -- above on the success path, silently turning a real test failure into
+    -- a printed PASS. `authenticated` has neither an INSERT policy nor an
+    -- INSERT table grant on ai_jobs (this migration's header comment), so
+    -- this reliably raises 42501 (insufficient_privilege) -- matching that
+    -- one condition precisely is both sufficient and safer.
+    when insufficient_privilege then
       raise notice 'PASS: INSERT on ai_jobs correctly rejected for authenticated (%)', sqlerrm;
   end;
 end $$;
@@ -220,7 +228,15 @@ begin
     where id = '62000000-0000-0000-0000-00000000000a';
     raise exception 'FAIL: org A owner was able to attribute a decision to a different user (forged reviewer_user_id)';
   exception
-    when insufficient_privilege or others then
+    -- Deliberately NOT "or others" here, same reasoning as the INSERT
+    -- assertion above and notifications.test.sql's precedent -- `others`
+    -- would also match the `raise exception 'FAIL...'` line immediately
+    -- above on the success path. ai_human_reviews_decide's WITH CHECK
+    -- (reviewer_user_id = auth.uid()) rejects the forged new row, which
+    -- reliably raises 42501 (insufficient_privilege, "new row violates
+    -- row-level security policy"), so matching that one condition precisely
+    -- is both sufficient and safer.
+    when insufficient_privilege then
       raise notice 'PASS: forged reviewer_user_id update correctly rejected (%)', sqlerrm;
   end;
 end $$;
