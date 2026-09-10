@@ -296,7 +296,12 @@ const matrix: PermissionMatrix = {
     org_members: READ_ONLY_LOG,
     contractors: FULL,
     permit_applications: FULL,
-    application_documents: FULL,
+    // Health-check audit round 3 fix: this was FULL (including 'update'),
+    // but application_documents has no UPDATE policy for anyone at the DB
+    // layer (uploads are immutable) -- see ownerAndOrgOwnerGrants's own
+    // comment above making the same point. permit_manager's real ceiling
+    // here matches that same-tier grant: create/read/archive, not update.
+    application_documents: ['create', 'read', 'archive'],
     extractions: SELF_LOG,
     audits: SELF_LOG,
     audit_findings_review: REVIEW,
@@ -323,7 +328,13 @@ const matrix: PermissionMatrix = {
     organizations: READ_ONLY_LOG,
     contractors: ['create', 'read', 'update'],
     permit_applications: ['create', 'read', 'update'],
-    application_documents: ['create', 'read', 'update'],
+    // Health-check audit round 3 fix: this was ['create', 'read', 'update'],
+    // but application_documents has no UPDATE policy for anyone at the DB
+    // layer (uploads are immutable) -- see ownerAndOrgOwnerGrants's own
+    // comment above making the same point. permit_coordinator's real
+    // ceiling here matches that same-tier grant: create/read/archive, not
+    // update.
+    application_documents: ['create', 'read', 'archive'],
     extractions: READ_ONLY_LOG,
     audits: READ_ONLY_LOG,
     audit_findings_review: REVIEW,

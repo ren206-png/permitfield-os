@@ -86,6 +86,17 @@ export async function createProjectAction(
   // Live count, not a cached figure -- same "never trust stale state for a
   // limit check" discipline requireOrgContext's own header comment
   // documents for org membership.
+  //
+  // Health-check audit round 3 finding: this check-then-act count, on its
+  // own, is a race -- two concurrent createProjectAction calls for the same
+  // org can each read a count still under the limit and both proceed,
+  // jointly exceeding it. Kept here anyway as a fast, pre-RPC rejection for
+  // the common non-racing case (avoids a wasted RPC round trip), but it is
+  // no longer the enforcement: create_project_with_intake() below now
+  // re-checks the same limit atomically under an advisory lock (migration
+  // 20260806000044) and is the actual source of truth, same
+  // precheck-vs-source-of-truth split as app/api/documents/route.ts's own
+  // total-bytes check plus its DB-level trigger (20260806000043).
   const { count, error: countError } = await supabase
     .from('projects')
     .select('id', { count: 'exact', head: true })
@@ -138,9 +149,19 @@ export async function createProjectAction(
     p_city: data.city ?? null,
     p_province_code: data.provinceCode ?? null,
     p_postal_code: data.postalCode ?? null,
+    p_max_active_projects: maxActiveProjects,
   });
 
   if (rpcError) {
+    // The DB-level recheck (migration 20260806000044) lost the race the
+    // precheck above missed -- surface the same friendly, limit-specific
+    // message a synchronous precheck failure would have, rather than the
+    // raw Postgres exception text.
+    if (rpcError.message.includes('active_project_limit_reached')) {
+      return {
+        error: `This organization has reached its limit of ${maxActiveProjects} active projects.`,
+      };
+    }
     return { error: `Failed to create project: ${rpcError.message}` };
   }
 

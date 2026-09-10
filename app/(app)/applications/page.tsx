@@ -4,6 +4,27 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
+import { fetchAllRows } from '@/lib/supabase/paginate';
+
+interface JurisdictionRow {
+  municipality: string;
+  province_code: string;
+  coverage_level: string;
+}
+interface PermitTypeRow {
+  title: string;
+  jurisdictions: JurisdictionRow | JurisdictionRow[] | null;
+}
+interface ApplicationListRow {
+  id: string;
+  project_title: string;
+  project_address: string;
+  status: string;
+  estimated_job_value_cents: number | null;
+  currency_code: string;
+  created_at: string;
+  permit_types: PermitTypeRow | PermitTypeRow[] | null;
+}
 
 export default async function ApplicationsPage() {
   const { orgId } = await requireOrgContext();
@@ -15,18 +36,28 @@ export default async function ApplicationsPage() {
   // own and doesn't rely on a reader knowing RLS exists, matching how
   // app/api/documents/route.ts still re-derives orgId from a lookup rather
   // than trusting a client-supplied value.
-  const { data: applications, error } = await supabase
-    .from('permit_applications')
-    .select(
-      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
-       permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
-    )
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load applications: ${error.message}`);
-  }
+  //
+  // Health-check audit round 3 finding: a plain .select() here has no
+  // .range()/pagination guard, so any org with more than PostgREST's default
+  // 1000-row cap (`db max rows`) would have silently had its oldest
+  // applications cut off the list with no error -- the exact failure mode
+  // lib/supabase/paginate.ts's header comment documents and that app/admin/
+  // page.tsx and lib/jurisdictions/public-directory.ts already guard against.
+  // fetchAllRows loops .range() pages (ordered by created_at, same order as
+  // before) until a short page confirms there's no more data.
+  const applications = await fetchAllRows<ApplicationListRow>(
+    (from, to) =>
+      supabase
+        .from('permit_applications')
+        .select(
+          `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
+           permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
+        )
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .range(from, to),
+    'applications'
+  );
 
   return (
     <div>

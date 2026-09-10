@@ -446,4 +446,77 @@ begin
   raise notice 'PASS: plain member role can insert a clients row (is_org_member-gated, unlike taxonomies)';
 end $$;
 
+-- === create_project_with_intake()'s p_max_active_projects guard
+-- (20260806000044, health-check audit round 3 finding): the RPC now
+-- re-checks projects.active_max itself, under an advisory lock, rather than
+-- trusting createProjectAction's own separate SELECT count(*) precheck --
+-- see that migration's header comment for the race the two-step
+-- check-then-act version had. p_max_active_projects := 0 guarantees the
+-- guard fires regardless of how many active projects org A already has
+-- from earlier sections in this file (a live count can never be negative),
+-- proving the exception path itself, not a specific count. Same "this is
+-- code-reviewed single-connection-transaction safety, not a live
+-- concurrency simulation" caveat permit_status_machine.test.sql's SS11
+-- gives for its own advisory-lock-guarded check.
+do $$
+begin
+  begin
+    perform create_project_with_intake(
+      p_org_id := '20000000-0000-0000-0000-00000000000a',
+      p_title := 'FAIL: should be rejected by the active_max guard',
+      p_description := null,
+      p_taxonomy_id := null,
+      p_property_owner_name := null,
+      p_applicant_name := null,
+      p_status := 'draft',
+      p_client_name := null,
+      p_client_email := null,
+      p_client_phone := null,
+      p_address_line1 := null,
+      p_address_line2 := null,
+      p_city := null,
+      p_province_code := null,
+      p_postal_code := null,
+      p_max_active_projects := 0
+    );
+    raise exception 'FAIL: create_project_with_intake created a project despite p_max_active_projects := 0';
+  exception
+    when check_violation then
+      if sqlerrm not like 'active_project_limit_reached%' then
+        raise exception 'FAIL: expected active_project_limit_reached, got a different check_violation: %', sqlerrm;
+      end if;
+      raise notice 'PASS: create_project_with_intake rejects when the active-project count already meets p_max_active_projects (%)', sqlerrm;
+  end;
+end $$;
+
+-- p_max_active_projects omitted entirely (defaults to null) still succeeds
+-- -- confirms existing callers that don't pass the new parameter (and any
+-- caller intentionally requesting "no limit") are unaffected by this guard.
+do $$
+declare
+  v_result record;
+begin
+  select * into v_result from create_project_with_intake(
+    p_org_id := '20000000-0000-0000-0000-00000000000a',
+    p_title := 'PASS: no limit passed, guard skipped',
+    p_description := null,
+    p_taxonomy_id := null,
+    p_property_owner_name := null,
+    p_applicant_name := null,
+    p_status := 'draft',
+    p_client_name := null,
+    p_client_email := null,
+    p_client_phone := null,
+    p_address_line1 := null,
+    p_address_line2 := null,
+    p_city := null,
+    p_province_code := null,
+    p_postal_code := null
+  );
+  if v_result.project_id is null then
+    raise exception 'FAIL: create_project_with_intake did not create a project when p_max_active_projects was omitted';
+  end if;
+  raise notice 'PASS: create_project_with_intake still succeeds when p_max_active_projects is omitted (guard skipped, null = unlimited)';
+end $$;
+
 rollback;
