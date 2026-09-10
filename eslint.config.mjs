@@ -112,11 +112,40 @@ const stripeClientRestriction = {
   },
 };
 
+// Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS), same
+// shape and mechanism as stripeClientRestriction above (a no-restricted-
+// imports rule scoped by files/ignores, using `paths` since `resend` is a
+// bare package name). Only lib/email/resend-client.ts may import it -- every
+// other file, including app/** and lib/inngest/functions/notify-on-failure.ts
+// itself, is forbidden, so this build fails if a future author wires
+// RESEND_API_KEY into a route handler, Server Action, or any other
+// end-user-facing module. Same "only one designated module reads this
+// credential" discipline as RESEND_API_KEY's own .env.example comment.
+const resendClientRestriction = {
+  files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+  ignores: ["lib/email/resend-client.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "resend",
+            message:
+              "The resend package (RESEND_API_KEY) may only be imported from lib/email/resend-client.ts -- see that module's header comment.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   clientPortalServiceClientRestriction,
   geminiClientRestriction,
+  resendClientRestriction,
   stripeClientRestriction,
   // Override default ignores of eslint-config-next.
   globalIgnores([

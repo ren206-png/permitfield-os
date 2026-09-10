@@ -300,3 +300,27 @@ export function isOrgDocumentRetrievalEnabled(): boolean {
 export function isBillingEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_BILLING');
 }
+
+// Failure-notification system. Gates lib/inngest/functions/notify-on-failure.ts,
+// the sole subscriber to three events that have existed since Phase 2/4 and
+// were emitted unconditionally on both success and failure the whole time --
+// 'permit/application.extracted' (zodValid), 'permit/application.audited'
+// (audited), 'permit/application.pdf_generated' (succeeded). Each of those
+// three events' own header comment in lib/inngest/client.ts already named
+// "Phase 5's UI/notifications" as the intended future consumer; this flag is
+// that consumer's on/off switch, not a new capability bolted on afterward.
+//
+// One flag gates two coordinated effects, same shape as isBillingEnabled()
+// above: (1) the in-app half -- notify-on-failure's writeNotification() call
+// is skipped entirely when off, so the notifications table only ever
+// receives rows in an environment that opted in, even though its schema and
+// RLS (20260806000044_notifications.sql) exist regardless of this flag's
+// value, same as every other flag in this file; (2) the email half -- when
+// off, lib/email/resend-client.ts is never reached, so RESEND_API_KEY need
+// not even be configured. Off means the three events above still fire
+// exactly as they always have (nothing upstream changes), they simply reach
+// no subscriber, byte-identical to the pre-existing "declared ahead of its
+// consumer" state.
+export function isFailureNotificationsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_FAILURE_NOTIFICATIONS');
+}
