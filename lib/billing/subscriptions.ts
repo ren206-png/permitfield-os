@@ -319,20 +319,36 @@ async function upsertOrgSubscription(
   // as if it had been applied. 20260806000040 already grants service_role
   // INSERT on this table specifically as "a defense-in-depth backfill path
   // for an org that predates this migration" -- this upsert is that path.
-  const { error } = await supabase.from('org_subscriptions').upsert(
-    {
-      org_id: input.orgId,
-      stripe_customer_id: input.stripeCustomerId,
-      stripe_subscription_id: input.stripeSubscriptionId,
-      tier: input.tier,
-      status: mirroredStatus,
-      current_period_end: input.currentPeriodEnd ? new Date(input.currentPeriodEnd * 1000).toISOString() : null,
-      trial_ends_at: input.trialEndsAt ? new Date(input.trialEndsAt * 1000).toISOString() : null,
-      stripe_event_created_at: new Date(input.eventCreated * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id' }
-  );
+  //
+  // Found while adding this module's own live test coverage: trial_ends_at
+  // is `not null` (20260806000040) with an insert-time-only default -- a
+  // Postgres column default only fills in for a column the INSERT statement
+  // *omits* entirely, never one explicitly set to NULL. subscription.
+  // trial_end is null for the overwhelming majority of real events (any
+  // subscription past its trial, or one that never had one), so
+  // unconditionally writing `trial_ends_at: null` here would throw a NOT
+  // NULL violation on literally every customer.subscription.updated/.deleted
+  // event for such a subscription -- caught immediately by the new test
+  // below sending a post-trial 'active' event, not a synthetic edge case.
+  // The key is now omitted entirely when trialEndsAt is null, so an UPDATE
+  // leaves the org's existing trial_ends_at (its real, historical trial-end
+  // date from signup) untouched, and a backfill INSERT falls through to the
+  // column's own 14-day default instead.
+  const upsertPayload: Record<string, unknown> = {
+    org_id: input.orgId,
+    stripe_customer_id: input.stripeCustomerId,
+    stripe_subscription_id: input.stripeSubscriptionId,
+    tier: input.tier,
+    status: mirroredStatus,
+    current_period_end: input.currentPeriodEnd ? new Date(input.currentPeriodEnd * 1000).toISOString() : null,
+    stripe_event_created_at: new Date(input.eventCreated * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (input.trialEndsAt) {
+    upsertPayload.trial_ends_at = new Date(input.trialEndsAt * 1000).toISOString();
+  }
+
+  const { error } = await supabase.from('org_subscriptions').upsert(upsertPayload, { onConflict: 'org_id' });
 
   if (error) {
     throw new Error(`Failed to upsert org_subscriptions for org ${input.orgId}: ${error.message}`);

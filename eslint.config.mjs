@@ -53,17 +53,17 @@ const clientPortalServiceClientRestriction = {
 // path, so this build fails if a future author wires the Gemini key into a
 // route handler, Server Action, or any other end-user-facing module.
 //
-// Unlike clientPortalServiceClientRestriction, there is no separate
-// live-test-file exemption here: lib/ai/gemini/client.ts has no dedicated
-// test file yet (same as the existing Voyage client, lib/ai/embed.ts, which
-// also has none -- see that module's header for why: a thin REST wrapper
-// with no local logic to unit-test in isolation, exercised live via
-// eval/run.ts instead). If a future test needs one, add it to `ignores`
-// alongside lib/ai/router.ts at that time, following the exact precedent
-// set by clientPortalServiceClientRestriction's own test-file exemption.
+// Health-check audit follow-up: lib/ai/gemini/client.ts now has a dedicated
+// test file, lib/ai/gemini/client.test.ts (covering the
+// AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS) addition from that same
+// audit), added to `ignores` alongside lib/ai/router.ts, following the exact
+// precedent set by clientPortalServiceClientRestriction's own test-file
+// exemption above. lib/ai/embed.ts (the Voyage client) has no equivalent
+// import-boundary rule to exempt from -- it isn't gated by one, since
+// VOYAGE_API_KEY has no analogous single-module restriction in this file.
 const geminiClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/ai/router.ts"],
+  ignores: ["lib/ai/router.ts", "lib/ai/gemini/client.test.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -72,7 +72,7 @@ const geminiClientRestriction = {
           {
             group: ["**/gemini/client", "**/gemini/client.ts"],
             message:
-              "lib/ai/gemini/client.ts (the Gemini API client, GEMINI_API_KEY) may only be imported from lib/ai/router.ts -- see that module's header comment and GATE_AI_1_FINDINGS.md §H's KEY_LEAK scenario.",
+              "lib/ai/gemini/client.ts (the Gemini API client, GEMINI_API_KEY) may only be imported from lib/ai/router.ts or its own test file (lib/ai/gemini/client.test.ts) -- see that module's header comment and GATE_AI_1_FINDINGS.md §H's KEY_LEAK scenario.",
           },
         ],
       },
@@ -86,16 +86,25 @@ const geminiClientRestriction = {
 // relative-path module -- `patterns` (glob-matched relative/aliased
 // specifiers) can't match a bare package name, so this uses `paths`
 // instead, matching the specifier string exactly. Only
-// lib/billing/subscriptions.ts may import it -- every other file,
-// including app/**, is forbidden, whether by the "@/" alias or a direct
-// `from 'stripe'` import, so this build fails if a future author wires the
-// Stripe secret key into a route handler, Server Action, or any other
-// end-user-facing module. Same "only one designated module reads this
-// credential" discipline as STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own
-// .env.example comments.
+// lib/billing/subscriptions.ts (and, following the exact precedent
+// clientPortalServiceClientRestriction set above, its own live test file,
+// lib/billing/subscriptions.live.test.ts) may import it -- every other
+// file, including app/**, is forbidden, whether by the "@/" alias or a
+// direct `from 'stripe'` import, so this build fails if a future author
+// wires the Stripe secret key into a route handler, Server Action, or any
+// other end-user-facing module. The test-file exemption is narrow and
+// deliberate, not a loosening of the boundary: that file's whole job is
+// constructing real signed webhook payloads (via `stripe.webhooks.
+// generateTestHeaderString()`) to exercise handleStripeWebhookEvent()'s
+// actual signature-verification path, work that has to import the SDK
+// directly to build a valid `Stripe-Signature` header -- the same
+// "bypasses the module's own public functions to set up" reason
+// client-portal.live.test.ts's own header gives for its exemption. Same
+// "only one designated module reads this credential" discipline as
+// STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own .env.example comments.
 const stripeClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/billing/subscriptions.ts"],
+  ignores: ["lib/billing/subscriptions.ts", "lib/billing/subscriptions.live.test.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
