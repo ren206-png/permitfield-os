@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
-import { isAdminPanelEnabled, isBillingEnabled } from '@/lib/flags';
+import { isAdminPanelEnabled, isBillingEnabled, isDashboardEnabled } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -30,6 +30,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // comment), it just renders read-only for a non-owner. The owner gate
   // lives in app/(app)/settings/billing/actions.ts instead.
   const showBillingLink = isBillingEnabled();
+  // Same flag-only shape as showBillingLink above, not an access check --
+  // app/(app)/dashboard/page.tsx does its own can(orgId, 'analytics') check
+  // and renders LockedFeature for an org whose plan lacks it, exactly the
+  // "flag says the route exists, the page itself decides visibility"
+  // division of labor that page's own header comment documents.
+  const showDashboardLink = isDashboardEnabled();
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
@@ -64,7 +70,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           becomes a fixed-width left column) -- see AppSidebar's own header
           comment for why it can't just disappear below md instead. */}
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 md:flex-row md:gap-8">
-        <AppSidebar showBillingLink={showBillingLink} showAdminLink={showAdminLink} />
+        <AppSidebar showBillingLink={showBillingLink} showAdminLink={showAdminLink} showDashboardLink={showDashboardLink} />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 

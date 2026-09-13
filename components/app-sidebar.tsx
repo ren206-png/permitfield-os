@@ -16,6 +16,10 @@ interface AppSidebarProps {
    * this IS an access check, not just a flag, since there's no
    * "locked admin" page for a non-admin to land on. */
   showAdminLink: boolean;
+  /** isDashboardEnabled() -- same flag-only shape as showBillingLink; the
+   * 'analytics' entitlement gate lives in app/(app)/dashboard/page.tsx
+   * itself (renders LockedFeature rather than 404ing), not here. */
+  showDashboardLink: boolean;
 }
 
 // Left-hand feature navigation for the authenticated app shell. Replaces the
@@ -32,11 +36,17 @@ interface AppSidebarProps {
 // disappearing on mobile -- the old top nav had no mobile-specific handling
 // either, but a sidebar that vanishes below `md` with no fallback would be a
 // regression, not a lateral move.
-export function AppSidebar({ showBillingLink, showAdminLink }: AppSidebarProps) {
+export function AppSidebar({ showBillingLink, showAdminLink, showDashboardLink }: AppSidebarProps) {
   const pathname = usePathname();
 
   const links: SidebarLink[] = [
     { href: '/applications', label: 'Applications' },
+    // No flag gates this one, unlike the others below -- /clients is plain
+    // RLS-scoped, member-visible functionality (clients_select's policy is
+    // is_org_member(org_id), same as every other org-wide resource), not a
+    // gated feature.
+    { href: '/clients', label: 'Clients' },
+    ...(showDashboardLink ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),
   ];

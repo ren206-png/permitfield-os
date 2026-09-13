@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { SITE_URL } from "@/lib/seo";
+import { ToastProvider } from "@/components/toast/toast-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,7 +34,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Mounted once, at the true root -- covers every segment (the
+            marketing pages, (app), /admin, /login, /onboarding) rather than
+            duplicating it per-layout. See toast-provider.tsx's own header
+            comment for why this exists and why it's hand-rolled. */}
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }
