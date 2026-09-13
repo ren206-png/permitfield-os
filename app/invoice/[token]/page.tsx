@@ -58,9 +58,14 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     notFound();
   }
 
+  // invoice_contact_name/invoice_contact_email do exist on this table
+  // (supabase/migrations/20260806000044_org_tax_profiles.sql) -- selected
+  // here now, unlike this page's original `select('legal_name')`-only
+  // query, so the "how do I actually pay this" gap flagged below can be
+  // closed for any org that has filled them in, with no schema change.
   const { data: taxProfile } = await supabase
     .from('org_tax_profiles')
-    .select('legal_name')
+    .select('legal_name, invoice_contact_name, invoice_contact_email')
     .eq('org_id', orgId)
     .maybeSingle();
 
@@ -152,24 +157,35 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-medium text-zinc-900">Line items</h2>
         {lineItems.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="text-left text-zinc-500">
-                <th className="pb-2 font-normal">Description</th>
-                <th className="pb-2 font-normal">Qty</th>
-                <th className="pb-2 text-right font-normal">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((li, idx) => (
-                <tr key={idx} className="border-t border-zinc-100">
-                  <td className="py-2 text-zinc-900">{li.description}</td>
-                  <td className="py-2 text-zinc-600">{li.quantity}</td>
-                  <td className="py-2 text-right text-zinc-900">{li.total}</td>
+          // See app/(app)/estimates/[id]/page.tsx's matching comment for
+          // why this table is wrapped in overflow-x-auto.
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500">
+                  <th className="pb-2 font-normal">Description</th>
+                  <th className="pb-2 font-normal">Qty</th>
+                  <th className="pb-2 text-right font-normal">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lineItems.map((li, idx) => (
+                  <tr key={idx} className="border-t border-zinc-100">
+                    <td className="py-2 text-zinc-900">{li.description}</td>
+                    <td className="py-2 text-zinc-600">{li.quantity}</td>
+                    <td className="py-2 text-right text-zinc-900">{li.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : invoice.status === 'draft' ? (
+          // Same distinction app/estimate/[token]/page.tsx now draws --
+          // this branch is a defensive fallback per this file's own header
+          // comment (draft invoices never get a client-portal link issued),
+          // but if it's ever reached it should read as an ordinary
+          // not-ready state, not an error.
+          <p className="mt-2 text-sm text-zinc-500">This invoice is still being prepared.</p>
         ) : (
           <p className="mt-2 text-sm text-zinc-500">This invoice is not yet available for viewing.</p>
         )}
@@ -219,18 +235,29 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
       </div>
 
       {/*
-        No payment-instructions field exists anywhere in this schema today --
-        checked org_tax_profiles (20260806000044_org_tax_profiles.sql, full
-        column list) and invoices (20260806000047_invoices.sql) directly; the
-        closest analog it has is `org_tax_profiles.legal_name`/address, not a
-        "how to pay us" text field. Rather than inventing one, this is
-        surfaced as a plain, honest gap: an outstanding balance is shown
-        above, but this page has no "how to pay it" copy to render alongside
-        it. Flagged in this pass's own final report, not silently worked
-        around.
+        org_tax_profiles does have invoice_contact_name/invoice_contact_email
+        columns (20260806000044_org_tax_profiles.sql) -- a prior pass here
+        missed them and only selected `legal_name`, leaving this "how do I
+        actually pay this" line with no way to act on it. Now selected
+        above and rendered as a mailto: link when an email is on file;
+        falls back to the previous generic (non-actionable) copy for an org
+        that hasn't filled the contact fields in, rather than showing a
+        broken/empty link.
       */}
       {outstandingCents !== null && outstandingCents > 0n && (
-        <p className="mt-4 text-sm text-zinc-500">Contact {taxProfile?.legal_name ?? 'the sender'} for payment instructions.</p>
+        <p className="mt-4 text-sm text-zinc-500">
+          {taxProfile?.invoice_contact_email ? (
+            <>
+              Contact {taxProfile.invoice_contact_name ?? taxProfile.legal_name ?? 'us'} at{' '}
+              <a href={`mailto:${taxProfile.invoice_contact_email}`} className="underline hover:text-zinc-900">
+                {taxProfile.invoice_contact_email}
+              </a>{' '}
+              for payment instructions.
+            </>
+          ) : (
+            <>Contact {taxProfile?.legal_name ?? 'the sender'} for payment instructions.</>
+          )}
+        </p>
       )}
 
       {invoice.status !== 'draft' && (

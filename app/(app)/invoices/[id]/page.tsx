@@ -8,7 +8,9 @@ import { centsToDollarsString, multiplyCentsByFraction, parseDecimalQuantity } f
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
 import { InvoiceStatusBadge } from '@/components/invoice-status-badge';
 import { PaymentStatusBadge } from '@/components/payment-status-badge';
+import { ReminderJobStatusBadge } from '@/components/reminder-job-status-badge';
 import { LockedFeature } from '@/components/locked-feature';
+import { reminderKindLabel } from '@/lib/quotes-payments/reminder-labels';
 import { IssueInvoiceButton } from './issue-invoice-button';
 import { VoidInvoiceForm } from './void-invoice-form';
 import { RecordPaymentForm } from './record-payment-form';
@@ -168,6 +170,52 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     }
   }
 
+  // Reminder visibility -- same read as app/(app)/estimates/[id]/page.tsx,
+  // scoped to this invoice via target_kind = 'invoice'. See that file's
+  // matching comment (and reminder-labels.ts's header comment) for the
+  // "nothing creates a reminder_jobs row yet" caveat this inherits too.
+  const { data: reminderJobRows, error: reminderJobsError } = await supabase
+    .from('reminder_jobs')
+    .select('id, kind, status, send_after, cancel_reason')
+    .eq('org_id', orgId)
+    .eq('target_kind', 'invoice')
+    .eq('target_id', id)
+    .order('send_after', { ascending: true });
+  if (reminderJobsError) {
+    throw new Error(`Failed to load reminders: ${reminderJobsError.message}`);
+  }
+
+  const reminderJobIds = (reminderJobRows ?? []).map((job) => job.id);
+  const attemptsByJobId = new Map<
+    string,
+    Array<{ id: string; outcome: string; errorDetail: string | null; attemptedAt: string }>
+  >();
+  if (reminderJobIds.length > 0) {
+    const { data: attemptRows, error: attemptsError } = await supabase
+      .from('reminder_delivery_attempts')
+      .select('id, reminder_job_id, outcome, error_detail, attempted_at')
+      .eq('org_id', orgId)
+      .in('reminder_job_id', reminderJobIds)
+      .order('attempted_at', { ascending: false });
+    if (attemptsError) {
+      throw new Error(`Failed to load reminder delivery attempts: ${attemptsError.message}`);
+    }
+    for (const row of attemptRows ?? []) {
+      const list = attemptsByJobId.get(row.reminder_job_id) ?? [];
+      list.push({ id: row.id, outcome: row.outcome, errorDetail: row.error_detail, attemptedAt: row.attempted_at });
+      attemptsByJobId.set(row.reminder_job_id, list);
+    }
+  }
+
+  const reminderJobs = (reminderJobRows ?? []).map((job) => ({
+    id: job.id,
+    kind: job.kind,
+    status: job.status,
+    sendAfter: job.send_after,
+    cancelReason: job.cancel_reason,
+    attempts: attemptsByJobId.get(job.id) ?? [],
+  }));
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="flex items-start justify-between gap-4">
@@ -187,24 +235,28 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-medium text-zinc-900">Line items</h2>
         {lineItems.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="text-left text-zinc-500">
-                <th className="pb-2 font-normal">Description</th>
-                <th className="pb-2 font-normal">Qty</th>
-                <th className="pb-2 text-right font-normal">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((li, idx) => (
-                <tr key={idx} className="border-t border-zinc-100">
-                  <td className="py-2 text-zinc-900">{li.description}</td>
-                  <td className="py-2 text-zinc-600">{li.quantity}</td>
-                  <td className="py-2 text-right text-zinc-900">{li.total}</td>
+          // See app/(app)/estimates/[id]/page.tsx's matching comment for
+          // why this table is wrapped in overflow-x-auto.
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500">
+                  <th className="pb-2 font-normal">Description</th>
+                  <th className="pb-2 font-normal">Qty</th>
+                  <th className="pb-2 text-right font-normal">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lineItems.map((li, idx) => (
+                  <tr key={idx} className="border-t border-zinc-100">
+                    <td className="py-2 text-zinc-900">{li.description}</td>
+                    <td className="py-2 text-zinc-600">{li.quantity}</td>
+                    <td className="py-2 text-right text-zinc-900">{li.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="mt-2 text-sm text-zinc-500">No line items.</p>
         )}
@@ -284,6 +336,45 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           )}
         </div>
       )}
+
+      <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+        <h2 className="text-sm font-medium text-zinc-900">Reminders</h2>
+        {reminderJobs.length > 0 ? (
+          <ul className="mt-3 flex flex-col gap-3">
+            {reminderJobs.map((job) => (
+              <li key={job.id} className="border-t border-zinc-100 pt-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-zinc-900">{reminderKindLabel(job.kind)}</p>
+                    <p className="text-xs text-zinc-500">
+                      {job.status === 'canceled'
+                        ? `Canceled${job.cancelReason ? ` · ${job.cancelReason}` : ''}`
+                        : `Scheduled for ${new Date(job.sendAfter).toLocaleString()}`}
+                    </p>
+                  </div>
+                  <ReminderJobStatusBadge status={job.status} />
+                </div>
+                {job.attempts.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-1 pl-3">
+                    {job.attempts.map((attempt) => (
+                      <li key={attempt.id} className="text-xs text-zinc-600">
+                        <span className={attempt.outcome === 'success' ? 'text-emerald-700' : 'text-red-700'}>
+                          {attempt.outcome === 'success' ? 'Delivered' : 'Failed'}
+                        </span>
+                        {' · '}
+                        {new Date(attempt.attemptedAt).toLocaleString()}
+                        {attempt.errorDetail && ` · ${attempt.errorDetail}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-zinc-500">No reminders scheduled.</p>
+        )}
+      </div>
 
       <div className="mt-6 flex flex-wrap items-center gap-4">
         {invoice.status === 'draft' && <IssueInvoiceButton invoiceId={invoice.id} />}

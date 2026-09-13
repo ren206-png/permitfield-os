@@ -134,24 +134,35 @@ export default async function PublicEstimatePage({ params }: { params: Promise<{
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-medium text-zinc-900">Line items</h2>
         {lineItems.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
-            <thead>
-              <tr className="text-left text-zinc-500">
-                <th className="pb-2 font-normal">Description</th>
-                <th className="pb-2 font-normal">Qty</th>
-                <th className="pb-2 text-right font-normal">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((li, idx) => (
-                <tr key={idx} className="border-t border-zinc-100">
-                  <td className="py-2 text-zinc-900">{li.description}</td>
-                  <td className="py-2 text-zinc-600">{li.quantity}</td>
-                  <td className="py-2 text-right text-zinc-900">{li.total}</td>
+          // See app/(app)/estimates/[id]/page.tsx's matching comment for
+          // why this table is wrapped in overflow-x-auto.
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500">
+                  <th className="pb-2 font-normal">Description</th>
+                  <th className="pb-2 font-normal">Qty</th>
+                  <th className="pb-2 text-right font-normal">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lineItems.map((li, idx) => (
+                  <tr key={idx} className="border-t border-zinc-100">
+                    <td className="py-2 text-zinc-900">{li.description}</td>
+                    <td className="py-2 text-zinc-600">{li.quantity}</td>
+                    <td className="py-2 text-right text-zinc-900">{li.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : estimate.status === 'draft' ? (
+          // Distinguished from the generic message below -- a draft with
+          // no line items yet is an expected, ordinary state (staff hasn't
+          // sent it), not a data anomaly, so it gets its own copy rather
+          // than sharing the "not yet available" wording used for every
+          // other reason this table could be empty.
+          <p className="mt-2 text-sm text-zinc-500">This estimate is still being prepared.</p>
         ) : (
           <p className="mt-2 text-sm text-zinc-500">This estimate is not yet available for viewing.</p>
         )}
