@@ -23,3 +23,20 @@ export const PDF_FILL_MIN_CONFIDENCE = 0.75;
 // column) -- one fixed size for every overlay field is a known simplification,
 // documented as a Phase 4 limitation rather than silently varying by field.
 export const OVERLAY_FONT_SIZE = 10;
+
+// Gate 4 (Quotes & Payments), Phase A addition: layout constants for
+// lib/pdf/estimate-pdf.ts and lib/pdf/invoice-pdf.ts, which -- unlike every
+// module above this comment -- generate a brand-new document from scratch
+// (PDFDocument.create(), not PDFDocument.load() against an existing
+// template), since no government-authored estimate/invoice template exists
+// to fill. Kept in this same file rather than a new one, per this file's own
+// "one file, never inline at a call site" convention for PDF layout
+// constants -- these are a different document *kind* than the permit-form
+// overlay/AcroForm constants above, not a different concern.
+export const QP_PDF_PAGE_WIDTH = 612; // US Letter, points (72pt/in x 8.5in) -- matches pdf-lib's own PageSizes.Letter[0], spelled out here so this file has no import dependency on that pdf-lib export for a value this module only reads once, at page-creation time.
+export const QP_PDF_PAGE_HEIGHT = 792; // US Letter, points (72pt/in x 11in) -- see QP_PDF_PAGE_WIDTH.
+export const QP_PDF_MARGIN = 54; // 0.75in margins, a conservative default with no product spec to follow yet.
+export const QP_PDF_TITLE_FONT_SIZE = 18;
+export const QP_PDF_HEADING_FONT_SIZE = 12;
+export const QP_PDF_BODY_FONT_SIZE = 10;
+export const QP_PDF_LINE_HEIGHT = 14;

@@ -17,13 +17,34 @@
 // breaking change) -- the dependency direction is one-way, entitlements ->
 // tiers, never the reverse, so there is no circular import between the two.
 
+// Gate 4 (Quotes & Payments), Phase A addition: three new dot-namespaced
+// entitlement keys, following this file's existing `<domain>.<action>`
+// convention (GATE_4_FINDINGS.md §3.2's own recommendation -- "should
+// follow this same quotes.issue / payments.online style, added to
+// BILLING_TIERS's per-tier feature list, not invented as a new naming
+// scheme"). GATE_4_FINDINGS.md does not resolve which tier(s) should carry
+// these, so this is a pragmatic, explicitly-flagged default rather than a
+// silent invention: all three are treated as Pro/Enterprise-tier features
+// (added to `ALL_FEATURES` below, not to Starter's narrower list), on the
+// reasoning that quoting/invoicing/payment-recording is a natural
+// premium-tier capability, consistent with how `analytics`/`ai` are already
+// Pro+-only. A single broad `quotes.manage`/`invoices.manage`/
+// `payments.manage` per lifecycle (rather than one entitlement per RPC,
+// e.g. separate `estimates.send` / `estimates.accept`) was chosen to avoid
+// over-fragmenting this file's entitlement list for a Phase A pass that has
+// no product requirement yet for issuance and, say, drafting to be gated
+// separately -- narrower keys can be split out later without a breaking
+// rename if a real product need for that granularity appears.
 export type Entitlement =
   | 'projects.create'
   | 'readiness.checker'
   | 'readiness.override'
   | 'jurisdiction.requirements'
   | 'analytics'
-  | 'ai';
+  | 'ai'
+  | 'quotes.manage'
+  | 'invoices.manage'
+  | 'payments.manage';
 export type LimitKey = 'projects.active_max';
 
 export type BillingTierId = 'starter' | 'pro' | 'enterprise';
@@ -46,6 +67,9 @@ const ALL_FEATURES: readonly Entitlement[] = [
   'jurisdiction.requirements',
   'analytics',
   'ai',
+  'quotes.manage',
+  'invoices.manage',
+  'payments.manage',
 ];
 
 // BILLING_PROPOSAL.md §2's ratified two-self-serve-tier + Enterprise table
