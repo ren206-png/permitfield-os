@@ -1,15 +1,25 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { requireOrgContext } from '@/lib/auth/org-context';
-import { createClient } from '@/lib/supabase/server';
-import { isQuotesPaymentsEnabled } from '@/lib/flags';
-import { can } from '@/lib/entitlements';
-import { centsToDollarsString, multiplyCentsByFraction, parseDecimalQuantity } from '@/lib/money/cents';
+import { PRODUCT_NAME } from '@/lib/brand';
+import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { createServiceClient } from '@/lib/supabase/service-client';
+import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
 import { EstimateStatusBadge } from '@/components/estimate-status-badge';
-import { LockedFeature } from '@/components/locked-feature';
-import { SendEstimateButton } from './send-estimate-button';
-import { GenerateEstimateClientLinkButton } from './generate-client-link-button';
+import { AcceptEstimateForm } from './accept-estimate-form';
+
+// Gate 4 (Quotes & Payments), Phase A. Route shape: `/estimate/[token]`
+// (singular, un-prefixed) -- the bearer token itself, not an estimate id, is
+// the URL's only identifier, matching every other client-portal-facing URL
+// this bridge issues (see lib/bridge/client-portal.ts's own rawToken
+// contract: the token IS the credential, an org/estimate id in the URL
+// would add nothing an attacker couldn't already see and would invite
+// building a second, redundant authorization check around it). Forced
+// dynamic for the same reason app/permits/ca/[region]/[city]/page.tsx states
+// its own force-dynamic: this page's content depends on a live per-request
+// lookup (a token resolves to different, or no, content over its lifetime),
+// so it must never be frozen at build time under either data-access
+// strategy.
+export const dynamic = 'force-dynamic';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -18,82 +28,66 @@ function centsField(row: any, key: string): string {
   return centsToDollarsString(dbValueToCents(value));
 }
 
-// Gate 4 (Quotes & Payments), Phase A. Mirrors
-// app/(app)/applications/[id]/page.tsx's role as this feature's detail/view
-// page. Renders the mutable draft line items while status = 'draft', or
-// the immutable estimate_revisions snapshot (`line_items` jsonb, the exact
-// shape lib/quotes-payments/tax-result.ts's serializeLineItemBreakdown()
-// writes -- snake_case keys, cents as plain numbers) once sent -- never
-// both, and never re-derives totals client-side; every number shown here is
-// read directly off a row already computed by the service layer.
-export default async function EstimateDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!isQuotesPaymentsEnabled()) {
+export default async function PublicEstimatePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+
+  // Every non-success outcome from resolveTargetToken -- flag off, token not
+  // found/expired/revoked/superseded, wrong target_kind, or the estimate row
+  // itself no longer existing in that org -- collapses to the same
+  // notFound() here. This mirrors resolveTargetToken()'s own generic
+  // `{ error: 'link_unavailable' }` collapse (see that function's header
+  // comment) one layer up: a 404 is this route's version of the identical
+  // "link_unavailable" response every denial reason produces, so a visitor
+  // can never distinguish "wrong token" from "revoked" from "this was never
+  // an estimate link" from the page they're shown.
+  const resolved = await resolveTargetToken(token, 'estimate');
+  if ('error' in resolved) {
     notFound();
   }
+  const { orgId, targetId } = resolved;
 
-  const { id } = await params;
-  const { orgId } = await requireOrgContext();
-  const hasEntitlement = await can(orgId, 'quotes.manage');
-  if (!hasEntitlement) {
-    return (
-      <LockedFeature
-        title="Estimates unavailable"
-        message="Your organization's plan does not include Quotes & Payments."
-      />
-    );
-  }
-
-  const supabase = await createClient();
+  // Trust boundary: this service-role client is constructed only after the
+  // resolveTargetToken() call above succeeded, and every query below is
+  // explicitly scoped with the orgId/targetId THAT CALL returned -- never
+  // with any other request-derived value. See
+  // lib/supabase/service-client.ts's "Exception 2" comment for the full
+  // reasoning this route relies on.
+  const supabase = createServiceClient();
 
   const { data: estimate, error } = await supabase
     .from('estimates')
     .select(
-      'id, status, currency_code, expiry_date, scope_notes, exclusions, terms, current_revision_id, created_at, clients ( name )'
+      'id, status, currency_code, expiry_date, scope_notes, exclusions, terms, current_revision_id, clients ( name )'
     )
-    .eq('id', id)
+    .eq('id', targetId)
     .eq('org_id', orgId)
     .maybeSingle();
 
   if (error) {
     throw new Error(`Failed to load estimate: ${error.message}`);
   }
+  // Should not happen -- resolveTargetToken() already ran targetExistsInOrg()
+  // moments ago -- but a delete race between that check and this read is not
+  // impossible, so this collapses to the same notFound() as every other
+  // denial rather than a 500.
   if (!estimate) {
     notFound();
   }
+
+  const { data: taxProfile } = await supabase
+    .from('org_tax_profiles')
+    .select('legal_name')
+    .eq('org_id', orgId)
+    .maybeSingle();
 
   const client = Array.isArray(estimate.clients) ? estimate.clients[0] : estimate.clients;
 
   let lineItems: Array<{ description: string; quantity: string; total: string }> = [];
   let totals: { subtotal: string; discount: string; tax: string; total: string } | null = null;
   let revisionNumber: number | null = null;
+  let sentAt: string | null = null;
 
-  if (estimate.status === 'draft') {
-    const { data: draftLineItems, error: lineItemsError } = await supabase
-      .from('estimate_line_items')
-      .select('description, quantity, unit_price_cents, discount_percent, discount_fixed_cents')
-      .eq('org_id', orgId)
-      .eq('estimate_id', id)
-      .order('position', { ascending: true });
-    if (lineItemsError) {
-      throw new Error(`Failed to load line items: ${lineItemsError.message}`);
-    }
-    // Draft-stage display total only (pre-discount, pre-tax -- the domain
-    // engine's actual, authoritative rounding sequence runs at send time,
-    // lib/quotes-payments/tax-result.ts). Uses
-    // multiplyCentsByFraction()/parseDecimalQuantity() rather than
-    // `Number(quantity)` float math, matching this codebase's float-free
-    // money discipline (lib/money/cents.ts's own header comment).
-    lineItems = (draftLineItems ?? []).map((li) => {
-      const quantityFraction = parseDecimalQuantity(li.quantity);
-      const unitPriceCents = dbValueToCents(li.unit_price_cents);
-      const lineTotalCents = quantityFraction ? multiplyCentsByFraction(unitPriceCents, quantityFraction) : 0n;
-      return {
-        description: li.description,
-        quantity: li.quantity,
-        total: centsToDollarsString(lineTotalCents),
-      };
-    });
-  } else if (estimate.current_revision_id) {
+  if (estimate.current_revision_id) {
     const { data: revision, error: revisionError } = await supabase
       .from('estimate_revisions')
       .select('revision_number, sent_at, line_items, subtotal_cents, discount_total_cents, tax_total_cents, total_cents')
@@ -105,6 +99,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
     }
     if (revision) {
       revisionNumber = revision.revision_number;
+      sentAt = revision.sent_at;
       const rawLineItems = Array.isArray(revision.line_items) ? revision.line_items : [];
       lineItems = rawLineItems.map((li: Record<string, unknown>) => ({
         description: String(li.description ?? ''),
@@ -121,13 +116,16 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto flex min-h-full max-w-2xl flex-col px-6 py-16">
+      <p className="text-sm text-zinc-500">{taxProfile?.legal_name ?? 'Estimate'}</p>
+      <div className="mt-1 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900">{client?.name ?? 'Unknown client'}</h1>
+          <h1 className="text-xl font-semibold text-zinc-900">Estimate for {client?.name ?? 'you'}</h1>
           <p className="mt-1 text-sm text-zinc-600">
             {estimate.currency_code}
             {revisionNumber !== null && ` · Revision ${revisionNumber}`}
+            {sentAt && ` · Sent ${new Date(sentAt).toLocaleDateString()}`}
+            {estimate.expiry_date && ` · Expires ${estimate.expiry_date}`}
           </p>
         </div>
         <EstimateStatusBadge status={estimate.status} />
@@ -155,7 +153,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
             </tbody>
           </table>
         ) : (
-          <p className="mt-2 text-sm text-zinc-500">No line items.</p>
+          <p className="mt-2 text-sm text-zinc-500">This estimate is not yet available for viewing.</p>
         )}
 
         {totals && (
@@ -188,23 +186,31 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-start gap-4">
-        {estimate.status === 'draft' && <SendEstimateButton estimateId={estimate.id} />}
-        {estimate.status !== 'draft' && (
-          <>
-            <a
-              href={`/api/estimates/${estimate.id}/pdf`}
-              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
-            >
-              Download PDF
-            </a>
-            <GenerateEstimateClientLinkButton estimateId={estimate.id} />
-          </>
+      {totals && (
+        <div className="mt-6 flex flex-wrap items-start gap-4">
+          <a
+            href={`/api/public/estimate/${token}/pdf`}
+            className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
+          >
+            Download PDF
+          </a>
+        </div>
+      )}
+
+      <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+        {estimate.status === 'sent' && <AcceptEstimateForm token={token} />}
+        {estimate.status === 'accepted' && (
+          <p className="text-sm font-medium text-emerald-700">This estimate has already been accepted.</p>
         )}
-        <Link href="/estimates" className="text-sm text-zinc-600 hover:text-zinc-900">
-          Back to estimates
-        </Link>
+        {(estimate.status === 'declined' || estimate.status === 'expired' || estimate.status === 'void') && (
+          <p className="text-sm font-medium text-zinc-600">This estimate is no longer open for acceptance.</p>
+        )}
+        {estimate.status === 'draft' && (
+          <p className="text-sm text-zinc-500">This estimate is not yet available for viewing.</p>
+        )}
       </div>
+
+      <p className="mt-10 text-sm text-zinc-500">{PRODUCT_NAME}</p>
     </div>
   );
 }

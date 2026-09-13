@@ -4,11 +4,13 @@ import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireOrgContext } from '@/lib/auth/org-context';
-import { isQuotesPaymentsEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
 import { can } from '@/lib/entitlements';
 import { issueInvoice, voidInvoice } from '@/lib/quotes-payments/invoices';
 import { recordPayment, reversePayment, type PaymentMethod } from '@/lib/quotes-payments/payments';
 import { parseCurrencyToCents } from '@/lib/money/cents';
+import { issueTargetToken } from '@/lib/bridge/client-portal';
+import { SITE_URL } from '@/lib/seo';
 
 // Gate 4 (Quotes & Payments), Phase A. Same double-gate discipline as
 // app/(app)/estimates/[id]/actions.ts's sendEstimateAction: flag re-checked
@@ -209,4 +211,92 @@ export async function reversePaymentAction(
     revalidatePath(`/invoices/${invoiceId}`);
   }
   return {};
+}
+
+// Gate 4 (Quotes & Payments), Phase A -- "Copy client link" action for
+// app/(app)/invoices/[id]/page.tsx. Same "separate action, UI-action-layer
+// wiring, generate-again supersedes" reasoning as
+// app/(app)/estimates/[id]/actions.ts's generateEstimateClientLinkAction --
+// see that function's own comment; not re-derived here. A voided invoice
+// may still have a link generated for it (the public route renders a void
+// notice, same "never blank a voided document" rule
+// generateInvoicePdf()'s header comment states) -- only a draft (no issued
+// snapshot yet) is rejected below.
+export interface GenerateInvoiceClientLinkState {
+  error?: string;
+  shareUrl?: string;
+  expiresAt?: string;
+}
+
+export async function generateInvoiceClientLinkAction(
+  _prevState: GenerateInvoiceClientLinkState,
+  formData: FormData
+): Promise<GenerateInvoiceClientLinkState> {
+  if (!isQuotesPaymentsEnabled()) {
+    notFound();
+  }
+
+  const { orgId, userId } = await requireOrgContext();
+  if (!(await can(orgId, 'invoices.manage'))) {
+    return { error: 'Your organization’s plan does not include Quotes & Payments.' };
+  }
+  if (!isClientPortalEnabled()) {
+    return { error: 'The client portal link system (PERMITFIELD_FF_CLIENT_PORTAL) is currently off.' };
+  }
+
+  const invoiceId = String(formData.get('invoiceId') ?? '').trim();
+  if (!invoiceId) {
+    return { error: 'Missing invoice id.' };
+  }
+
+  const supabase = await createClient();
+
+  const { data: invoice, error: invoiceError } = await supabase
+    .from('invoices')
+    .select('id, status, clients ( email, name )')
+    .eq('id', invoiceId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (invoiceError) {
+    return { error: `Failed to load invoice: ${invoiceError.message}` };
+  }
+  if (!invoice) {
+    return { error: 'Invoice not found in your organization.' };
+  }
+  if (invoice.status === 'draft') {
+    return { error: 'Issue the invoice before generating a client link.' };
+  }
+
+  const client = Array.isArray(invoice.clients) ? invoice.clients[0] : invoice.clients;
+  const recipientEmail = client?.email;
+  if (!recipientEmail) {
+    return { error: 'This client has no email on file -- add one before generating a client link.' };
+  }
+
+  const result = await issueTargetToken({
+    targetKind: 'invoice',
+    targetId: invoiceId,
+    orgId,
+    recipientEmail,
+    recipientName: client?.name ?? null,
+    issuedByOrgUserId: userId,
+  });
+
+  if ('error' in result) {
+    switch (result.error) {
+      case 'client_portal_disabled':
+        return { error: 'The client portal link system (PERMITFIELD_FF_CLIENT_PORTAL) is currently off.' };
+      case 'quotes_payments_disabled':
+        return { error: 'Quotes & Payments is currently off.' };
+      case 'target_not_found':
+        return { error: 'Invoice not found in your organization.' };
+      case 'invalid_recipient_email':
+        return { error: 'This client’s email on file is not valid -- fix it before generating a client link.' };
+      case 'issue_failed':
+        return { error: 'Generating the client link failed. Check server logs and try again.' };
+    }
+  }
+
+  return { shareUrl: `${SITE_URL}/invoice/${result.rawToken}`, expiresAt: result.expiresAt };
 }

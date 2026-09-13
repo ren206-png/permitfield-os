@@ -13,6 +13,7 @@ import { IssueInvoiceButton } from './issue-invoice-button';
 import { VoidInvoiceForm } from './void-invoice-form';
 import { RecordPaymentForm } from './record-payment-form';
 import { ReversePaymentButton } from './reverse-payment-button';
+import { GenerateInvoiceClientLinkButton } from './generate-client-link-button';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -294,16 +295,20 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             >
               Download PDF
             </a>
+            <GenerateInvoiceClientLinkButton invoiceId={invoice.id} />
             <VoidInvoiceForm invoiceId={invoice.id} />
           </>
         )}
         {invoice.status === 'void' && (
-          <a
-            href={`/api/invoices/${invoice.id}/pdf`}
-            className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
-          >
-            Download PDF
-          </a>
+          <>
+            <a
+              href={`/api/invoices/${invoice.id}/pdf`}
+              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
+            >
+              Download PDF
+            </a>
+            <GenerateInvoiceClientLinkButton invoiceId={invoice.id} />
+          </>
         )}
         <Link href="/invoices" className="text-sm text-zinc-600 hover:text-zinc-900">
           Back to invoices
