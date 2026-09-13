@@ -9,6 +9,12 @@
 --      payment_allocations rows untouched (correction model: new status +
 --      new row, never edit/delete of the original).
 --   4. Tenant isolation.
+--   5. (20260806000051 regression) record_payment() rejects: a single
+--      allocation exceeding an invoice's outstanding balance, MULTIPLE
+--      allocations against the SAME invoice within one call whose sum
+--      exceeds the balance (the actual adversarial-review bug -- see that
+--      migration's header comment), and any allocation at all against a
+--      non-issued (voided) invoice.
 
 begin;
 
@@ -171,6 +177,78 @@ begin
   exception
     when sqlstate '22023' then
       raise notice 'PASS: reverse_payment() on an already-reversed payment is rejected with 22023 (%)', sqlerrm;
+  end;
+end $$;
+
+-- Step 7b (20260806000051 regression, single-allocation over-allocation):
+-- payment_a1 above was reversed in Step 6/7, so it no longer counts toward
+-- "already recorded" (reverse_payment() flips status, it does not delete
+-- the allocation row -- record_payment()'s own already-recorded sum filters
+-- on payments.status = 'recorded', so a reversed payment's old allocation is
+-- correctly excluded here). The invoice's full 60000-cent balance is once
+-- again unclaimed; a single allocation of 70000 against it must be rejected.
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-0000000000e2","role":"authenticated"}';
+
+do $$
+begin
+  begin
+    perform record_payment(
+      '20000000-0000-0000-0000-00000000000a', '61000000-0000-0000-0000-00000000000a', 'e_transfer', 70000, current_date, 'over-allocate-single',
+      jsonb_build_array(jsonb_build_object('invoice_id', '65000000-0000-0000-0000-00000000000a', 'amount_cents', 70000))
+    );
+    raise exception 'FAIL: record_payment() accepted a single allocation exceeding the invoice''s outstanding balance';
+  exception
+    when sqlstate '22023' then
+      raise notice 'PASS: record_payment() rejects a single allocation exceeding the outstanding balance (%)', sqlerrm;
+  end;
+end $$;
+
+-- Step 7c (20260806000051 regression, SAME-invoice split-allocation
+-- bypass): the bug this migration actually closed. Two allocations of
+-- 35000 each (70000 total) against the SAME invoice, in ONE
+-- record_payment() call, split specifically so that no SINGLE entry
+-- exceeds the 60000 balance on its own (35000 <= 60000) -- only their SUM
+-- does. Before the v_pending_by_invoice fix, each entry was checked only
+-- against already-COMMITTED rows (0, since nothing in this call has been
+-- inserted yet), so both individually "passed" and the invoice ended up
+-- over-allocated by 10000 cents with zero concurrency involved. Must still
+-- be rejected with both entries in a single array.
+do $$
+begin
+  begin
+    perform record_payment(
+      '20000000-0000-0000-0000-00000000000a', '61000000-0000-0000-0000-00000000000a', 'e_transfer', 70000, current_date, 'split-bypass-attempt',
+      jsonb_build_array(
+        jsonb_build_object('invoice_id', '65000000-0000-0000-0000-00000000000a', 'amount_cents', 35000),
+        jsonb_build_object('invoice_id', '65000000-0000-0000-0000-00000000000a', 'amount_cents', 35000)
+      )
+    );
+    raise exception 'FAIL: record_payment() accepted a same-invoice split allocation that together exceeds the outstanding balance';
+  exception
+    when sqlstate '22023' then
+      raise notice 'PASS: record_payment() rejects a same-invoice split allocation whose sum exceeds the outstanding balance (%)', sqlerrm;
+  end;
+end $$;
+
+-- Step 7d (20260806000051 regression, voided invoice): void the invoice,
+-- then confirm no allocation can be recorded against it at all, regardless
+-- of amount.
+do $$
+begin
+  perform void_invoice('65000000-0000-0000-0000-00000000000a', 'test void for payment-guard regression');
+end $$;
+
+do $$
+begin
+  begin
+    perform record_payment(
+      '20000000-0000-0000-0000-00000000000a', '61000000-0000-0000-0000-00000000000a', 'e_transfer', 100, current_date, 'void-invoice-attempt',
+      jsonb_build_array(jsonb_build_object('invoice_id', '65000000-0000-0000-0000-00000000000a', 'amount_cents', 100))
+    );
+    raise exception 'FAIL: record_payment() accepted an allocation against a voided invoice';
+  exception
+    when sqlstate '22023' then
+      raise notice 'PASS: record_payment() rejects an allocation against a non-issued (voided) invoice (%)', sqlerrm;
   end;
 end $$;
 
