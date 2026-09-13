@@ -5,6 +5,7 @@ import { isCurrentUserAdmin } from '@/lib/auth/admin';
 import { isAdminPanelEnabled, isBillingEnabled } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
+import { AppSidebar } from '@/components/app-sidebar';
 
 // Shared chrome for every authenticated, org-scoped page. requireOrgContext()
 // is the single gate every (app) route passes through: no session -> /login,
@@ -33,32 +34,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
       <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex shrink-0 items-center gap-6">
-            <Link href="/applications" className="text-sm font-semibold tracking-tight text-zinc-900">
-              {PRODUCT_SHORT}
-            </Link>
-            <nav className="flex items-center gap-4 text-sm text-zinc-600">
-              <Link href="/applications" className="hover:text-zinc-900">
-                Applications
-              </Link>
-              {showBillingLink && (
-                <Link href="/settings/billing" className="hover:text-zinc-900">
-                  Billing
-                </Link>
-              )}
-              {showAdminLink && (
-                <Link href="/admin" className="hover:text-zinc-900">
-                  Admin
-                </Link>
-              )}
-            </nav>
-          </div>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <Link href="/applications" className="shrink-0 text-sm font-semibold tracking-tight text-zinc-900">
+            {PRODUCT_SHORT}
+          </Link>
           {/* min-w-0 lets this group (and the truncated span inside it) shrink
               below its content width instead of forcing the org name onto a
-              second line and crowding the nav above -- the bug this fixes at
-              375px, where org names like "Org A - Test Mechanical Ltd." don't
-              fit alongside "Applications" and "Sign out" on one line. */}
+              second line -- the bug this fixes at 375px, where org names
+              like "Org A - Test Mechanical Ltd." don't fit alongside
+              "Sign out" on one line. Feature links used to live in this
+              header's own <nav> too; they now live in the AppSidebar below
+              instead, which is why this row is just branding + org + sign
+              out. */}
           <div className="flex min-w-0 items-center gap-4">
             <span className="min-w-0 truncate text-sm text-zinc-500" title={orgName}>
               {orgName}
@@ -72,10 +59,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6">{children}</main>
+      {/* flex-col on mobile (sidebar renders as a horizontal scrollable strip
+          above the page content) becomes flex-row at md and up (sidebar
+          becomes a fixed-width left column) -- see AppSidebar's own header
+          comment for why it can't just disappear below md instead. */}
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 md:flex-row md:gap-8">
+        <AppSidebar showBillingLink={showBillingLink} showAdminLink={showAdminLink} />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
 
       <footer className="border-t border-zinc-200 bg-white py-4">
-        <p className="mx-auto max-w-5xl px-4 text-center text-xs text-zinc-500 sm:px-6">{LEGAL_DISCLAIMER}</p>
+        <p className="mx-auto max-w-6xl px-4 text-center text-xs text-zinc-500 sm:px-6">{LEGAL_DISCLAIMER}</p>
       </footer>
     </div>
   );
