@@ -70,3 +70,80 @@ export function centsToDollarsString(cents: bigint): string {
   const withCommas = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${withCommas}.${fractionStr}`;
 }
+
+// Gate 4 (Quotes & Payments) addition. `estimate_line_items.quantity`/
+// `invoice_line_items.quantity` are Postgres `numeric` -- fractional
+// quantities (2.5 hours of labour, 12.75 linear feet of trim) are a real,
+// required case (GATE_4_FINDINGS.md, lib/tax/engine.ts's own header
+// comment). A fractional quantity can never be multiplied against
+// unit-price-in-cents via `Number()`/float without risking the exact same
+// class of error this file's header comment describes for currency strings
+// -- so it gets the identical treatment: represented as an exact BigInt
+// numerator/denominator pair (denominator always a power of ten), parsed by
+// string slicing, never by `parseFloat`.
+export interface DecimalFraction {
+  numerator: bigint;
+  denominator: bigint;
+}
+
+const DECIMAL_QUANTITY_PATTERN = /^(\d+)(?:\.(\d+))?$/;
+
+/**
+ * Parses a non-negative decimal string (e.g. "2.5", "12.75", "3") into an
+ * exact numerator/denominator BigInt pair (denominator = 10^(decimal
+ * places)). Returns null if the string isn't a parseable non-negative
+ * decimal -- callers must treat that as "could not parse", never as zero or
+ * one.
+ */
+export function parseDecimalQuantity(raw: string): DecimalFraction | null {
+  const match = DECIMAL_QUANTITY_PATTERN.exec(raw.trim());
+  if (!match) return null;
+
+  const [, wholePart, fractionPart = ''] = match;
+  const denominator = 10n ** BigInt(fractionPart.length);
+  const numerator = BigInt(wholePart) * denominator + (fractionPart === '' ? 0n : BigInt(fractionPart));
+  return { numerator, denominator };
+}
+
+/**
+ * Rounds a non-negative rational amount (numerator/denominator, both
+ * BigInt) to the nearest whole integer using round-half-up (round half away
+ * from zero -- a tie rounds up, never to "even" and never down). This is
+ * the one rounding rule this codebase uses for money derived from a
+ * non-integer input (a fractional quantity times unit-price-cents, or a
+ * percentage tax/discount rate times an amount in cents) -- see
+ * lib/tax/engine.ts's header comment for the full policy this backs, and
+ * the RATIONALE.md-equivalent comment on why round-half-up rather than
+ * banker's rounding was chosen.
+ *
+ * Both inputs must be non-negative; this codebase never represents a
+ * negative money amount (refunds/credit notes are their own signed concept
+ * at a higher layer, out of scope for this primitive).
+ */
+export function roundFractionToCents(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) {
+    throw new Error(`roundFractionToCents: denominator must be positive, got ${denominator.toString()}.`);
+  }
+  if (numerator < 0n) {
+    throw new Error(`roundFractionToCents: numerator must not be negative, got ${numerator.toString()}.`);
+  }
+  // Both operands non-negative, so BigInt's truncating division is exactly
+  // floor() here -- no separate floor step needed.
+  const quotient = numerator / denominator;
+  const remainder = numerator % denominator;
+  // remainder/denominator >= 1/2  <=>  remainder * 2 >= denominator.
+  return remainder * 2n >= denominator ? quotient + 1n : quotient;
+}
+
+/**
+ * Multiplies an exact integer cents amount by a DecimalFraction (e.g. a
+ * fractional quantity, or a "percent / 100" rate) and rounds the product to
+ * the nearest whole cent via roundFractionToCents. Convenience wrapper so
+ * call sites never have to hand-build the numerator/denominator themselves.
+ */
+export function multiplyCentsByFraction(cents: bigint, fraction: DecimalFraction): bigint {
+  if (cents < 0n) {
+    throw new Error(`multiplyCentsByFraction: cents must not be negative, got ${cents.toString()}.`);
+  }
+  return roundFractionToCents(cents * fraction.numerator, fraction.denominator);
+}
