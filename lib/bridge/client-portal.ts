@@ -1349,10 +1349,29 @@ export async function listTokensForApplication(applicationId: string): Promise<L
 // neither of these two functions re-derives org membership or entitlement
 // itself).
 
-export type TargetKind = 'estimate' | 'invoice';
+// Gate 4 (Quotes & Payments), Phase B: extended to also cover
+// 'change_order' and 'credit_note' -- per GATE_4_PHASE_B_FINDINGS.md §III
+// Q5's resolution, both get their own portal routes (a lightweight
+// accept-only page for change orders, a full view+PDF page for credit
+// notes -- see app/change-order/[token]/page.tsx and
+// app/credit-note/[token]/page.tsx), so both need a real target_kind here,
+// the same way 'estimate'/'invoice' already do. `client_access_tokens`'s
+// own `target_kind` column is deliberately unconstrained free text (see
+// that table's migration comment), so no DB-side enum needs updating --
+// only this module's dispatch and the TypeScript union itself.
+export type TargetKind = 'estimate' | 'invoice' | 'change_order' | 'credit_note';
 
-function targetTable(targetKind: TargetKind): 'estimates' | 'invoices' {
-  return targetKind === 'estimate' ? 'estimates' : 'invoices';
+function targetTable(targetKind: TargetKind): 'estimates' | 'invoices' | 'change_orders' | 'credit_notes' {
+  switch (targetKind) {
+    case 'estimate':
+      return 'estimates';
+    case 'invoice':
+      return 'invoices';
+    case 'change_order':
+      return 'change_orders';
+    case 'credit_note':
+      return 'credit_notes';
+  }
 }
 
 // The live re-check `resolveTargetToken` runs against project 1, mirroring
@@ -1482,8 +1501,11 @@ export type IssueTargetTokenResult =
 // itself, unlike `issueToken`'s own requireAdmin()-gated-caller contract):
 // the caller must have already verified the invoking org member holds the
 // relevant entitlement ('quotes.manage' for an estimate, 'invoices.manage'
-// for an invoice) for `orgId`. In practice this pass's only callers are the
-// "Generate client link" Server Actions in app/(app)/estimates/[id]/actions.ts
+// for an invoice, change_order, or credit_note -- per
+// GATE_4_PHASE_B_FINDINGS.md §III Q6, change orders and credit notes fold
+// under the existing invoices.manage entitlement rather than a new one) for
+// `orgId`. In practice this pass's only callers are the "Generate client
+// link" Server Actions in app/(app)/estimates/[id]/actions.ts
 // and app/(app)/invoices/[id]/actions.ts, which re-derive org membership via
 // requireOrgContext() and re-check the entitlement before calling this --
 // the same "each caller re-derives its own authorization" discipline this
