@@ -102,6 +102,13 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     amountCents: bigint;
     receivedAt: string;
   }> = [];
+  const creditNotes: Array<{
+    id: string;
+    creditNoteNumber: bigint | null;
+    reason: string | null;
+    issuedAt: string | null;
+    amountCents: bigint;
+  }> = [];
   let outstandingCents: bigint | null = null;
 
   if (invoice.status !== 'draft') {
@@ -131,9 +138,41 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
       });
     }
 
+    // Credit notes -- see lib/quotes-payments/credit-notes.ts's header
+    // comment: a credit note reduces what's owed on this still-outstanding
+    // invoice without any money changing hands, a distinct concept from
+    // reverse_payment() (which stays the mechanism for money already paid
+    // being returned). Only `status = 'issued'` credit notes count -- a
+    // draft is not yet a real financial commitment (same reasoning
+    // createDraftCreditNote()'s own header comment gives for why the
+    // outstanding-balance guard doesn't run at draft time), and a voided
+    // one's reduction has been reversed. Per
+    // GATE_4_PHASE_B_FINDINGS.md §III Q3, this is a third, explicit term in
+    // the outstanding-balance formula, added here and in
+    // app/(app)/invoices/[id]/page.tsx together.
+    const { data: creditNoteRows, error: creditNotesError } = await supabase
+      .from('credit_notes')
+      .select('id, status, currency_code, reason, credit_note_number, issued_at, issued_amount_cents')
+      .eq('org_id', orgId)
+      .eq('invoice_id', targetId)
+      .eq('status', 'issued');
+    if (creditNotesError) {
+      throw new Error(`Failed to load credit notes: ${creditNotesError.message}`);
+    }
+    for (const row of creditNoteRows ?? []) {
+      creditNotes.push({
+        id: row.id,
+        creditNoteNumber: dbValueToCentsOrNull(row.credit_note_number),
+        reason: row.reason,
+        issuedAt: row.issued_at,
+        amountCents: dbValueToCentsOrNull(row.issued_amount_cents) ?? 0n,
+      });
+    }
+    const issuedCreditsCents = creditNotes.reduce((sum, cn) => sum + cn.amountCents, 0n);
+
     const issuedTotalCents = dbValueToCentsOrNull(invoice.issued_total_cents);
     if (issuedTotalCents !== null) {
-      outstandingCents = issuedTotalCents - paidCents;
+      outstandingCents = issuedTotalCents - paidCents - issuedCreditsCents;
     }
   }
 
@@ -284,6 +323,26 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
                   <p className="text-xs text-zinc-500">{p.receivedAt}</p>
                 </div>
                 <PaymentStatusBadge status={p.status} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {creditNotes.length > 0 && (
+        <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-medium text-zinc-900">Credit notes</h2>
+          <ul className="mt-3 flex flex-col gap-2">
+            {creditNotes.map((cn) => (
+              <li key={cn.id} className="border-t border-zinc-100 pt-2 text-sm">
+                <p className="text-zinc-900">
+                  {cn.creditNoteNumber !== null ? `Credit note #${cn.creditNoteNumber}` : 'Credit note'} · −
+                  {centsToDollarsString(cn.amountCents)}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {cn.issuedAt}
+                  {cn.reason ? ` · ${cn.reason}` : ''}
+                </p>
               </li>
             ))}
           </ul>
