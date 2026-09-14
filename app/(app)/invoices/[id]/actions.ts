@@ -8,6 +8,7 @@ import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
 import { can } from '@/lib/entitlements';
 import { issueInvoice, voidInvoice } from '@/lib/quotes-payments/invoices';
 import { recordPayment, reversePayment, type PaymentMethod } from '@/lib/quotes-payments/payments';
+import { createDraftCreditNote, issueCreditNote, voidCreditNote } from '@/lib/quotes-payments/credit-notes';
 import { parseCurrencyToCents } from '@/lib/money/cents';
 import { issueTargetToken } from '@/lib/bridge/client-portal';
 import { SITE_URL } from '@/lib/seo';
@@ -299,4 +300,122 @@ export async function generateInvoiceClientLinkAction(
   }
 
   return { shareUrl: `${SITE_URL}/invoice/${result.rawToken}`, expiresAt: result.expiresAt };
+}
+
+// Gate 4 (Quotes & Payments), Phase B -- credit notes have no draft-review
+// UI anywhere in this pass (unlike change orders, which get their own
+// staff detail page for the send/accept/issue lifecycle) -- a credit note
+// has no line items to review before committing (see
+// lib/quotes-payments/credit-notes.ts's header comment), so this single
+// action creates the draft and immediately issues it, same one-step
+// simplicity as recordPaymentAction above. If issue_credit_note() rejects
+// it (most likely: the outstanding-balance guard in that RPC), the
+// just-created draft is deleted rather than left behind as orphaned
+// clutter with no retry UI to act on it -- ordinary RLS permits this
+// because it is still `status = 'draft'` at that point.
+export interface IssueCreditNoteState {
+  error?: string;
+}
+
+export async function issueCreditNoteAction(
+  _prevState: IssueCreditNoteState,
+  formData: FormData
+): Promise<IssueCreditNoteState> {
+  if (!isQuotesPaymentsEnabled()) {
+    notFound();
+  }
+
+  const { orgId, userId, role } = await requireOrgContext();
+  if (!(await can(orgId, 'invoices.manage'))) {
+    return { error: 'Your organization’s plan does not include Quotes & Payments.' };
+  }
+
+  const invoiceId = String(formData.get('invoiceId') ?? '').trim();
+  const amountRaw = String(formData.get('amount') ?? '').trim();
+  const reason = String(formData.get('reason') ?? '').trim();
+
+  if (!invoiceId) {
+    return { error: 'Missing invoice id.' };
+  }
+  const amountCents = parseCurrencyToCents(amountRaw);
+  if (amountCents === null || amountCents <= 0n) {
+    return { error: 'Enter a valid credit amount.' };
+  }
+
+  const supabase = await createClient();
+
+  // Re-derive the client id from the DB rather than trusting a hidden form
+  // field, same discipline as recordPaymentAction above.
+  const { data: invoice } = await supabase
+    .from('invoices')
+    .select('id, client_id, status')
+    .eq('id', invoiceId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (!invoice) {
+    return { error: 'Invoice not found in your organization.' };
+  }
+  if (invoice.status !== 'issued') {
+    return { error: 'Only an issued invoice can have a credit note applied against it.' };
+  }
+
+  let draft;
+  try {
+    draft = await createDraftCreditNote(supabase, {
+      orgId,
+      clientId: invoice.client_id,
+      invoiceId,
+      amountCents,
+      reason: reason || null,
+      actorUserId: userId,
+      actorRole: role,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to create the credit note.' };
+  }
+
+  try {
+    await issueCreditNote(supabase, { orgId, creditNoteId: draft.id, actorUserId: userId, actorRole: role });
+  } catch (error) {
+    await supabase.from('credit_notes').delete().eq('id', draft.id).eq('org_id', orgId);
+    return { error: error instanceof Error ? error.message : 'Failed to issue the credit note.' };
+  }
+
+  revalidatePath(`/invoices/${invoiceId}`);
+  return {};
+}
+
+export interface VoidCreditNoteState {
+  error?: string;
+}
+
+export async function voidCreditNoteAction(_prevState: VoidCreditNoteState, formData: FormData): Promise<VoidCreditNoteState> {
+  if (!isQuotesPaymentsEnabled()) {
+    notFound();
+  }
+
+  const { orgId, userId, role } = await requireOrgContext();
+  if (!(await can(orgId, 'invoices.manage'))) {
+    return { error: 'Your organization’s plan does not include Quotes & Payments.' };
+  }
+
+  const creditNoteId = String(formData.get('creditNoteId') ?? '').trim();
+  const invoiceId = String(formData.get('invoiceId') ?? '').trim();
+  const voidReason = String(formData.get('voidReason') ?? '').trim();
+  if (!creditNoteId) {
+    return { error: 'Missing credit note id.' };
+  }
+
+  const supabase = await createClient();
+
+  try {
+    await voidCreditNote(supabase, { orgId, creditNoteId, voidReason: voidReason || null, actorUserId: userId, actorRole: role });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to void the credit note.' };
+  }
+
+  if (invoiceId) {
+    revalidatePath(`/invoices/${invoiceId}`);
+  }
+  return {};
 }

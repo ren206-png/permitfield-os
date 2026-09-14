@@ -9,6 +9,8 @@ import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-m
 import { InvoiceStatusBadge } from '@/components/invoice-status-badge';
 import { PaymentStatusBadge } from '@/components/payment-status-badge';
 import { ReminderJobStatusBadge } from '@/components/reminder-job-status-badge';
+import { CreditNoteStatusBadge } from '@/components/credit-note-status-badge';
+import { ChangeOrderStatusBadge } from '@/components/change-order-status-badge';
 import { LockedFeature } from '@/components/locked-feature';
 import { reminderKindLabel } from '@/lib/quotes-payments/reminder-labels';
 import { IssueInvoiceButton } from './issue-invoice-button';
@@ -16,6 +18,8 @@ import { VoidInvoiceForm } from './void-invoice-form';
 import { RecordPaymentForm } from './record-payment-form';
 import { ReversePaymentButton } from './reverse-payment-button';
 import { GenerateInvoiceClientLinkButton } from './generate-client-link-button';
+import { IssueCreditNoteForm } from './issue-credit-note-form';
+import { VoidCreditNoteForm } from './void-credit-note-form';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -134,6 +138,20 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     referenceNote: string | null;
     receivedAt: string;
   }> = [];
+  const creditNotes: Array<{
+    id: string;
+    status: string;
+    creditNoteNumber: bigint | null;
+    reason: string | null;
+    issuedAt: string | null;
+    amountCents: bigint | null;
+  }> = [];
+  const changeOrders: Array<{
+    id: string;
+    status: string;
+    title: string;
+    sentTotalCents: bigint | null;
+  }> = [];
   let outstandingCents: bigint | null = null;
 
   if (invoice.status !== 'draft') {
@@ -164,9 +182,64 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       });
     }
 
+    // Credit notes -- see app/invoice/[token]/page.tsx's matching comment
+    // (and lib/quotes-payments/credit-notes.ts's header comment) for why
+    // this is a distinct concept from reverse_payment(), and
+    // GATE_4_PHASE_B_FINDINGS.md §III Q3 for the outstanding-balance
+    // formula this feeds into. Unlike that read-only customer-facing page,
+    // every status is loaded here (not just 'issued') so staff can see and
+    // act on drafts/voids too -- only 'issued' rows count toward the
+    // balance below.
+    const { data: creditNoteRows, error: creditNotesError } = await supabase
+      .from('credit_notes')
+      .select('id, status, reason, credit_note_number, issued_at, issued_amount_cents')
+      .eq('org_id', orgId)
+      .eq('invoice_id', id)
+      .order('created_at', { ascending: false });
+    if (creditNotesError) {
+      throw new Error(`Failed to load credit notes: ${creditNotesError.message}`);
+    }
+    for (const row of creditNoteRows ?? []) {
+      creditNotes.push({
+        id: row.id,
+        status: row.status,
+        creditNoteNumber: dbValueToCentsOrNull(row.credit_note_number),
+        reason: row.reason,
+        issuedAt: row.issued_at,
+        amountCents: dbValueToCentsOrNull(row.issued_amount_cents),
+      });
+    }
+    // Change orders proposed against this (necessarily already-issued)
+    // invoice -- per GATE_4_PHASE_B_FINDINGS.md §III Q1, a change order
+    // never touches this invoice's own balance; it only ever produces a
+    // second, separate invoice once issued (resulting_invoice_id below).
+    // Every status is loaded (not just 'issued') so staff can see and act
+    // on drafts/pending-acceptance/void ones too.
+    const { data: changeOrderRows, error: changeOrdersError } = await supabase
+      .from('change_orders')
+      .select('id, status, title, sent_total_cents')
+      .eq('org_id', orgId)
+      .eq('source_invoice_id', id)
+      .order('created_at', { ascending: false });
+    if (changeOrdersError) {
+      throw new Error(`Failed to load change orders: ${changeOrdersError.message}`);
+    }
+    for (const row of changeOrderRows ?? []) {
+      changeOrders.push({
+        id: row.id,
+        status: row.status,
+        title: row.title,
+        sentTotalCents: dbValueToCentsOrNull(row.sent_total_cents),
+      });
+    }
+
+    const issuedCreditsCents = creditNotes
+      .filter((cn) => cn.status === 'issued')
+      .reduce((sum, cn) => sum + (cn.amountCents ?? 0n), 0n);
+
     const issuedTotalCents = dbValueToCentsOrNull(invoice.issued_total_cents);
     if (issuedTotalCents !== null) {
-      outstandingCents = issuedTotalCents - paidCents;
+      outstandingCents = issuedTotalCents - paidCents - issuedCreditsCents;
     }
   }
 
@@ -333,6 +406,74 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </ul>
           ) : (
             <p className="mt-2 text-sm text-zinc-500">No payments recorded yet.</p>
+          )}
+        </div>
+      )}
+
+      {invoice.status !== 'draft' && (
+        <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-900">Credit notes</h2>
+            {invoice.status === 'issued' && <IssueCreditNoteForm invoiceId={invoice.id} />}
+          </div>
+          {creditNotes.length > 0 ? (
+            <ul className="mt-3 flex flex-col gap-2">
+              {creditNotes.map((cn) => (
+                <li key={cn.id} className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-2 text-sm">
+                  <div>
+                    <p className="text-zinc-900">
+                      {cn.creditNoteNumber !== null ? `Credit note #${cn.creditNoteNumber}` : 'Draft credit note'}
+                      {cn.amountCents !== null && ` · -${centsToDollarsString(cn.amountCents)}`}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {cn.issuedAt ?? 'Not yet issued'}
+                      {cn.reason ? ` · ${cn.reason}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CreditNoteStatusBadge status={cn.status} />
+                    {cn.status === 'issued' && <VoidCreditNoteForm creditNoteId={cn.id} invoiceId={invoice.id} />}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-zinc-500">No credit notes issued yet.</p>
+          )}
+        </div>
+      )}
+
+      {invoice.status !== 'draft' && (
+        <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-900">Change orders</h2>
+            {invoice.status === 'issued' && (
+              <Link
+                href={`/change-orders/new?invoiceId=${invoice.id}`}
+                className="text-sm font-medium text-zinc-900 underline"
+              >
+                New change order
+              </Link>
+            )}
+          </div>
+          {changeOrders.length > 0 ? (
+            <ul className="mt-3 flex flex-col gap-2">
+              {changeOrders.map((co) => (
+                <li key={co.id} className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-2 text-sm">
+                  <div>
+                    <Link href={`/change-orders/${co.id}`} className="text-zinc-900 underline">
+                      {co.title}
+                    </Link>
+                    {co.sentTotalCents !== null && (
+                      <p className="text-xs text-zinc-500">{centsToDollarsString(co.sentTotalCents)}</p>
+                    )}
+                  </div>
+                  <ChangeOrderStatusBadge status={co.status} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-zinc-500">No change orders proposed yet.</p>
           )}
         </div>
       )}
