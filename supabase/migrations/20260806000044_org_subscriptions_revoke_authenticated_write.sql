@@ -1,0 +1,42 @@
+-- CI gap (supabase/tests/org_subscriptions.test.sql's "authenticated UPDATE
+-- of org_subscriptions" assertion, around line 174-178): 20260806000040's
+-- own grant is already SELECT-only for `authenticated`
+-- (`grant select on org_subscriptions to authenticated;`, that migration's
+-- line 76), and grepping every supabase/migrations/*.sql for
+-- `org_subscriptions` and for any catch-all `grant ... on all tables in
+-- schema public to authenticated` turns up neither -- no migration in this
+-- repo ever grants INSERT/UPDATE/DELETE on this table to `authenticated`.
+-- A fresh `supabase db reset` against this repo's own local Postgres/CLI
+-- reproduces the intended, secure state (`authenticated` has SELECT only,
+-- confirmed via information_schema.role_table_grants and by a live `set
+-- role authenticated; update org_subscriptions ...` attempt correctly
+-- failing with "permission denied for table org_subscriptions"), so this
+-- is not a bug in this repo's own GRANT statements.
+--
+-- What *can* differ across environments -- and does not show up anywhere
+-- in supabase/migrations/ because it isn't part of this repo's own
+-- migrations at all -- is Postgres' per-schema default privileges
+-- (`pg_default_acl` for role `postgres`, schema `public`), which the
+-- Supabase CLI seeds at `supabase start`/`db reset` time (the "Seeding
+-- globals from roles.sql..." step every `supabase start` prints) before
+-- any of this repo's own migrations run. That seeding is versioned with
+-- the CLI/Postgres image, not with this repo, and CI's
+-- `supabase/setup-cli@v1 version: latest` step is not pinned to the same
+-- CLI build local development happens to have installed -- so its default
+-- ACL for a newly-created public-schema table (such as org_subscriptions,
+-- created by the `postgres` role in 20260806000040) is not guaranteed to
+-- match what a given local install produces, even from byte-identical
+-- migrations.
+--
+-- Rather than depend on that implicit, CLI-version-dependent default being
+-- safe forever, this migration makes the write boundary explicit and
+-- self-defending at the table level: `authenticated` is revoked of
+-- INSERT/UPDATE/DELETE outright, regardless of whatever any given
+-- Postgres/CLI version's default privileges happen to grant. This matches
+-- 20260806000040_org_subscriptions.sql's own documented intent (header
+-- comment and its policy/grant comments) -- service_role-write-only,
+-- authenticated read-only -- explicitly rather than implicitly. INSERT and
+-- DELETE are revoked defensively alongside UPDATE (the one the CI failure
+-- actually demonstrated) for the same reason: no code path should ever
+-- rely on an environment's default privileges to keep those closed either.
+revoke insert, update, delete on org_subscriptions from authenticated;
