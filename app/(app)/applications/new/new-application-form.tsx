@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from 'react';
 import { createApplicationAction, type NewApplicationState } from './actions';
 import { CoverageBadge } from '@/components/coverage-badge';
+import { useErrorToast } from '@/components/toast/use-action-toast';
 
 interface Jurisdiction {
   id: string;
@@ -38,6 +39,7 @@ export function NewApplicationForm({
   contractors: Contractor[];
 }) {
   const [state, formAction, pending] = useActionState(createApplicationAction, initialState);
+  useErrorToast(state.error);
   const [jurisdictionId, setJurisdictionId] = useState('');
 
   const selectedJurisdiction = useMemo(

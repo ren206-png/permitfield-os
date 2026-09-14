@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { portalAction, type BillingActionState } from './actions';
+import { useErrorToast } from '@/components/toast/use-action-toast';
 
 const initialState: BillingActionState = {};
 
@@ -12,6 +13,7 @@ const initialState: BillingActionState = {};
 // of Price IDs is required (BILLING_PROPOSAL.md §3).
 export function PortalButton() {
   const [state, formAction, pending] = useActionState(portalAction, initialState);
+  useErrorToast(state.error);
 
   return (
     <form action={formAction}>
