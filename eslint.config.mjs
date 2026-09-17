@@ -112,12 +112,55 @@ const stripeClientRestriction = {
   },
 };
 
+// Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K/§J.4), same shape and
+// mechanism as stripeClientRestriction above -- applied to the bare
+// `resend` npm package instead of a relative-path module, for the same
+// reason (`patterns` can't match a bare package specifier, so this uses
+// `paths`). Two designated modules may import it, not one: 5.3's own
+// lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL, plain-text
+// notification emails), and Gate 4 Phase A's lib/email/client.ts
+// (PERMITFIELD_RESEND_API_KEY/PERMITFIELD_RESEND_FROM_ADDRESS, HTML
+// invoice/estimate emails via lib/email/send.ts) -- the two were built in
+// parallel on separate branches, neither aware of the other, with
+// deliberately distinct env vars and failure semantics (send.ts throws;
+// lib/email/send.ts returns a typed {success:false} result instead, see
+// that module's header). Reconciling them into one shared sender is a
+// real follow-up design decision, not something to force here -- this
+// restriction just keeps the credential from leaking to a THIRD call
+// site (a route handler, Server Action, or other end-user-facing module)
+// while both existing ones stay intentionally separate. Same "only
+// designated modules read this credential" discipline as
+// RESEND_API_KEY/RESEND_FROM_EMAIL's own .env.example comments. Note this
+// does NOT restrict lib/notifications/recipients.ts (org_members/
+// auth.admin lookups) or lib/notifications/content.ts (pure derivation)
+// -- neither imports `resend` at all, so neither needs (or gets) an
+// exemption here.
+const resendClientRestriction = {
+  files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+  ignores: ["lib/notifications/send.ts", "lib/email/client.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "resend",
+            message:
+              "The resend package may only be imported from lib/notifications/send.ts (RESEND_API_KEY, Gate 5.3 notifications) or lib/email/client.ts (PERMITFIELD_RESEND_API_KEY, Gate 4 Phase A invoice/estimate emails) -- see each module's header comment and GATE_5_FINDINGS.md §K/§J.4.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   clientPortalServiceClientRestriction,
   geminiClientRestriction,
   stripeClientRestriction,
+  resendClientRestriction,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

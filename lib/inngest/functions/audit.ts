@@ -35,6 +35,17 @@ export const permitAudit = inngest.createFunction(
     // (set by permit.extract); left untouched here rather than overwritten.
     if (!zodValid) {
       await step.sendEvent('emit-audited-skipped-extraction-failed', {
+        // Deterministic id -- see extract.ts's own emit-extracted-event
+        // comment for the full "why" (closes permit-notify's residual
+        // duplicate-delivery gap via Inngest's id-based event-ingestion
+        // dedup, a layer earlier than this function's own
+        // idempotency: extractionId). Reuses that SAME extractionId here --
+        // unlike extract.ts, this function's own idempotency key already IS
+        // extractionId (not applicationId), so there is no fresher/more
+        // precise per-occurrence value to prefer over it: all 4 of this
+        // file's sendEvent call sites are mutually exclusive within one run
+        // and share this identity.
+        id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
         data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
       });
@@ -115,6 +126,10 @@ export const permitAudit = inngest.createFunction(
     // 'verified'-jurisdiction audit to any later reader of the table.
     if (!isAiAuditEnabled() || context.coverageLevel !== 'verified') {
       await step.sendEvent('emit-audited-skipped-not-covered', {
+        // Deterministic id -- see this file's first sendEvent
+        // (emit-audited-skipped-extraction-failed) and extract.ts's
+        // emit-extracted-event for the full "why".
+        id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
         data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
       });
@@ -178,6 +193,10 @@ export const permitAudit = inngest.createFunction(
       });
 
       await step.sendEvent('emit-audited-event', {
+        // Deterministic id -- see this file's first sendEvent
+        // (emit-audited-skipped-extraction-failed) and extract.ts's
+        // emit-extracted-event for the full "why".
+        id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
         data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
       });
@@ -282,6 +301,10 @@ export const permitAudit = inngest.createFunction(
     const persisted = { auditId: auditId as string | null };
 
     await step.sendEvent('emit-audited-event', {
+      // Deterministic id -- see this file's first sendEvent
+      // (emit-audited-skipped-extraction-failed) and extract.ts's
+      // emit-extracted-event for the full "why".
+      id: `permit/application.audited:${extractionId}`,
       name: 'permit/application.audited',
       data: {
         applicationId,

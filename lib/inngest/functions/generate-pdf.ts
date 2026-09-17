@@ -132,6 +132,17 @@ export const permitGeneratePdf = inngest.createFunction(
 
     if (!eligible) {
       await step.sendEvent('emit-pdf-generated-skipped', {
+        // Deterministic id -- see extract.ts's emit-extracted-event for the
+        // full "why" (closes permit-notify's residual duplicate-delivery
+        // gap via Inngest's id-based event-ingestion dedup). Keyed on
+        // applicationId, matching (not fighting) this file's own
+        // idempotency: 'event.data.applicationId' -- unlike extract.ts,
+        // THIS function's own header comment explicitly wants a second real
+        // trigger for the same applicationId (e.g. a second review-confirm
+        // somehow firing) to collapse rather than double-run, so reusing
+        // applicationId as the emitted event's dedup key is consistent with
+        // that already-declared intent, not a new risk.
+        id: `permit/application.pdf_generated:${applicationId}`,
         name: 'permit/application.pdf_generated',
         data: {
           applicationId,
@@ -323,6 +334,9 @@ export const permitGeneratePdf = inngest.createFunction(
     });
 
     await step.sendEvent('emit-pdf-generated-event', {
+      // Deterministic id -- see emit-pdf-generated-skipped above for the
+      // full "why".
+      id: `permit/application.pdf_generated:${applicationId}`,
       name: 'permit/application.pdf_generated',
       data: {
         applicationId,
