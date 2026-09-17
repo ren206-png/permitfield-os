@@ -101,3 +101,33 @@ export const ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS = 8;
 // genuinely hung request doesn't block a background job step for its full
 // platform-level timeout.
 export const EXTERNAL_API_TIMEOUT_MS = 30_000;
+
+// Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Same purpose as
+// EXTRACTION_PROMPT_VERSION/AUDIT_PROMPT_VERSION above, for the new
+// drawing-review prompt (lib/ai/review-drawing.ts) -- persisted with every
+// drawing_reviews row (drawing_reviews' own model_id/prompt_version live on
+// its referenced ai_jobs row, not a column of drawing_reviews itself; see
+// 20260806000045's header on reusing the AI-1.1 ledger) so a bad prompt
+// revision can be identified, and the exact rows it produced found, without
+// guessing.
+export const DRAWING_REVIEW_PROMPT_VERSION = 'drawing-review-v1';
+
+// Same reasoning as AUDIT_MAX_TOKENS: a drawing review's findings list can
+// span several distinct issues across one sheet, so it gets its own,
+// generous cap rather than reusing EXTRACTION_MAX_TOKENS's smaller budget.
+export const DRAWING_REVIEW_MAX_TOKENS = 8192;
+
+// Same retry-once-then-fail-closed policy as AUDIT_MAX_VALIDATION_ATTEMPTS,
+// applied at the whole-tool-call level for the drawing-review response. Per-
+// item citation/Zod failures within an otherwise-valid array are NOT retried
+// here either, for the identical reason given there -- they're dropped into
+// `drawing_findings_rejected` individually instead.
+export const DRAWING_REVIEW_MAX_VALIDATION_ATTEMPTS = 2;
+
+// Same bounding rationale as AUDIT_MAX_RETRIEVED_CHUNKS, applied to the
+// drawing-review retrieval path (lib/ai/retrieve-code-chunks.ts's
+// buildDrawingReviewQueryText + retrieveCodeChunks call site in
+// lib/inngest/functions/drawing-review.ts): an unbounded context both costs
+// more and gives the model more surface area to cite something it wasn't
+// actually shown carefully.
+export const DRAWING_REVIEW_MAX_RETRIEVED_CHUNKS = 8;

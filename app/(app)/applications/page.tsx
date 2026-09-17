@@ -5,8 +5,44 @@ import { centsToDollarsString } from '@/lib/money/cents';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 
-export default async function ApplicationsPage() {
+// Same literal union components/status-badge.tsx already declares for this
+// enum -- duplicated here (rather than imported from that file, which
+// doesn't export its own type) only so this page's status <select> can be
+// exhaustively validated against real values below.
+const APPLICATION_STATUSES = [
+  'draft',
+  'uploading',
+  'extracting',
+  'extraction_failed',
+  'extracted',
+  'auditing',
+  'audit_failed',
+  'ready_for_review',
+  'reviewed',
+  'generating_documents',
+  'document_generation_failed',
+  'documents_generated',
+  'submitted',
+] as const;
+type ApplicationStatusFilter = (typeof APPLICATION_STATUSES)[number];
+
+function isKnownStatus(value: string): value is ApplicationStatusFilter {
+  return (APPLICATION_STATUSES as readonly string[]).includes(value);
+}
+
+// Search/filter added on top of the original plain `.order('created_at')`
+// list -- both params are plain GET query params on a <form method="get">
+// (no client JS/state needed, works with this page staying an async Server
+// Component) rather than a client-side filter over an already-fetched list,
+// so a search still only ever fetches the org's own already-RLS-scoped rows
+// -- it doesn't fetch everything and filter client-side.
+export default async function ApplicationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; status?: string }>;
+}) {
   const { orgId } = await requireOrgContext();
+  const { q, status } = await searchParams;
   const supabase = await createClient();
 
   // RLS (`permit_applications_select`, is_org_member(org_id)) already scopes
@@ -15,18 +51,39 @@ export default async function ApplicationsPage() {
   // own and doesn't rely on a reader knowing RLS exists, matching how
   // app/api/documents/route.ts still re-derives orgId from a lookup rather
   // than trusting a client-supplied value.
-  const { data: applications, error } = await supabase
+  let query = supabase
     .from('permit_applications')
     .select(
       `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
        permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
     )
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false });
+    .eq('org_id', orgId);
+
+  // Validated against the real enum list before being handed to `.eq()` --
+  // an unvalidated value would reach Postgres as a cast against
+  // application_status and error the whole page instead of just no-op'ing
+  // an unrecognized filter (e.g. a stale/hand-edited query string).
+  if (status && isKnownStatus(status)) {
+    query = query.eq('status', status);
+  }
+
+  // ilike, both columns, case-insensitive substring match -- `%` escaped so
+  // a search term containing a literal `%` (or `,`, which `.or()`'s own
+  // comma-separated filter syntax would otherwise misparse as a second
+  // condition) can't corrupt the filter string.
+  const trimmedQuery = q?.trim();
+  if (trimmedQuery) {
+    const escaped = trimmedQuery.replace(/[%,]/g, '\\$&');
+    query = query.or(`project_title.ilike.%${escaped}%,project_address.ilike.%${escaped}%`);
+  }
+
+  const { data: applications, error } = await query.order('created_at', { ascending: false });
 
   if (error) {
     throw new Error(`Failed to load applications: ${error.message}`);
   }
+
+  const hasActiveFilters = Boolean(trimmedQuery) || Boolean(status);
 
   return (
     <div>
@@ -39,6 +96,39 @@ export default async function ApplicationsPage() {
           New application
         </Link>
       </div>
+
+      <form method="get" className="mt-4 flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          name="q"
+          defaultValue={q ?? ''}
+          placeholder="Search title or address"
+          className="min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none"
+        />
+        <select
+          name="status"
+          defaultValue={status && isKnownStatus(status) ? status : ''}
+          className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none"
+        >
+          <option value="">All statuses</option>
+          {APPLICATION_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {value.replaceAll('_', ' ')}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
+        >
+          Filter
+        </button>
+        {hasActiveFilters && (
+          <Link href="/applications" className="text-sm text-zinc-500 underline hover:text-zinc-900">
+            Clear
+          </Link>
+        )}
+      </form>
 
       {applications && applications.length > 0 ? (
         <ul className="mt-6 flex flex-col gap-3">
@@ -85,6 +175,13 @@ export default async function ApplicationsPage() {
             );
           })}
         </ul>
+      ) : hasActiveFilters ? (
+        <div className="mt-6 rounded-lg border border-dashed border-zinc-300 bg-white p-10 text-center">
+          <p className="text-sm text-zinc-600">No applications match your search.</p>
+          <Link href="/applications" className="mt-3 inline-block text-sm font-medium text-zinc-900 underline">
+            Clear filters
+          </Link>
+        </div>
       ) : (
         <div className="mt-6 rounded-lg border border-dashed border-zinc-300 bg-white p-10 text-center">
           <p className="text-sm text-zinc-600">No applications yet.</p>

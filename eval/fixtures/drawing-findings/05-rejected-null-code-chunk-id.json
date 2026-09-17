@@ -1,0 +1,15 @@
+{
+  "description": "The DB check constraint 'kind = missing_document OR code_chunk_id IS NOT NULL' (20260806000044_drawing_review_schema.sql) is mirrored in DrawingFindingSchema's .refine() -- a code_conflict with a null code_chunk_id is rejected here, not left to fail at the database insert.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111"],
+  "rawFinding": {
+    "kind": "code_conflict",
+    "severity": "warning",
+    "issue": "A conflict asserted with no supporting excerpt cited.",
+    "action_required": "N/A -- this finding should be rejected before it reaches a human.",
+    "code_chunk_id": null,
+    "source_page": 1,
+    "source_region": null,
+    "confidence": 0.6
+  },
+  "expected": { "ok": false, "reasonContains": "code_chunk_id is required" }
+}
