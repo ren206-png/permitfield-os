@@ -276,7 +276,7 @@ reset role;
 -- Runs as the connecting role (postgres) to perform the GRANT/REVOKE DDL,
 -- same pattern as service_role_truncate_append_only.test.sql.
 --
--- Gate 5.1 (20260806000044_drawing_review_schema.sql) added drawing_reviews
+-- Gate 5.1 (20260806000045_drawing_review_schema.sql) added drawing_reviews
 -- with a FK to ai_jobs(id), so a bare `truncate table ai_jobs, ...` now fails
 -- with "cannot truncate a table referenced in a foreign key constraint"
 -- regardless of privileges. drawing_reviews/drawing_findings are included in

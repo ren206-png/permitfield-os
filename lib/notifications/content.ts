@@ -52,7 +52,7 @@ export interface DerivedNotificationContent {
   text: string;
   // Only populated for 'drawing_review_completed' -- a drawing review is
   // scoped to one application_documents row, not the whole application
-  // (mirrors drawing_reviews.application_document_id, 20260806000044). Every
+  // (mirrors drawing_reviews.application_document_id, 20260806000045). Every
   // other event kind here is application-scoped, so this is null for them.
   applicationDocumentId: string | null;
 }

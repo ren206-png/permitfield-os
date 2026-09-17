@@ -6,7 +6,7 @@ import { NotificationToggleButton } from './notification-toggle-button';
 
 // Gate 5, sub-phase 5.3 hardening (per-user opt-out, per Ren's explicit
 // "1-4 matters to me please work on it" instruction). Self-service
-// settings page for notification_preferences (20260806000048...sql) --
+// settings page for notification_preferences (20260806000049...sql) --
 // same "flag off means this route 404s" discipline as
 // app/(app)/settings/billing/page.tsx's own isBillingEnabled() gate, since
 // a preference toggle with notifications disabled entirely would have no
@@ -42,7 +42,7 @@ export default async function NotificationsSettingsPage() {
     throw new Error(`Failed to load notification preferences: ${error.message}`);
   }
 
-  // ABSENCE MEANS ENABLED -- see 20260806000048_notification_preferences.sql
+  // ABSENCE MEANS ENABLED -- see 20260806000049_notification_preferences.sql
   // and lib/notifications/recipients.ts's own header comments for why a
   // missing row (every member as of this migration, and any member who
   // never visits this page) reads as "notify me", not "don't notify me".

@@ -14,7 +14,7 @@
 --
 -- SHAPE: mirrors the simpler insert-only, RLS-default-deny
 -- drawing_findings_rejected/ai_findings_rejected precedent
--- (20260806000045/20260806000010), not the richer SELECT-gated-for-
+-- (20260806000046/20260806000010), not the richer SELECT-gated-for-
 -- elevated-roles ai_jobs ledger shape (20260806000036) -- no UI or ops
 -- read-path consumes this table yet ("declare ahead of its consumer",
 -- same discipline as every flag/column/event in this workstream). Unlike
@@ -38,8 +38,8 @@ create table notification_log (
   -- Only populated for event_kind = 'drawing_review_completed' -- a
   -- drawing review is scoped to one application_documents row, not the
   -- whole application (mirrors drawing_reviews.application_document_id,
-  -- 20260806000044). ON DELETE SET NULL, not CASCADE, same reasoning as
-  -- drawing_findings_rejected.application_document_id (20260806000045):
+  -- 20260806000045). ON DELETE SET NULL, not CASCADE, same reasoning as
+  -- drawing_findings_rejected.application_document_id (20260806000046):
   -- this log row documents a notification that was actually sent: it must
   -- not disappear just because the referenced document was later
   -- archived/replaced.
@@ -59,7 +59,7 @@ create table notification_log (
   -- 'permit/application.review_confirmed' notification) is a plain
   -- `alter table ... drop constraint / add constraint` rather than the
   -- `alter type ... add value` ceremony (which also can't be used inside
-  -- the same transaction that adds the value, per 20260806000044's own
+  -- the same transaction that adds the value, per 20260806000045's own
   -- comment on ai_task_kind). This table has no other column that would
   -- benefit from the enum's storage/comparison efficiency at the volumes
   -- this workstream expects.
@@ -90,7 +90,7 @@ create table notification_log (
   ),
   -- Only 'email' exists today (Resend, per §J.4) -- a plain CHECK, not an
   -- enum, same "free text/CHECK now, decide the fixed list later"
-  -- reasoning as drawing_category (20260806000044): no SMS/webhook-out
+  -- reasoning as drawing_category (20260806000045): no SMS/webhook-out
   -- provider has been chosen yet (§F), and this column just needs to not
   -- block that future decision.
   channel text not null default 'email' check (channel = 'email'),
@@ -146,7 +146,7 @@ create trigger notification_log_append_only
   for each row execute function forbid_update_delete();
 
 -- Table-level grants, mirroring drawing_findings_rejected/
--- ai_findings_rejected exactly (20260806000045/20260806000010):
+-- ai_findings_rejected exactly (20260806000046/20260806000010):
 -- service_role is the only writer that exists (lib/inngest/functions/
 -- notify.ts), and gets INSERT only, not SELECT -- there is no code path in
 -- this sub-phase that needs to read this table back (Inngest's own

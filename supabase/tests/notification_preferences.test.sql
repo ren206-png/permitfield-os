@@ -1,6 +1,6 @@
 -- Gate 5, sub-phase 5.3 hardening (per-user opt-out, per Ren's explicit
 -- "1-4 matters to me please work on it" instruction,
--- 20260806000048_notification_preferences.sql). Proves:
+-- 20260806000049_notification_preferences.sql). Proves:
 --   1. authenticated can INSERT/UPDATE/SELECT their OWN (org_id, user_id)
 --      row (user_id = auth.uid(), and is_org_member(org_id) on insert).
 --   2. authenticated cannot INSERT a row claiming a DIFFERENT user_id (the

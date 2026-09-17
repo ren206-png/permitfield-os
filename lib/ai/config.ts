@@ -107,7 +107,7 @@ export const EXTERNAL_API_TIMEOUT_MS = 30_000;
 // drawing-review prompt (lib/ai/review-drawing.ts) -- persisted with every
 // drawing_reviews row (drawing_reviews' own model_id/prompt_version live on
 // its referenced ai_jobs row, not a column of drawing_reviews itself; see
-// 20260806000044's header on reusing the AI-1.1 ledger) so a bad prompt
+// 20260806000045's header on reusing the AI-1.1 ledger) so a bad prompt
 // revision can be identified, and the exact rows it produced found, without
 // guessing.
 export const DRAWING_REVIEW_PROMPT_VERSION = 'drawing-review-v1';

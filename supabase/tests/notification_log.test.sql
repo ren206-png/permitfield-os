@@ -1,4 +1,4 @@
--- Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K, 20260806000047_notification_log.sql).
+-- Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K, 20260806000048_notification_log.sql).
 -- Proves, for the new notification_log table, the same shape of guarantees
 -- this codebase's other internal-ops "no SELECT policy, insert-only for
 -- service_role" tables get (drawing_findings_rejected.test.sql /
@@ -204,7 +204,7 @@ do $$
 begin
   begin
     perform 1 from notification_log limit 1;
-    raise exception 'FAIL: service_role was able to SELECT from notification_log (should be insert-only, per 20260806000045:48 precedent)';
+    raise exception 'FAIL: service_role was able to SELECT from notification_log (should be insert-only, per 20260806000046:48 precedent)';
   exception
     when insufficient_privilege then
       raise notice 'PASS: SELECT on notification_log correctly rejected for service_role (insert-only grant) (%)', sqlerrm;

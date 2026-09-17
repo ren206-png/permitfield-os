@@ -1,5 +1,5 @@
 -- Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K,
--- 20260806000045_drawing_findings_rejected.sql). Proves, for the new
+-- 20260806000046_drawing_findings_rejected.sql). Proves, for the new
 -- drawing_findings_rejected table, the same shape of guarantees this
 -- codebase's other internal-ops "no SELECT policy, insert-only for
 -- service_role" tables get -- no dedicated test file for its sibling

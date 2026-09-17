@@ -57,7 +57,7 @@ export async function resolveOrgNotificationRecipients(
   // ABSENCE MEANS ENABLED: a member with no notification_preferences row at
   // all (every member as of this migration, and any member who never visits
   // the settings page after) is NOT in this set and is notified exactly as
-  // before -- see 20260806000048_notification_preferences.sql's own header
+  // before -- see 20260806000049_notification_preferences.sql's own header
   // comment on why this default is deliberately opt-out-by-exception, not
   // opt-in-by-default.
   const { data: preferences, error: preferencesError } = await supabase

@@ -4,7 +4,7 @@ import { FindingKindSchema, FindingSeveritySchema } from './audit';
 // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Response schema for the
 // `permit.drawing_review` Inngest function
 // (lib/inngest/functions/drawing-review.ts). Mirrors, field for field, the
-// drawing_findings table (20260806000044_drawing_review_schema.sql) so a
+// drawing_findings table (20260806000045_drawing_review_schema.sql) so a
 // validated finding maps onto an insert with no translation gaps -- same
 // shape/purpose as lib/ai/schemas/audit.ts's own header comment for
 // AuditResponseSchema/AuditFindingSchema, which this file deliberately
@@ -12,13 +12,13 @@ import { FindingKindSchema, FindingSeveritySchema } from './audit';
 // redeclaring: a "passed check" / "missing document" / "code conflict"
 // taxonomy and a critical/warning/info severity scale are not specific to
 // text-document audits, they apply unchanged to a drawing review (see
-// 20260806000044's own header comment for why drawing_findings.kind/severity
+// 20260806000045's own header comment for why drawing_findings.kind/severity
 // reuse audit_findings' enums instead of near-duplicates).
 //
 // Unlike AuditFindingSchema, a drawing finding has TWO citation axes, not
 // one: code_chunk_id (the rule, same as audit) AND source_page (the visual
 // evidence location on the drawing sheet itself -- Gate 5's actual
-// "evidence-linked" requirement, per 20260806000044's header). "No citation,
+// "evidence-linked" requirement, per 20260806000045's header). "No citation,
 // no finding" (SS0.2) is therefore mirrored as TWO separate .refine()s
 // below, restating the table's own two CHECK constraints
 // (`check (kind = 'missing_document' or code_chunk_id is not null)`,
@@ -29,7 +29,7 @@ import { FindingKindSchema, FindingSeveritySchema } from './audit';
 
 // Normalized bounding box on a drawing sheet page, e.g. {"x":0.12,"y":0.30,
 // "width":0.08,"height":0.05} in [0,1] fractions of page width/height --
-// same contract 20260806000044's own header comment deferred to this
+// same contract 20260806000045's own header comment deferred to this
 // sub-phase's Zod schema (rather than a DB CHECK) to decide. Deliberately
 // NOT required even when source_page is present (a finding may be
 // page-level, with no single region to box) -- optional at the top level in

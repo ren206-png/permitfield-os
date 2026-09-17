@@ -24,8 +24,8 @@ export interface RetrievedCodeChunk {
   effectiveFrom: string | null;
   effectiveTo: string | null;
   // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). New dimension column from
-  // 20260806000044_drawing_review_schema.sql / wired into the RPC by
-  // 20260806000046_search_jurisdiction_code_chunks_drawing_category.sql --
+  // 20260806000045_drawing_review_schema.sql / wired into the RPC by
+  // 20260806000047_search_jurisdiction_code_chunks_drawing_category.sql --
   // same null-means-universal semantics as permitType/propertyType/language
   // above, passed through for observability.
   drawingCategory: string | null;
@@ -51,9 +51,9 @@ export interface CodeChunkRetrievalFilters {
   language?: string;
   // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Same optional-narrowing
   // shape as the three filters above, wired to the new p_drawing_category
-  // RPC argument (20260806000046...sql). No real classifier exists yet to
+  // RPC argument (20260806000047...sql). No real classifier exists yet to
   // populate this today -- same "declare ahead of its consumer" discipline
-  // as 20260806000044's own drawing_category column header comment -- so the
+  // as 20260806000045's own drawing_category column header comment -- so the
   // one real caller that will exist after this sub-phase
   // (lib/inngest/functions/drawing-review.ts) passes this as undefined too,
   // same as every existing caller does for the other three dimensions.
@@ -141,7 +141,7 @@ export async function retrieveCodeChunks(
   // (lib/inngest/functions/audit.ts) does not pass any of these arguments at
   // all yet -- all resolve to `null` on the wire, which is
   // search_jurisdiction_code_chunks's own "no filtering on this dimension"
-  // default (20260806000037.../20260806000046...sql), so this change is
+  // default (20260806000037.../20260806000047...sql), so this change is
   // backward-compatible with every pre-AI-1.2/pre-5.2 caller. p_as_of_date is
   // deliberately NOT exposed here -- see CodeChunkRetrievalFilters's own
   // header comment on why the effective-date window isn't an optional

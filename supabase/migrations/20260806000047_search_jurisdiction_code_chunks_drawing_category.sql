@@ -2,7 +2,7 @@
 -- repo's standing migration convention.
 --
 -- Wires the drawing_category dimension column (added schema-only, with no
--- RPC filter, by 20260806000044's own header comment -- "declare now, wire
+-- RPC filter, by 20260806000045's own header comment -- "declare now, wire
 -- at the first real call site") into search_jurisdiction_code_chunks, so
 -- lib/ai/retrieve-code-chunks.ts's new drawingCategory filter
 -- (Gate 5.2 -- this is that first real call site) has an RPC argument to

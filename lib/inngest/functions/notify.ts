@@ -50,7 +50,7 @@ import { sendNotificationEmail } from '@/lib/notifications/send';
 // trigger event names) would silently drop every earlier event's own data
 // the moment a second one arrived within the debounce window -- exactly the
 // data loss this hardening pass exists to prevent. See
-// 20260806000049_notification_pending_events.sql's header comment for the
+// 20260806000050_notification_pending_events.sql's header comment for the
 // full reasoning, including why Inngest's native `batchEvents` was also
 // considered and rejected (unconfirmed cross-trigger-name behavior, and
 // documented incompatibility with idempotency/rateLimit/cancel/priority).
@@ -167,7 +167,7 @@ export const permitNotify = inngest.createFunction(
     // One row recorded per real occurrence, immediately -- never lost to
     // permitNotifyFlush's own debounce window "only the latest event
     // survives" limitation (see this file's header comment and
-    // 20260806000049_notification_pending_events.sql's header for why).
+    // 20260806000050_notification_pending_events.sql's header for why).
     const enqueued = await step.run('enqueue-pending-event', async () => {
       const { data: inserted, error } = await supabase
         .from('notification_pending_events')

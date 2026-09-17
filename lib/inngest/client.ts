@@ -63,7 +63,7 @@ export interface PermitEventPayloads {
   // jurisdiction code excerpts -- one event per application_documents row,
   // NOT per application (unlike 'permit/application.documents_ready'),
   // since a drawing review is scoped to one drawing sheet at a time (see
-  // drawing_reviews.application_document_id, 20260806000044). No real
+  // drawing_reviews.application_document_id, 20260806000045). No real
   // sender exists yet in this sub-phase -- per GATE_5_FINDINGS.md §K's own
   // 5.2 scope, wiring a real trigger call site (e.g. from the document
   // upload route, gated on doc_kind = 'blueprint') is deferred to 5.4. Named
@@ -95,7 +95,7 @@ export interface PermitEventPayloads {
   // to collapse a rapid-fire burst of these into a single delayed run per
   // application, which then reads every still-pending row for that
   // application from the DB (never from this event's own payload -- see
-  // 20260806000049_notification_pending_events.sql's header comment on why)
+  // 20260806000050_notification_pending_events.sql's header comment on why)
   // and sends one combined digest email per recipient.
   'permit/notification.queued': { applicationId: string };
 }

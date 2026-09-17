@@ -17,7 +17,7 @@ import { AiJobInsertSchema, AiTokenLedgerInsertSchema } from '@/lib/ai/schemas/a
 // permit.audit, this event has no real emitter yet anywhere in this
 // codebase (no classifier exists to decide "this uploaded document is a
 // drawing, go review it" -- see lib/ai/config.ts's own
-// DRAWING_REVIEW_MAX_RETRIEVED_CHUNKS comment and 20260806000044's header on
+// DRAWING_REVIEW_MAX_RETRIEVED_CHUNKS comment and 20260806000045's header on
 // drawing_category being schema-only). Same "declared ahead of its
 // consumer" discipline as every flag/column/enum value in this workstream:
 // this function is real, callable, end-to-end-testable code with zero
@@ -354,7 +354,7 @@ export const permitDrawingReview = inngest.createFunction(
     });
 
     // SS6 citation-validity-rate metric, mirrored for this pipeline (see
-    // 20260806000045_drawing_findings_rejected.sql) -- rejections are
+    // 20260806000046_drawing_findings_rejected.sql) -- rejections are
     // persisted, never silently dropped.
     await step.run('insert-rejected-findings', async () => {
       if (modelResult.rejected.length === 0) return;

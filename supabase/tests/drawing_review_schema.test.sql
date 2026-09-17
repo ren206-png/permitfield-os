@@ -1,4 +1,4 @@
--- Gate 5, sub-phase 5.1 (GATE_5_FINDINGS.md §K, 20260806000044_drawing_review_schema.sql).
+-- Gate 5, sub-phase 5.1 (GATE_5_FINDINGS.md §K, 20260806000045_drawing_review_schema.sql).
 -- Proves, for the two new tables (drawing_reviews, drawing_findings), the
 -- ai_task_kind enum extension, and the new jurisdiction_code_chunks.
 -- drawing_category column:
@@ -21,7 +21,7 @@
 --      all, unlike drawing_findings).
 --   6. TRUNCATE: service_role holds no TRUNCATE grant on either table and
 --      cannot TRUNCATE them.
---   7. ai_task_kind now accepts 'drawing_review' (20260806000044's enum
+--   7. ai_task_kind now accepts 'drawing_review' (20260806000045's enum
 --      extension), and an ai_jobs row of that kind correctly backs a
 --      drawing_reviews row via ai_job_id.
 --   8. jurisdiction_code_chunks.drawing_category is a plain nullable

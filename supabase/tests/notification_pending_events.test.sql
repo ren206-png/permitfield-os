@@ -1,6 +1,6 @@
 -- Gate 5, sub-phase 5.3 hardening (digest/batching, per Ren's explicit
 -- "1-4 matters to me please work on it" instruction,
--- 20260806000049_notification_pending_events.sql). Proves, for this new
+-- 20260806000050_notification_pending_events.sql). Proves, for this new
 -- durable queue table backing lib/inngest/functions/notify.ts's
 -- permitNotify/permitNotifyFlush split:
 --   1. RLS default-deny: with RLS enabled and zero policies, `authenticated`

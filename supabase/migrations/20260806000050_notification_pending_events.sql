@@ -44,14 +44,14 @@
 create table notification_pending_events (
   id uuid primary key default gen_random_uuid(),
   -- Direct column, not resolved via a join -- same cross-tenant-leak
-  -- reasoning as notification_log.org_id (20260806000047...sql), even
+  -- reasoning as notification_log.org_id (20260806000048...sql), even
   -- though (like notification_log) this table has no SELECT policy for
   -- `authenticated` to filter.
   org_id uuid not null references organizations(id) on delete cascade,
   application_id uuid not null references permit_applications(id) on delete cascade,
   -- Same one-directional relationship to event_kind as
   -- notification_log.application_document_id -- see that column's own
-  -- comment (20260806000047...sql) for why this is deliberately NOT a
+  -- comment (20260806000048...sql) for why this is deliberately NOT a
   -- bidirectional CHECK (self-contradictory with `on delete set null`).
   application_document_id uuid references application_documents(id) on delete set null,
   event_kind text not null check (

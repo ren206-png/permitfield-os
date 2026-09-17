@@ -26,7 +26,7 @@ import type { RejectedFinding } from './audit-permit-data';
 // call, two-pass validation (whole-call structural, then per-item
 // citation) -- reused rather than reinvented, per GATE_5_FINDINGS.md §I.1
 // Q2's resolution that drawing review stays on Claude directly (see
-// 20260806000044_drawing_review_schema.sql's own header comment on why
+// 20260806000045_drawing_review_schema.sql's own header comment on why
 // 'drawing_review' is not added to lib/ai/router.ts's TASK_ROUTES).
 //
 // SCOPE DECISION: unlike auditPermitData, this module's system prompt
@@ -38,7 +38,7 @@ import type { RejectedFinding } from './audit-permit-data';
 // The 'missing_document' kind, and DrawingFindingSchema's own exemption of
 // it from both citation requirements, are kept in the schema regardless
 // (same "declared ahead of its consumer" discipline as
-// drawing_category/jurisdiction_code_chunks -- 20260806000044's own header
+// drawing_category/jurisdiction_code_chunks -- 20260806000045's own header
 // comment) so a future sub-phase that adds a real deterministic missing-
 // document check for drawings does not need a schema change to use it.
 // validateDrawingFindingItem below rejects a model-produced
