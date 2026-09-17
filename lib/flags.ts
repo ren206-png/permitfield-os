@@ -321,6 +321,43 @@ export function isBillingEnabled(): boolean {
 // exactly as they always have (nothing upstream changes), they simply reach
 // no subscriber, byte-identical to the pre-existing "declared ahead of its
 // consumer" state.
+//
+// Independent of, and not a replacement for, isNotificationsEnabled() below
+// -- Gate 5.3's notify.ts and this flag's notify-on-failure.ts are two
+// separate subscribers to overlapping events (built in parallel, neither
+// aware of the other; see eslint.config.mjs's resendClientRestriction
+// header comment for the same story on the Resend-client side). Both can be
+// on, off, or mixed in a given environment; reconciling them into one
+// subscriber is a real follow-up design decision, not something forced
+// here.
 export function isFailureNotificationsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_FAILURE_NOTIFICATIONS');
+}
+
+// Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Master kill switch for the
+// drawing-review AI pipeline (lib/inngest/functions/drawing-review.ts) --
+// same "ops-level rollback lever, independent of the per-jurisdiction
+// coverage_level product gate" shape as isAiAuditEnabled() above. Both are
+// checked before any model call is made; see that function's own header
+// comment for why the two checks are kept separate rather than folded into
+// one. Default OFF per the same global engineering rule as every flag in
+// this file -- no environment runs a real drawing review until this is
+// explicitly turned on, regardless of any jurisdiction's coverage_level.
+export function isDrawingReviewEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_DRAWING_REVIEW');
+}
+
+// Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K). Master kill switch for the
+// notification-sending Inngest subscriber (lib/inngest/functions/notify.ts)
+// -- same "ops-level rollback lever" shape as isDrawingReviewEnabled()/
+// isAiAuditEnabled() above, checked before any Resend call is made, and
+// independent of any per-jurisdiction product gate (this flag has no
+// coverage_level counterpart -- notifications are an operational concern of
+// the application/org, not a jurisdiction-coverage-tier concern). Default
+// OFF per the same global engineering rule as every flag in this file -- no
+// environment sends a real email until this is explicitly turned on AND
+// RESEND_API_KEY/RESEND_FROM_EMAIL are configured (lib/notifications/
+// send.ts throws at the point of use, not at import time, if they aren't).
+export function isNotificationsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_NOTIFICATIONS');
 }

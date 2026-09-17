@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { checkoutAction, type BillingActionState } from './actions';
 import type { BillingTierId } from '@/lib/billing/tiers';
+import { useErrorToast } from '@/components/toast/use-action-toast';
 
 const initialState: BillingActionState = {};
 
@@ -11,6 +12,7 @@ const initialState: BillingActionState = {};
 // per instance" shape as app/admin/client-portal/revoke-token-button.tsx.
 export function CheckoutButton({ tier, label }: { tier: BillingTierId; label: string }) {
   const [state, formAction, pending] = useActionState(checkoutAction, initialState);
+  useErrorToast(state.error);
 
   return (
     <form action={formAction}>

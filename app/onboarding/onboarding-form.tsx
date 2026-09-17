@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { createOrganizationAction, type OnboardingState } from './actions';
+import { useErrorToast } from '@/components/toast/use-action-toast';
 
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
@@ -11,6 +12,7 @@ const initialState: OnboardingState = {};
 
 export function OnboardingForm() {
   const [state, formAction, pending] = useActionState(createOrganizationAction, initialState);
+  useErrorToast(state.error);
 
   return (
     <form action={formAction} className="flex flex-col gap-5">

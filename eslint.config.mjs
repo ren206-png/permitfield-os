@@ -112,18 +112,31 @@ const stripeClientRestriction = {
   },
 };
 
-// Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS), same
-// shape and mechanism as stripeClientRestriction above (a no-restricted-
-// imports rule scoped by files/ignores, using `paths` since `resend` is a
-// bare package name). Only lib/email/resend-client.ts may import it -- every
-// other file, including app/** and lib/inngest/functions/notify-on-failure.ts
-// itself, is forbidden, so this build fails if a future author wires
-// RESEND_API_KEY into a route handler, Server Action, or any other
-// end-user-facing module. Same "only one designated module reads this
-// credential" discipline as RESEND_API_KEY's own .env.example comment.
+// Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS) and
+// Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K/§J.4), same shape and
+// mechanism as stripeClientRestriction above -- applied to the bare
+// `resend` npm package instead of a relative-path module, for the same
+// reason (`patterns` can't match a bare package specifier, so this uses
+// `paths`). Two designated modules may import it, not one: this branch's
+// own lib/email/resend-client.ts (RESEND_API_KEY/RESEND_FROM_ADDRESS,
+// failure-notification emails, subscriber to permit.notify_on_failure) and
+// Gate 5.3's lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL,
+// digested lifecycle-notification emails, subscriber to permit.notify) --
+// the two were built in parallel on separate branches, neither aware of
+// the other, with distinct env vars and call patterns (see each module's
+// own header comment). Reconciling them into one shared sender is a real
+// follow-up design decision, not something to force here -- this
+// restriction just keeps the credential from leaking to a THIRD call site
+// (a route handler, Server Action, or other end-user-facing module) while
+// both existing ones stay intentionally separate. Same "only designated
+// modules read this credential" discipline as RESEND_API_KEY's own
+// .env.example comment. Note this does NOT restrict
+// lib/notifications/recipients.ts (org_members/auth.admin lookups) or
+// lib/notifications/content.ts (pure derivation) -- neither imports
+// `resend` at all, so neither needs (or gets) an exemption here.
 const resendClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/email/resend-client.ts"],
+  ignores: ["lib/email/resend-client.ts", "lib/notifications/send.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -132,7 +145,7 @@ const resendClientRestriction = {
           {
             name: "resend",
             message:
-              "The resend package (RESEND_API_KEY) may only be imported from lib/email/resend-client.ts -- see that module's header comment.",
+              "The resend package may only be imported from lib/email/resend-client.ts (RESEND_API_KEY, failure-notification emails) or lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL, Gate 5.3 lifecycle-notification emails) -- see each module's header comment and GATE_5_FINDINGS.md §K/§J.4.",
           },
         ],
       },
