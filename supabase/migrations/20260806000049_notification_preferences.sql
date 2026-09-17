@@ -94,3 +94,24 @@ grant select on notification_preferences to service_role;
 -- applied anyway for the same "close it in the same migration that creates
 -- the table, not by a future audit" discipline as every sibling table.
 revoke truncate on notification_preferences from service_role;
+
+-- Close the analogous INSERT/UPDATE/DELETE gap for the same reason
+-- 20260806000044_org_subscriptions_revoke_authenticated_write.sql (already
+-- on main) and this workstream's own
+-- 20260806000046_drawing_findings_rejected.sql/20260806000048_notification_log.sql
+-- close their SELECT/write gaps: the grant above ("service_role: SELECT
+-- only") assumed omitting a grant is equivalent to denying it, but the
+-- Supabase CLI seeds Postgres' per-schema default privileges
+-- (pg_default_acl) at `supabase start`/`db reset` time from the CLI/
+-- Postgres image, not from this repo, so an unpinned CLI version (CI's
+-- `supabase/setup-cli@v1 version: latest`) is not guaranteed to leave
+-- service_role's INSERT/UPDATE/DELETE closed just because no migration
+-- ever granted them. Revoke explicitly instead of relying on that implicit,
+-- CLI-version-dependent default.
+revoke insert, update, delete on notification_preferences from service_role;
+
+-- Same reasoning, for `authenticated`'s DELETE: the grants above are
+-- select/insert/update only (this table deliberately has no DELETE
+-- policy), so close the same CLI-version-dependent default-ACL gap for
+-- DELETE explicitly rather than relying on omission.
+revoke delete on notification_preferences from authenticated;

@@ -62,3 +62,19 @@ grant insert on drawing_findings_rejected to service_role;
 -- TRUNCATE bypasses RLS entirely and there is no row-level trigger on this
 -- table to intercept it.
 revoke truncate on drawing_findings_rejected from service_role;
+
+-- Close the analogous SELECT gap, same root cause and same fix shape as
+-- 20260806000044_org_subscriptions_revoke_authenticated_write.sql (already
+-- on main): the Supabase CLI seeds Postgres' per-schema default privileges
+-- (pg_default_acl for role postgres, schema public) at `supabase
+-- start`/`db reset` time, before any of this repo's own migrations run, and
+-- that seeding is versioned with the CLI/Postgres image rather than this
+-- repo -- `supabase/setup-cli@v1 version: latest` in CI is not guaranteed
+-- to match whatever a given local install happens to have. The comment
+-- above ("INSERT ONLY, no SELECT") assumed omitting a grant is equivalent
+-- to denying it; per SERVICE_ROLE_GRANTS_FINDINGS.md, service_role holds
+-- the full privilege set on every public-schema table by platform default,
+-- independent of this repo's own narrower grants, so omission alone does
+-- not close the gap in every environment. Revoke explicitly instead of
+-- relying on that implicit, CLI-version-dependent default.
+revoke select on drawing_findings_rejected from service_role;

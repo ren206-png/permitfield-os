@@ -117,3 +117,19 @@ grant select, insert, update on notification_pending_events to service_role;
 -- `authenticated` doesn't apply to service_role at all, so this revoke is
 -- the only backstop.
 revoke truncate on notification_pending_events from service_role;
+
+-- Close the analogous DELETE gap for service_role, and the SELECT/INSERT/
+-- UPDATE/DELETE gap for `authenticated` (zero policies above means
+-- default-deny is meant to be total for that role), for the same reason
+-- 20260806000044_org_subscriptions_revoke_authenticated_write.sql (already
+-- on main) and this workstream's own 20260806000046/20260806000048/
+-- 20260806000049 close their own gaps: the grants above assumed omitting a
+-- grant is equivalent to denying it, but the Supabase CLI seeds Postgres'
+-- per-schema default privileges (pg_default_acl) at `supabase start`/`db
+-- reset` time from the CLI/Postgres image, not from this repo, so an
+-- unpinned CLI version (CI's `supabase/setup-cli@v1 version: latest`) is
+-- not guaranteed to leave a never-granted privilege closed. Revoke
+-- explicitly instead of relying on that implicit, CLI-version-dependent
+-- default.
+revoke delete on notification_pending_events from service_role;
+revoke select, insert, update, delete on notification_pending_events from authenticated;
