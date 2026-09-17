@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { issueTokenAction, type IssueTokenState } from './actions';
+import { useErrorToast, useSuccessToast } from '@/components/toast/use-action-toast';
 
 const inputClass = 'rounded-md border border-zinc-300 px-2 py-1 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
 const labelClass = 'mb-1 block text-xs font-medium text-zinc-600';
@@ -10,6 +11,14 @@ const initialState: IssueTokenState = {};
 
 export function IssueTokenForm({ applicationId, orgId }: { applicationId: string; orgId: string }) {
   const [state, formAction, pending] = useActionState(issueTokenAction, initialState);
+  useErrorToast(state.error);
+  // Deliberately doesn't put the raw token itself in the toast -- the
+  // amber block below is this action's one durable, non-auto-dismissing
+  // place to read it back ("copy it now, it will not be shown again
+  // anywhere" per that block's own text). A toast that vanishes after
+  // AUTO_DISMISS_MS is the wrong surface for a value the operator might
+  // still be about to copy.
+  useSuccessToast(Boolean(state.issuedRawToken), 'Token issued.');
 
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2 border-t border-zinc-100 pt-3">
