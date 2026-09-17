@@ -121,12 +121,46 @@ const stripeClientRestriction = {
   },
 };
 
+// Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K/§J.4), same shape and
+// mechanism as stripeClientRestriction above -- applied to the bare
+// `resend` npm package instead of a relative-path module, for the same
+// reason (`patterns` can't match a bare package specifier, so this uses
+// `paths`). Only lib/notifications/send.ts may import it -- every other
+// file, including app/**, is forbidden, whether by the "@/" alias or a
+// direct `from 'resend'` import, so this build fails if a future author
+// wires the Resend API key into a route handler, Server Action, or any
+// other end-user-facing module. Same "only one designated module reads
+// this credential" discipline as RESEND_API_KEY/RESEND_FROM_EMAIL's own
+// .env.example comments. Note this does NOT restrict
+// lib/notifications/recipients.ts (org_members/auth.admin lookups) or
+// lib/notifications/content.ts (pure derivation) -- neither imports
+// `resend` at all, so neither needs (or gets) an exemption here.
+const resendClientRestriction = {
+  files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+  ignores: ["lib/notifications/send.ts"],
+  rules: {
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "resend",
+            message:
+              "The resend package (RESEND_API_KEY) may only be imported from lib/notifications/send.ts -- see that module's header comment and GATE_5_FINDINGS.md §K/§J.4.",
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   clientPortalServiceClientRestriction,
   geminiClientRestriction,
   stripeClientRestriction,
+  resendClientRestriction,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
