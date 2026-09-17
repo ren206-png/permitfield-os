@@ -206,6 +206,25 @@ export const permitExtract = inngest.createFunction(
     });
 
     await step.sendEvent('emit-extracted-event', {
+      // Deterministic id, not Inngest's own random default -- closes the
+      // residual duplicate-delivery gap documented in notify.ts's own header
+      // comment (permit-notify has no function-level idempotency of its
+      // own). Inngest dedupes event INGESTION by `id` (a second send with an
+      // id it has already seen is dropped, never delivered to subscribers)
+      // -- this is a different, earlier layer than this function's own
+      // `idempotency: 'event.data.applicationId'`, which only collapses a
+      // re-run of THIS function, not a re-send of the event it emits. Keyed
+      // on extractionId (the freshly-inserted row's id above), NOT this
+      // function's own applicationId idempotency key: audit.ts's own header
+      // comment is explicit that a second real extraction for the same
+      // applicationId (a corrected re-extraction) must be independently
+      // auditable, not collapsed as a duplicate -- using applicationId here
+      // would incorrectly dedupe that legitimate second occurrence at the
+      // event-ingestion layer before audit.ts ever saw it. extractionId is
+      // exactly the value audit.ts already trusts as ITS OWN idempotency
+      // key, so this reuses the same "which real thing is this" identity
+      // rather than inventing a second one.
+      id: `permit/application.extracted:${persisted.extractionId}`,
       name: 'permit/application.extracted',
       data: {
         applicationId,

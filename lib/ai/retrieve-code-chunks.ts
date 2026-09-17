@@ -23,6 +23,12 @@ export interface RetrievedCodeChunk {
   language: string | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
+  // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). New dimension column from
+  // 20260806000044_drawing_review_schema.sql / wired into the RPC by
+  // 20260806000046_search_jurisdiction_code_chunks_drawing_category.sql --
+  // same null-means-universal semantics as permitType/propertyType/language
+  // above, passed through for observability.
+  drawingCategory: string | null;
   rrfScore: number;
 }
 
@@ -43,6 +49,15 @@ export interface CodeChunkRetrievalFilters {
   permitType?: string;
   propertyType?: string;
   language?: string;
+  // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Same optional-narrowing
+  // shape as the three filters above, wired to the new p_drawing_category
+  // RPC argument (20260806000046...sql). No real classifier exists yet to
+  // populate this today -- same "declare ahead of its consumer" discipline
+  // as 20260806000044's own drawing_category column header comment -- so the
+  // one real caller that will exist after this sub-phase
+  // (lib/inngest/functions/drawing-review.ts) passes this as undefined too,
+  // same as every existing caller does for the other three dimensions.
+  drawingCategory?: string;
 }
 
 /**
@@ -75,6 +90,26 @@ export function buildAuditQueryText(params: {
 }
 
 /**
+ * Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Builds the natural-language
+ * query text for a drawing review, mirroring buildAuditQueryText's own
+ * "build only from what's actually known" discipline -- but unlike audit,
+ * there is no prior extraction of the drawing's own content to draw
+ * structured facts from at retrieval time (the model has not yet looked at
+ * the drawing itself; retrieval happens BEFORE the model call, same
+ * ordering as audit's retrieve-then-call sequence). The only inputs
+ * available before that call are the permit type this application is for
+ * and the drawing document's own filename -- both are included; nothing is
+ * padded or guessed for a value that isn't known.
+ */
+export function buildDrawingReviewQueryText(params: {
+  permitTypeTitle: string;
+  documentFilename: string;
+}): string {
+  const { permitTypeTitle, documentFilename } = params;
+  return `${permitTypeTitle}. Drawing document: ${documentFilename}`;
+}
+
+/**
  * Calls search_jurisdiction_code_chunks (migration 20260806000014) to fetch
  * the top AUDIT_MAX_RETRIEVED_CHUNKS code chunks for one jurisdiction, fused
  * via RRF across BM25 and (when isVectorRetrievalEnabled()) vector ranking.
@@ -101,12 +136,13 @@ export async function retrieveCodeChunks(
     queryEmbeddingLiteral = toPgvectorLiteral(embedding);
   }
 
-  // p_permit_type/p_property_type/p_language: omitted filters map to
-  // undefined here, and the existing caller (lib/inngest/functions/audit.ts)
-  // does not pass a fourth argument at all yet -- both resolve to `null` on
-  // the wire, which is search_jurisdiction_code_chunks's own "no filtering
-  // on this dimension" default (20260806000037...sql), so this change is
-  // backward-compatible with every pre-AI-1.2 caller. p_as_of_date is
+  // p_permit_type/p_property_type/p_language/p_drawing_category: omitted
+  // filters map to undefined here, and the existing caller
+  // (lib/inngest/functions/audit.ts) does not pass any of these arguments at
+  // all yet -- all resolve to `null` on the wire, which is
+  // search_jurisdiction_code_chunks's own "no filtering on this dimension"
+  // default (20260806000037.../20260806000046...sql), so this change is
+  // backward-compatible with every pre-AI-1.2/pre-5.2 caller. p_as_of_date is
   // deliberately NOT exposed here -- see CodeChunkRetrievalFilters's own
   // header comment on why the effective-date window isn't an optional
   // filter.
@@ -118,6 +154,7 @@ export async function retrieveCodeChunks(
     p_permit_type: filters?.permitType ?? null,
     p_property_type: filters?.propertyType ?? null,
     p_language: filters?.language ?? null,
+    p_drawing_category: filters?.drawingCategory ?? null,
   });
 
   if (error) {
@@ -136,6 +173,7 @@ export async function retrieveCodeChunks(
     language: string | null;
     effective_from: string | null;
     effective_to: string | null;
+    drawing_category: string | null;
     rrf_score: number;
   }>).map((row) => ({
     id: row.id,
@@ -149,6 +187,7 @@ export async function retrieveCodeChunks(
     language: row.language,
     effectiveFrom: row.effective_from,
     effectiveTo: row.effective_to,
+    drawingCategory: row.drawing_category,
     rrfScore: row.rrf_score,
   }));
 }
