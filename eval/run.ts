@@ -28,8 +28,10 @@ import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { PDFDocument } from 'pdf-lib';
 import { validateAuditFindingItem, auditPermitData } from '../lib/ai/audit-permit-data';
+import { validateDrawingFindingItem, reviewDrawing } from '../lib/ai/review-drawing';
 import { extractPermitData } from '../lib/ai/extract-permit-data';
 import { computeMissingDocumentFindings } from '../lib/inngest/functions/audit';
+import { composeDigestEmail, deriveNotificationContent } from '../lib/notifications/content';
 import type { PermitExtraction } from '../lib/ai/schemas/extraction';
 import {
   splitApplicantName,
@@ -154,6 +156,197 @@ async function runZeroChunksShortCircuit() {
     ok
       ? 'an empty corpus (the real current state of jurisdiction_code_chunks) degrades to a clean, no-op result, not an error'
       : `expected a clean empty result; got ${JSON.stringify(result)}`
+  );
+}
+
+// --- review-drawing: per-item citation/kind/Zod validation (offline, Gate 5 5.2) ---
+
+interface DrawingFindingFixture {
+  description: string;
+  shownChunkIds: string[];
+  rawFinding: Parameters<typeof validateDrawingFindingItem>[0];
+  expected: { ok: boolean; reasonContains?: string };
+}
+
+function runDrawingFindingFixtures() {
+  console.log('\n== review-drawing.ts: per-item citation/kind/Zod validation (offline, Gate 5 5.2) ==');
+  for (const { file, data } of loadFixtures<DrawingFindingFixture>('drawing-findings')) {
+    const result = validateDrawingFindingItem(data.rawFinding, new Set(data.shownChunkIds));
+
+    if (result.ok !== data.expected.ok) {
+      report(file, false, `expected ok=${data.expected.ok}, got ok=${result.ok}. (${data.description})`);
+      continue;
+    }
+    if (!result.ok && data.expected.reasonContains && !result.reason.includes(data.expected.reasonContains)) {
+      report(file, false, `rejection reason "${result.reason}" did not contain "${data.expected.reasonContains}"`);
+      continue;
+    }
+    report(file, true, data.description);
+  }
+}
+
+// --- review-drawing: zero-retrieved-chunks short-circuit (offline, Gate 5 5.2) ---
+
+async function runDrawingReviewZeroChunksShortCircuit() {
+  console.log('\n== review-drawing.ts: zero-retrieved-chunks short-circuit (offline, no API call made) ==');
+  // Same defensive Proxy trick as audit-permit-data's own zero-chunk check
+  // above: if reviewDrawing's zero-chunk guard is ever removed or reordered,
+  // this throws instead of silently passing.
+  const uncallableClient = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error('reviewDrawing should not touch the Anthropic client when retrievedChunks is empty.');
+      },
+    }
+  ) as Anthropic;
+
+  const result = await reviewDrawing(
+    uncallableClient,
+    { id: 'doc-1', filename: 'drawing.pdf', route: 'text', textContent: 'irrelevant' },
+    []
+  );
+  const ok =
+    result.structurallyValid === true &&
+    result.findings.length === 0 &&
+    result.rejected.length === 0 &&
+    result.rawResponse === null &&
+    result.inputTokens === 0 &&
+    result.outputTokens === 0;
+  report(
+    'zero-chunks-returns-clean-empty-result',
+    ok,
+    ok
+      ? 'an empty corpus (the real current state of jurisdiction_code_chunks) degrades to a clean, no-op result, not an error'
+      : `expected a clean empty result; got ${JSON.stringify(result)}`
+  );
+}
+
+// --- notifications/content.ts: deriveNotificationContent (offline, Gate 5 5.3) ---
+
+function runNotificationContentChecks() {
+  console.log('\n== notifications/content.ts: deriveNotificationContent (offline, pure/model-free) ==');
+  const ctx = { permitTypeTitle: 'Residential Deck Permit' };
+
+  const extractedOk = deriveNotificationContent(
+    'permit/application.extracted',
+    { applicationId: 'app-1', extractionId: 'ext-1', zodValid: true },
+    ctx
+  );
+  report(
+    'extracted, zodValid=true -> extraction_completed',
+    extractedOk?.eventKind === 'extraction_completed' && extractedOk.applicationDocumentId === null,
+    `got ${JSON.stringify(extractedOk)}`
+  );
+
+  const extractedFailed = deriveNotificationContent(
+    'permit/application.extracted',
+    { applicationId: 'app-1', extractionId: 'ext-1', zodValid: false },
+    ctx
+  );
+  report(
+    'extracted, zodValid=false -> extraction_failed (a genuine failure, still notified -- not a deliberate skip)',
+    extractedFailed?.eventKind === 'extraction_failed',
+    `got ${JSON.stringify(extractedFailed)}`
+  );
+
+  const auditedOk = deriveNotificationContent(
+    'permit/application.audited',
+    { applicationId: 'app-1', auditId: 'audit-1', audited: true },
+    ctx
+  );
+  report('audited, audited=true -> audit_completed', auditedOk?.eventKind === 'audit_completed', `got ${JSON.stringify(auditedOk)}`);
+
+  const auditedSkipped = deriveNotificationContent(
+    'permit/application.audited',
+    { applicationId: 'app-1', auditId: null, audited: false },
+    ctx
+  );
+  report(
+    'audited, audited=false -> null (deliberate skip, not a failure -- flag off or coverage_level not verified)',
+    auditedSkipped === null,
+    `got ${JSON.stringify(auditedSkipped)}`
+  );
+
+  const pdfOk = deriveNotificationContent(
+    'permit/application.pdf_generated',
+    { applicationId: 'app-1', generatedDocumentIds: ['doc-1', 'doc-2'], succeeded: true },
+    ctx
+  );
+  report(
+    'pdf_generated, succeeded=true -> pdf_generated, mentions file count',
+    pdfOk?.eventKind === 'pdf_generated' && pdfOk.text.includes('2 file(s)'),
+    `got ${JSON.stringify(pdfOk)}`
+  );
+
+  const pdfFailed = deriveNotificationContent(
+    'permit/application.pdf_generated',
+    { applicationId: 'app-1', generatedDocumentIds: [], succeeded: false },
+    ctx
+  );
+  report(
+    'pdf_generated, succeeded=false -> pdf_generation_failed (a genuine failure, still notified)',
+    pdfFailed?.eventKind === 'pdf_generation_failed',
+    `got ${JSON.stringify(pdfFailed)}`
+  );
+
+  const drawingOk = deriveNotificationContent(
+    'permit/application.drawing_reviewed',
+    { applicationId: 'app-1', applicationDocumentId: 'doc-9', drawingReviewId: 'dr-1', reviewed: true },
+    ctx
+  );
+  report(
+    'drawing_reviewed, reviewed=true -> drawing_review_completed, carries applicationDocumentId',
+    drawingOk?.eventKind === 'drawing_review_completed' && drawingOk.applicationDocumentId === 'doc-9',
+    `got ${JSON.stringify(drawingOk)}`
+  );
+
+  const drawingSkipped = deriveNotificationContent(
+    'permit/application.drawing_reviewed',
+    { applicationId: 'app-1', applicationDocumentId: 'doc-9', drawingReviewId: null, reviewed: false },
+    ctx
+  );
+  report(
+    'drawing_reviewed, reviewed=false -> null (deliberate skip, same reasoning as audited=false)',
+    drawingSkipped === null,
+    `got ${JSON.stringify(drawingSkipped)}`
+  );
+}
+
+// --- notifications/content.ts: composeDigestEmail (offline, Gate 5 5.3 hardening) ---
+
+function runComposeDigestEmailChecks() {
+  console.log('\n== notifications/content.ts: composeDigestEmail (offline, pure) ==');
+
+  report(
+    'zero items throws (permitNotifyFlush never calls this for a zero-pending-row flush)',
+    (() => {
+      try {
+        composeDigestEmail([]);
+        return false;
+      } catch {
+        return true;
+      }
+    })(),
+    'expected composeDigestEmail([]) to throw'
+  );
+
+  const single = composeDigestEmail([{ subject: 'Extraction complete: Residential Deck Permit', text: 'Body one.' }]);
+  report(
+    'single item -> passed through verbatim, no digest framing',
+    single.subject === 'Extraction complete: Residential Deck Permit' && single.text === 'Body one.',
+    `got ${JSON.stringify(single)}`
+  );
+
+  const multi = composeDigestEmail([
+    { subject: 'Extraction complete: Residential Deck Permit', text: 'Body one.' },
+    { subject: 'Audit complete: Residential Deck Permit', text: 'Body two.' },
+  ]);
+  report(
+    'multiple items -> counted subject, numbered body concatenation',
+    multi.subject === '2 updates: Extraction complete: Residential Deck Permit' &&
+      multi.text === '1. Extraction complete: Residential Deck Permit\nBody one.\n\n2. Audit complete: Residential Deck Permit\nBody two.',
+    `got ${JSON.stringify(multi)}`
   );
 }
 
@@ -481,6 +674,10 @@ async function main() {
   runAuditFindingFixtures();
   runMissingDocumentChecks();
   await runZeroChunksShortCircuit();
+  runDrawingFindingFixtures();
+  await runDrawingReviewZeroChunksShortCircuit();
+  runNotificationContentChecks();
+  runComposeDigestEmailChecks();
   runSplitApplicantNameChecks();
   runResolveFieldValueChecks();
   runBuildFieldResolutionContextChecks();
