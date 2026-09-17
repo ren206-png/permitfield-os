@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000045_estimates.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000052_estimates.sql.
 -- Proves:
 --   1. Draft-mutable RLS: an org member can INSERT/UPDATE/DELETE
 --      estimates/estimate_line_items while status = 'draft', and loses that
@@ -156,7 +156,7 @@ end $$;
 
 -- Step 7 (append-only): estimate_revisions itself cannot be touched by
 -- UPDATE/DELETE, even by the org's own permit_manager. `authenticated` has
--- no UPDATE/DELETE grant on this table at all (20260806000045's grant
+-- no UPDATE/DELETE grant on this table at all (20260806000052's grant
 -- section), so this is rejected at the grant layer before the
 -- forbid_update_delete() trigger even runs -- same "permission denied,
 -- not a trigger message" shape permit_status_machine.test.sql's own

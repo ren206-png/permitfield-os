@@ -6,7 +6,7 @@
 // estimate_line_items / invoice_line_items / org_tax_profiles rows and
 // passes their fields straight into calculateTax() below, then persists the
 // result's totals into estimates/invoices' *_cents columns (see
-// 20260806000045_estimates.sql and 20260806000047_invoices.sql's own header
+// 20260806000052_estimates.sql and 20260806000054_invoices.sql's own header
 // comments: "no calculation logic in SQL", totals are computed here and
 // passed in already-computed).
 //
@@ -20,7 +20,7 @@
 // lib/money/cents.ts's `roundFractionToCents` header comment for why that
 // specific tie-break rule was picked (the simpler, more universally expected
 // customer-facing convention, and the one implied by
-// 20260806000045_estimates.sql's own comment: "line_subtotal_cents =
+// 20260806000052_estimates.sql's own comment: "line_subtotal_cents =
 // round(quantity * unit_price_cents)", which does not qualify "round" any
 // further, so this module treats round-half-up as filling that gap rather
 // than silently picking banker's rounding instead).
@@ -35,7 +35,7 @@
 //      single, deliberate round-to-cents step.
 //
 //   2. Discount, applied to lineSubtotalCents (matching
-//      20260806000045_estimates.sql's own documented discount-order contract
+//      20260806000052_estimates.sql's own documented discount-order contract
 //      verbatim -- that migration's header comment is the authoritative
 //      source for this sequence, restated here as the implementation):
 //        - if discountPercent is set: lineDiscountCents =
@@ -85,7 +85,7 @@
 //
 // Why per-line, then sum, rather than tax-on-the-summed-subtotal: this is
 // the standard invoicing convention (each line is its own taxable supply)
-// and it is the only order consistent with 20260806000045_estimates.sql's
+// and it is the only order consistent with 20260806000052_estimates.sql's
 // documented per-line discount contract -- that migration only defines
 // rounding at the line level, so extending "round once more, per tax type,
 // per line" is the natural continuation of the same contract rather than a

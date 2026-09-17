@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase A service layer -- thin wrapper around
 // `record_estimate_acceptance()` (see
-// supabase/migrations/20260806000046_estimate_acceptances.sql).
+// supabase/migrations/20260806000053_estimate_acceptances.sql).
 //
 // TRUST BOUNDARY (read before calling this function from anywhere new):
 // the migration's grants are `revoke all from public; revoke all from

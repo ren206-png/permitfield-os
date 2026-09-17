@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase A: rate table.
 //
-// Mirrors supabase/migrations/20260806000048_tax_rule_versions_and_decisions.sql's
+// Mirrors supabase/migrations/20260806000055_tax_rule_versions_and_decisions.sql's
 // seed rows EXACTLY -- same four (province, tax_type, rate_percent) triples,
 // same UNVERIFIED status. This file does not "fix" or second-guess those
 // rates; it consumes them as fixture data, per this task's explicit
@@ -48,21 +48,21 @@ export const GST_HST_RATES: Readonly<Record<SupportedProvinceCode, GstHstRate>> 
     rateBasisPoints: 500n, // 5.00%
     verified: false,
     sourceNote:
-      'UNVERIFIED fixture seed -- nominal federal GST rate for Alberta (no provincial sales tax in AB); mirrors 20260806000048 row 1.',
+      'UNVERIFIED fixture seed -- nominal federal GST rate for Alberta (no provincial sales tax in AB); mirrors 20260806000055 row 1.',
   },
   ON: {
     taxType: 'hst',
     rateBasisPoints: 1_300n, // 13.00%
     verified: false,
     sourceNote:
-      'UNVERIFIED fixture seed -- nominal harmonized HST rate for Ontario; mirrors 20260806000048 row 2.',
+      'UNVERIFIED fixture seed -- nominal harmonized HST rate for Ontario; mirrors 20260806000055 row 2.',
   },
   BC: {
     taxType: 'gst',
     rateBasisPoints: 500n, // 5.00%
     verified: false,
     sourceNote:
-      'UNVERIFIED fixture seed -- nominal federal GST rate for British Columbia; mirrors 20260806000048 row 3.',
+      'UNVERIFIED fixture seed -- nominal federal GST rate for British Columbia; mirrors 20260806000055 row 3.',
   },
 };
 
@@ -75,7 +75,7 @@ export const BC_PST_RATE: PstRate = {
   rateBasisPoints: 700n, // 7.00%
   verified: false,
   sourceNote:
-    "UNVERIFIED fixture seed -- nominal BC provincial PST rate, tracked entirely independently of BC's GST row; mirrors 20260806000048 row 4.",
+    "UNVERIFIED fixture seed -- nominal BC provincial PST rate, tracked entirely independently of BC's GST row; mirrors 20260806000055 row 4.",
 };
 
 export function isSupportedProvinceCode(code: string): code is SupportedProvinceCode {

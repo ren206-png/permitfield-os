@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000049_payments.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000056_payments.sql.
 -- Proves:
 --   1. `authenticated` has no direct INSERT/UPDATE grant on
 --      payments/payment_allocations at all -- every write goes through
@@ -9,7 +9,7 @@
 --      payment_allocations rows untouched (correction model: new status +
 --      new row, never edit/delete of the original).
 --   4. Tenant isolation.
---   5. (20260806000051 regression) record_payment() rejects: a single
+--   5. (20260806000058 regression) record_payment() rejects: a single
 --      allocation exceeding an invoice's outstanding balance, MULTIPLE
 --      allocations against the SAME invoice within one call whose sum
 --      exceeds the balance (the actual adversarial-review bug -- see that
@@ -180,7 +180,7 @@ begin
   end;
 end $$;
 
--- Step 7b (20260806000051 regression, single-allocation over-allocation):
+-- Step 7b (20260806000058 regression, single-allocation over-allocation):
 -- payment_a1 above was reversed in Step 6/7, so it no longer counts toward
 -- "already recorded" (reverse_payment() flips status, it does not delete
 -- the allocation row -- record_payment()'s own already-recorded sum filters
@@ -203,7 +203,7 @@ begin
   end;
 end $$;
 
--- Step 7c (20260806000051 regression, SAME-invoice split-allocation
+-- Step 7c (20260806000058 regression, SAME-invoice split-allocation
 -- bypass): the bug this migration actually closed. Two allocations of
 -- 35000 each (70000 total) against the SAME invoice, in ONE
 -- record_payment() call, split specifically so that no SINGLE entry
@@ -230,7 +230,7 @@ begin
   end;
 end $$;
 
--- Step 7d (20260806000051 regression, voided invoice): void the invoice,
+-- Step 7d (20260806000058 regression, voided invoice): void the invoice,
 -- then confirm no allocation can be recorded against it at all, regardless
 -- of amount.
 do $$

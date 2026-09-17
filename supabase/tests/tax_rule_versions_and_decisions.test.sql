@@ -1,5 +1,5 @@
 -- Gate 4 (Quotes & Payments), Phase A /
--- 20260806000048_tax_rule_versions_and_decisions.sql. Storage-shape-only
+-- 20260806000055_tax_rule_versions_and_decisions.sql. Storage-shape-only
 -- migration -- this file proves the schema/RLS/seed shape, not any tax
 -- calculation (none exists).
 -- Proves:
@@ -111,7 +111,7 @@ end $$;
 
 -- Step 5 (append-only): even a permit_manager cannot UPDATE/DELETE an
 -- existing tax_rule_versions row. `authenticated` has no UPDATE/DELETE
--- grant on this table at all (20260806000048's grant section: select+
+-- grant on this table at all (20260806000055's grant section: select+
 -- insert only), so this is rejected at the grant layer before the
 -- forbid_update_delete() trigger even runs -- same "permission denied, not
 -- a trigger message" shape permit_status_machine.test.sql's own

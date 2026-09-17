@@ -35,7 +35,7 @@ function expectOk(result: ReturnType<typeof calculateTax>): TaxCalculationOk {
 
 describe('calculateTax -- AB (GST only, no PST)', () => {
   it('charges 5% GST and no PST for a registered org', () => {
-    // $100.00 line, AB GST 5.00% (migration 20260806000048 row 1, UNVERIFIED
+    // $100.00 line, AB GST 5.00% (migration 20260806000055 row 1, UNVERIFIED
     // fixture): 10_000 * 500 / 10_000 = 500 cents GST.
     const result = expectOk(
       calculateTax([line({ unitPriceCents: 10_000n })], ctx({ provinceCode: 'AB', gstHstStatus: 'registered' }))

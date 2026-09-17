@@ -186,7 +186,7 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
  * Persists the outcome of decideAndSend(): a delivery attempt row on the
  * 'sent'/'send-failed' branches (never on 'skipped' -- a skip is not a
  * delivery attempt at all, per reminder_delivery_attempts' own header
- * comment in 20260806000050_reminder_jobs.sql), an audit_logs entry on
+ * comment in 20260806000057_reminder_jobs.sql), an audit_logs entry on
  * every branch, and the reminder_jobs status transition:
  *   - 'sent'        -> status='sent'
  *   - 'skipped'      -> status='skipped' (never 'canceled' -- canceled_at/
@@ -355,7 +355,7 @@ async function loadInvoiceSnapshot(
  * payment_allocations back to payments and keeping only allocations whose
  * payment is still `recorded` (excluding `reversed`) -- invoices has no
  * paid-status column of its own; see
- * supabase/migrations/20260806000049_payments.sql's own header comment
+ * supabase/migrations/20260806000056_payments.sql's own header comment
  * and lib/inngest/functions/reminder-eligibility.ts's
  * sumRecordedAllocationCents() for why this exact join is required. Two
  * queries (allocations, then payments by id) rather than a single

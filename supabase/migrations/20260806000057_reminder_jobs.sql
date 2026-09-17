@@ -30,7 +30,7 @@ create table reminder_jobs (
   kind reminder_job_kind not null,
   -- Polymorphic-by-convention link to the estimate or invoice this
   -- reminder concerns -- same discriminated-column shape as
-  -- tax_decisions.source_kind/source_line_item_id (20260806000048), for
+  -- tax_decisions.source_kind/source_line_item_id (20260806000055), for
   -- the same reason (exactly one of two possible source tables applies,
   -- neither is immutable/append-only enough for a always-safe real FK).
   target_kind text not null check (target_kind in ('estimate', 'invoice')),

@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000047_invoices.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000054_invoices.sql.
 -- Proves:
 --   1. Draft-mutable RLS, same shape as estimates.
 --   2. issue_invoice(): role-gated, draft-required, assigns the correct

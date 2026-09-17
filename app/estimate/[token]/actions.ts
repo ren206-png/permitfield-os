@@ -85,7 +85,7 @@ export async function acceptEstimateAction(
 
   // revisionHash: a content fingerprint record_estimate_acceptance() stores
   // verbatim without re-verifying it against anything (confirmed by reading
-  // that RPC's full SQL body, 20260806000046_estimate_acceptances.sql) --
+  // that RPC's full SQL body, 20260806000053_estimate_acceptances.sql) --
   // computed fresh here from the revision's own stored jsonb + four *_cents
   // columns, mirroring lib/quotes-payments/invoices.ts's issueInvoice()
   // documentHash computation exactly: sha256 of a deterministic

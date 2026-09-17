@@ -1,5 +1,5 @@
 // Gate 4 (Quotes & Payments) UX polish. Shared label map for
-// reminder_jobs.kind (supabase/migrations/20260806000050_reminder_jobs.sql)
+// reminder_jobs.kind (supabase/migrations/20260806000057_reminder_jobs.sql)
 // -- pulled out to its own file, unlike the status-badge components' own
 // per-file literal unions, because this map is read from two different
 // detail pages (app/(app)/estimates/[id]/page.tsx and

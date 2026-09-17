@@ -14,7 +14,7 @@ import { SITE_URL } from '@/lib/seo';
 // app/(app)/estimates/new/actions.ts: flag re-checked first (notFound()),
 // 'quotes.manage' entitlement re-checked here AND inside sendEstimate()
 // itself. Role-based "who may send" (is_org_billing_manager()'s wider
-// owner/org_owner/platform_admin/permit_manager tier, 20260806000045's own
+// owner/org_owner/platform_admin/permit_manager tier, 20260806000052's own
 // RLS) is NOT re-implemented here -- send_estimate()'s own RPC/RLS is the
 // final authority; a member without that role gets a thrown Postgres error
 // from the RPC, caught below and surfaced as a plain message, same "let
