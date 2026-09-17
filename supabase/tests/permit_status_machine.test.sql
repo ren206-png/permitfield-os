@@ -235,7 +235,7 @@ end $$;
 -- IS allowed to make -- ready_to_submit -> collecting_documents is a legal
 -- edge (Check 1 would pass), so a 42501 here is unambiguously Check 2's
 -- org-tier role branch doing the rejecting, not transition illegality.
--- Before 20260806000045, this rejection did not happen at all -- Check 2
+-- Before 20260806000052, this rejection did not happen at all -- Check 2
 -- had no org-tier branch, so both roles could previously make this move.
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-000000000012","role":"authenticated"}';
 

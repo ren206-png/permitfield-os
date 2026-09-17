@@ -447,7 +447,7 @@ begin
 end $$;
 
 -- === create_project_with_intake()'s p_max_active_projects guard
--- (20260806000044, health-check audit round 3 finding): the RPC now
+-- (20260806000051, health-check audit round 3 finding): the RPC now
 -- re-checks projects.active_max itself, under an advisory lock, rather than
 -- trusting createProjectAction's own separate SELECT count(*) precheck --
 -- see that migration's header comment for the race the two-step
