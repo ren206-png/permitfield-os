@@ -94,7 +94,7 @@ export async function createProjectAction(
   // the common non-racing case (avoids a wasted RPC round trip), but it is
   // no longer the enforcement: create_project_with_intake() below now
   // re-checks the same limit atomically under an advisory lock (migration
-  // 20260806000051) and is the actual source of truth, same
+  // 20260806000060) and is the actual source of truth, same
   // precheck-vs-source-of-truth split as app/api/documents/route.ts's own
   // total-bytes check plus its DB-level trigger (20260806000043).
   const { count, error: countError } = await supabase
@@ -153,7 +153,7 @@ export async function createProjectAction(
   });
 
   if (rpcError) {
-    // The DB-level recheck (migration 20260806000051) lost the race the
+    // The DB-level recheck (migration 20260806000060) lost the race the
     // precheck above missed -- surface the same friendly, limit-specific
     // message a synchronous precheck failure would have, rather than the
     // raw Postgres exception text.
