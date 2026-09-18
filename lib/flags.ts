@@ -301,6 +301,53 @@ export function isBillingEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_BILLING');
 }
 
+// Failure-notification system. Gates lib/inngest/functions/notify-on-failure.ts,
+// the sole subscriber to three events that have existed since Phase 2/4 and
+// were emitted unconditionally on both success and failure the whole time --
+// 'permit/application.extracted' (zodValid), 'permit/application.audited'
+// (audited), 'permit/application.pdf_generated' (succeeded). Each of those
+// three events' own header comment in lib/inngest/client.ts already named
+// "Phase 5's UI/notifications" as the intended future consumer; this flag is
+// that consumer's on/off switch, not a new capability bolted on afterward.
+//
+// One flag gates two coordinated effects, same shape as isBillingEnabled()
+// above: (1) the in-app half -- notify-on-failure's writeNotification() call
+// is skipped entirely when off, so the notifications table only ever
+// receives rows in an environment that opted in, even though its schema and
+// RLS (20260806000059_notifications.sql) exist regardless of this flag's
+// value, same as every other flag in this file; (2) the email half -- when
+// off, lib/email/resend-client.ts is never reached, so RESEND_API_KEY need
+// not even be configured. Off means the three events above still fire
+// exactly as they always have (nothing upstream changes), they simply reach
+// no subscriber, byte-identical to the pre-existing "declared ahead of its
+// consumer" state.
+//
+// Independent of, and not a replacement for, isNotificationsEnabled() below
+// -- Gate 5.3's notify.ts and this flag's notify-on-failure.ts are two
+// separate subscribers to overlapping events (built in parallel, neither
+// aware of the other; see eslint.config.mjs's resendClientRestriction
+// header comment for the same story on the Resend-client side). Both can be
+// on, off, or mixed in a given environment; reconciling them into one
+// subscriber is a real follow-up design decision, not something forced
+// here.
+export function isFailureNotificationsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_FAILURE_NOTIFICATIONS');
+}
+
+// Gate 4 (Quotes & Payments), Phase A (GATE_4_FINDINGS.md). Schema/RLS/RPCs
+// for org_tax_profiles, estimates(+line items/revisions/acceptances),
+// invoices(+line items), tax_rule_versions/tax_decisions, payments(+
+// allocations), and reminder_jobs(+delivery attempts) exist in the database
+// regardless of this flag's value -- the same "schema exists, feature
+// surface does not" split every other flag in this file draws (e.g.
+// isBillingEnabled() above). This flag gates future UI/route/Server-Action
+// surface area, not built in this pass. Default OFF: no environment is
+// affected by these migrations landing until a future pass builds on top
+// of them AND this is explicitly turned on.
+export function isQuotesPaymentsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_QUOTES_PAYMENTS');
+}
+
 // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Master kill switch for the
 // drawing-review AI pipeline (lib/inngest/functions/drawing-review.ts) --
 // same "ops-level rollback lever, independent of the per-jurisdiction

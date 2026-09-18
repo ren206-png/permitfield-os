@@ -2,9 +2,16 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
-import { isAdminPanelEnabled, isBillingEnabled, isDashboardEnabled } from '@/lib/flags';
+import {
+  isAdminPanelEnabled,
+  isBillingEnabled,
+  isDashboardEnabled,
+  isFailureNotificationsEnabled,
+  isQuotesPaymentsEnabled,
+} from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
+import { createClient } from '@/lib/supabase/server';
 import { AppSidebar } from '@/components/app-sidebar';
 
 // Shared chrome for every authenticated, org-scoped page. requireOrgContext()
@@ -16,7 +23,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 // a prop or context provider that could go stale across a client-side
 // navigation.
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const { orgName } = await requireOrgContext();
+  const { orgId, orgName } = await requireOrgContext();
   // Cheap enough to check on every (app) page load (one env var read plus a
   // getUser() call that's already been made by requireOrgContext() above --
   // requireUser() inside isCurrentUserAdmin() re-hits auth.getUser(), same
@@ -30,12 +37,41 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // comment), it just renders read-only for a non-owner. The owner gate
   // lives in app/(app)/settings/billing/actions.ts instead.
   const showBillingLink = isBillingEnabled();
+  // Gate 4 (Quotes & Payments), Phase A. No entitlement check here on
+  // purpose, matching showBillingLink's own reasoning above -- the nav link
+  // is visible to every org member the moment the flag is on, same as
+  // billing's own link; the entitlement-gated "locked" state renders inside
+  // the pages themselves (see e.g. app/(app)/estimates/page.tsx), not by
+  // hiding the nav entry, so a member without the entitlement still learns
+  // the feature exists rather than it silently vanishing.
+  const showQuotesPaymentsLinks = isQuotesPaymentsEnabled();
   // Same flag-only shape as showBillingLink above, not an access check --
   // app/(app)/dashboard/page.tsx does its own can(orgId, 'analytics') check
   // and renders LockedFeature for an org whose plan lacks it, exactly the
   // "flag says the route exists, the page itself decides visibility"
   // division of labor that page's own header comment documents.
   const showDashboardLink = isDashboardEnabled();
+
+  // Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS, see
+  // lib/flags.ts's isFailureNotificationsEnabled() header comment). Flag
+  // checked first, same as showAdminLink above -- an environment with the
+  // flag off never queries the notifications table at all, byte-identical
+  // to before this build. A fresh createClient() call rather than threading
+  // one down from requireOrgContext(), matching this file's own header
+  // comment's "re-derive from the DB, don't thread trust through props"
+  // habit; a `head: true` count avoids fetching any row body just to get a
+  // number, and needs no pagination guard the way a real .select() would
+  // (PostgREST's 1000-row cap only bounds returned rows, not a count).
+  let unreadNotificationCount = 0;
+  if (isFailureNotificationsEnabled()) {
+    const supabase = await createClient();
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('read_at', null);
+    unreadNotificationCount = count ?? 0;
+  }
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
@@ -70,7 +106,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           becomes a fixed-width left column) -- see AppSidebar's own header
           comment for why it can't just disappear below md instead. */}
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 md:flex-row md:gap-8">
-        <AppSidebar showBillingLink={showBillingLink} showAdminLink={showAdminLink} showDashboardLink={showDashboardLink} />
+        <AppSidebar
+          showBillingLink={showBillingLink}
+          showAdminLink={showAdminLink}
+          showDashboardLink={showDashboardLink}
+          showNotificationsLink={isFailureNotificationsEnabled()}
+          unreadNotificationCount={unreadNotificationCount}
+          showQuotesPaymentsLinks={showQuotesPaymentsLinks}
+        />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 
