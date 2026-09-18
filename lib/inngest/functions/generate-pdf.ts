@@ -23,15 +23,35 @@ import { buildStoragePath, computeSha256, FORM_TEMPLATES_BUCKET, GENERATED_BUCKE
 // never eligible, full stop -- there is no code path where a listed
 // jurisdiction should have anything typed onto a legal form.
 //
-// idempotency is keyed on applicationId: a re-run for the same application
-// (e.g. Inngest retry, or a second review-confirm somehow firing twice)
-// should collapse rather than double-generate every filing's PDF.
+// idempotency is keyed on applicationId + the triggering event's own name:
+// a re-run for the SAME event (e.g. Inngest retry, or a second
+// review-confirm somehow firing twice) should collapse rather than
+// double-generate every filing's PDF.
+//
+// Health-check audit round 3 fix: this used to be keyed on applicationId
+// alone. Inngest's `idempotency` is a per-FUNCTION dedup key across ALL of
+// a function's triggers (a rate-limit-of-1 within the dedup window), not a
+// per-triggering-event key -- so a bare applicationId key silently
+// collapsed the two DIFFERENT trigger events this function listens for into
+// one slot. Concretely: a 'verified'-tier application's 'audited' event
+// fires first (per this function's own eligibility gate below, NOT yet
+// eligible -- it must reach 'reviewed' first), runs to completion, and
+// consumes the applicationId-only key. The LATER, genuinely eligible
+// 'review_confirmed' event for that same application then silently
+// collapsed into that already-consumed key and never ran the function body
+// at all -- 'verified'-tier applications never got their PDFs generated,
+// with no error anywhere (Inngest treats a deduped run as a normal skip,
+// not a failure). Appending event.name to the key gives each trigger its
+// own dedup slot (applicationId+'audited' vs. applicationId+
+// 'review_confirmed'), closing that cross-trigger collision while still
+// collapsing true retries/duplicates of the SAME event, which always share
+// the same event.name.
 export const permitGeneratePdf = inngest.createFunction(
   {
     id: 'permit-generate-pdf',
     name: 'Generate filled permit PDFs',
     triggers: [{ event: 'permit/application.audited' }, { event: 'permit/application.review_confirmed' }],
-    idempotency: 'event.data.applicationId',
+    idempotency: 'event.data.applicationId + "-" + event.name',
     retries: 2,
   },
   async ({ event, step }) => {

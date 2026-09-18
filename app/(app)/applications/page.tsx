@@ -4,6 +4,27 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
+import { fetchAllRows } from '@/lib/supabase/paginate';
+
+interface JurisdictionRow {
+  municipality: string;
+  province_code: string;
+  coverage_level: string;
+}
+interface PermitTypeRow {
+  title: string;
+  jurisdictions: JurisdictionRow | JurisdictionRow[] | null;
+}
+interface ApplicationListRow {
+  id: string;
+  project_title: string;
+  project_address: string;
+  status: string;
+  estimated_job_value_cents: number | null;
+  currency_code: string;
+  created_at: string;
+  permit_types: PermitTypeRow | PermitTypeRow[] | null;
+}
 
 // Same literal union components/status-badge.tsx already declares for this
 // enum -- duplicated here (rather than imported from that file, which
@@ -45,43 +66,55 @@ export default async function ApplicationsPage({
   const { q, status } = await searchParams;
   const supabase = await createClient();
 
+  // Validated against the real enum list before being handed to `.eq()` --
+  // an unvalidated value would reach Postgres as a cast against
+  // application_status and error the whole page instead of just no-op'ing
+  // an unrecognized filter (e.g. a stale/hand-edited query string).
+  const trimmedQuery = q?.trim();
+  const escapedQuery = trimmedQuery ? trimmedQuery.replace(/[%,]/g, '\\$&') : null;
+
+  // Health-check audit round 3 finding: a plain .select() here has no
+  // .range()/pagination guard, so any org with more than PostgREST's default
+  // 1000-row cap (`db max rows`) would have silently had its oldest
+  // applications cut off the list with no error -- the exact failure mode
+  // lib/supabase/paginate.ts's header comment documents and that app/admin/
+  // page.tsx and lib/jurisdictions/public-directory.ts already guard
+  // against. fetchAllRows loops .range() pages (ordered by created_at, same
+  // order as before) until a short page confirms there's no more data. Each
+  // page rebuilds the filter chain from scratch (same precedent as
+  // app/admin/page.tsx's own fetchAllRows call sites) rather than reusing
+  // one mutable builder across pages/re-applying .eq()/.or() on top of a
+  // prior page's builder state.
+  //
   // RLS (`permit_applications_select`, is_org_member(org_id)) already scopes
   // this to the caller's org -- the explicit .eq('org_id', orgId) below is
   // redundant with RLS but kept anyway so this query reads correctly on its
   // own and doesn't rely on a reader knowing RLS exists, matching how
   // app/api/documents/route.ts still re-derives orgId from a lookup rather
   // than trusting a client-supplied value.
-  let query = supabase
-    .from('permit_applications')
-    .select(
-      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
-       permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
-    )
-    .eq('org_id', orgId);
+  const applications = await fetchAllRows<ApplicationListRow>((from, to) => {
+    let pageQuery = supabase
+      .from('permit_applications')
+      .select(
+        `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
+         permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
+      )
+      .eq('org_id', orgId);
 
-  // Validated against the real enum list before being handed to `.eq()` --
-  // an unvalidated value would reach Postgres as a cast against
-  // application_status and error the whole page instead of just no-op'ing
-  // an unrecognized filter (e.g. a stale/hand-edited query string).
-  if (status && isKnownStatus(status)) {
-    query = query.eq('status', status);
-  }
+    if (status && isKnownStatus(status)) {
+      pageQuery = pageQuery.eq('status', status);
+    }
 
-  // ilike, both columns, case-insensitive substring match -- `%` escaped so
-  // a search term containing a literal `%` (or `,`, which `.or()`'s own
-  // comma-separated filter syntax would otherwise misparse as a second
-  // condition) can't corrupt the filter string.
-  const trimmedQuery = q?.trim();
-  if (trimmedQuery) {
-    const escaped = trimmedQuery.replace(/[%,]/g, '\\$&');
-    query = query.or(`project_title.ilike.%${escaped}%,project_address.ilike.%${escaped}%`);
-  }
+    // ilike, both columns, case-insensitive substring match -- `%` escaped
+    // so a search term containing a literal `%` (or `,`, which `.or()`'s own
+    // comma-separated filter syntax would otherwise misparse as a second
+    // condition) can't corrupt the filter string.
+    if (escapedQuery) {
+      pageQuery = pageQuery.or(`project_title.ilike.%${escapedQuery}%,project_address.ilike.%${escapedQuery}%`);
+    }
 
-  const { data: applications, error } = await query.order('created_at', { ascending: false });
-
-  if (error) {
-    throw new Error(`Failed to load applications: ${error.message}`);
-  }
+    return pageQuery.order('created_at', { ascending: false }).range(from, to);
+  }, 'applications');
 
   const hasActiveFilters = Boolean(trimmedQuery) || Boolean(status);
 
