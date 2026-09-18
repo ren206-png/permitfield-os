@@ -20,6 +20,12 @@ interface AppSidebarProps {
    * 'analytics' entitlement gate lives in app/(app)/dashboard/page.tsx
    * itself (renders LockedFeature rather than 404ing), not here. */
   showDashboardLink: boolean;
+  /** isQuotesPaymentsEnabled() -- Gate 4 (Quotes & Payments), Phase A. Same
+   * flag-only shape as the others above, not an access check: visible to
+   * every org member the moment the flag is on, with the entitlement-gated
+   * "locked" state rendered inside the pages themselves (see e.g.
+   * app/(app)/estimates/page.tsx), not by hiding these links. */
+  showQuotesPaymentsLinks: boolean;
 }
 
 // Left-hand feature navigation for the authenticated app shell. Replaces the
@@ -36,7 +42,12 @@ interface AppSidebarProps {
 // disappearing on mobile -- the old top nav had no mobile-specific handling
 // either, but a sidebar that vanishes below `md` with no fallback would be a
 // regression, not a lateral move.
-export function AppSidebar({ showBillingLink, showAdminLink, showDashboardLink }: AppSidebarProps) {
+export function AppSidebar({
+  showBillingLink,
+  showAdminLink,
+  showDashboardLink,
+  showQuotesPaymentsLinks,
+}: AppSidebarProps) {
   const pathname = usePathname();
 
   const links: SidebarLink[] = [
@@ -47,6 +58,13 @@ export function AppSidebar({ showBillingLink, showAdminLink, showDashboardLink }
     // gated feature.
     { href: '/clients', label: 'Clients' },
     ...(showDashboardLink ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
+    ...(showQuotesPaymentsLinks
+      ? [
+          { href: '/estimates', label: 'Estimates' },
+          { href: '/invoices', label: 'Invoices' },
+          { href: '/settings/tax-profile', label: 'Tax profile' },
+        ]
+      : []),
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),
   ];

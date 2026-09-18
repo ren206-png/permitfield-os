@@ -33,6 +33,27 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // behalf of an end user," which is what this file's opening warning is
 // about. Do not use this client from any other public route without adding
 // an equally explicit exception here first.
+//
+// Exception 2 (Gate 4, Quotes & Payments, Phase A -- public estimate/invoice
+// view + PDF routes, app/estimate/[token]/, app/invoice/[token]/, and their
+// api/public/.../pdf siblings): these routes serve an anonymous, bearer-
+// token-holding client, not an authenticated end user, so there is no
+// Supabase Auth session (and therefore no RLS-enforcing session client,
+// lib/supabase/server.ts) available to them at all -- the same structural
+// reason lib/bridge/client-portal.ts's own client-facing operations already
+// use this exact client for their project-1 reads. What makes each read
+// safe despite bypassing RLS: every one of these routes calls
+// lib/bridge/client-portal.ts's `resolveTargetToken()` FIRST, and only
+// constructs this client (or proceeds to use one already constructed) with
+// the `orgId`/`targetId` THAT CALL RETURNED -- never with a request-supplied
+// org id or estimate/invoice id -- and every subsequent query is explicitly
+// scoped with `.eq('org_id', orgId).eq('id', targetId)` using those
+// server-verified values. That is the same "validated pointer, not a
+// trusted-caller-supplied one" discipline `loadScopedApplication()` already
+// applies one file over; it is being restated here, not re-decided, because
+// this file's own rule above requires a new exception to be spelled out
+// explicitly rather than silently added to. Do not read any OTHER table
+// from these routes without narrowing the scoping the same way.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

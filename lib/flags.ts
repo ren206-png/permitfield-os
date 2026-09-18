@@ -301,6 +301,20 @@ export function isBillingEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_BILLING');
 }
 
+// Gate 4 (Quotes & Payments), Phase A (GATE_4_FINDINGS.md). Schema/RLS/RPCs
+// for org_tax_profiles, estimates(+line items/revisions/acceptances),
+// invoices(+line items), tax_rule_versions/tax_decisions, payments(+
+// allocations), and reminder_jobs(+delivery attempts) exist in the database
+// regardless of this flag's value -- the same "schema exists, feature
+// surface does not" split every other flag in this file draws (e.g.
+// isBillingEnabled() above). This flag gates future UI/route/Server-Action
+// surface area, not built in this pass. Default OFF: no environment is
+// affected by these migrations landing until a future pass builds on top
+// of them AND this is explicitly turned on.
+export function isQuotesPaymentsEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_QUOTES_PAYMENTS');
+}
+
 // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Master kill switch for the
 // drawing-review AI pipeline (lib/inngest/functions/drawing-review.ts) --
 // same "ops-level rollback lever, independent of the per-jurisdiction
