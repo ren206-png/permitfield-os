@@ -1,7 +1,7 @@
 -- Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS).
 -- Proves, against the actual `authenticated`/`service_role` Postgres roles
 -- under RLS (not just "the UI doesn't show a button for it"), everything
--- 20260806000051_notifications.sql adds:
+-- 20260806000059_notifications.sql adds:
 --   1. Tenant isolation: Org B cannot read Org A's notifications row; Org A
 --      can read its own.
 --   2. `authenticated` cannot INSERT a notifications row (no insert policy

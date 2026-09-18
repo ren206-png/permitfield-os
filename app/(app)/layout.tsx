@@ -7,6 +7,7 @@ import {
   isBillingEnabled,
   isDashboardEnabled,
   isFailureNotificationsEnabled,
+  isQuotesPaymentsEnabled,
 } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
@@ -36,6 +37,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // comment), it just renders read-only for a non-owner. The owner gate
   // lives in app/(app)/settings/billing/actions.ts instead.
   const showBillingLink = isBillingEnabled();
+  // Gate 4 (Quotes & Payments), Phase A. No entitlement check here on
+  // purpose, matching showBillingLink's own reasoning above -- the nav link
+  // is visible to every org member the moment the flag is on, same as
+  // billing's own link; the entitlement-gated "locked" state renders inside
+  // the pages themselves (see e.g. app/(app)/estimates/page.tsx), not by
+  // hiding the nav entry, so a member without the entitlement still learns
+  // the feature exists rather than it silently vanishing.
+  const showQuotesPaymentsLinks = isQuotesPaymentsEnabled();
   // Same flag-only shape as showBillingLink above, not an access check --
   // app/(app)/dashboard/page.tsx does its own can(orgId, 'analytics') check
   // and renders LockedFeature for an org whose plan lacks it, exactly the
@@ -103,6 +112,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           showDashboardLink={showDashboardLink}
           showNotificationsLink={isFailureNotificationsEnabled()}
           unreadNotificationCount={unreadNotificationCount}
+          showQuotesPaymentsLinks={showQuotesPaymentsLinks}
         />
         <main className="min-w-0 flex-1">{children}</main>
       </div>

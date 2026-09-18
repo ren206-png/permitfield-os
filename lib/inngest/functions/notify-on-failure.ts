@@ -14,7 +14,7 @@ import { sendFailureEmail } from '@/lib/email/resend-client';
 // purely additive subscriber (PERMITFIELD_FF_FAILURE_NOTIFICATIONS, see
 // lib/flags.ts's isFailureNotificationsEnabled() header comment).
 //
-// Writes an in-app notifications row (20260806000051_notifications.sql) and
+// Writes an in-app notifications row (20260806000059_notifications.sql) and
 // sends one email per genuine failure. Both are best-effort: neither
 // writeNotification() nor sendFailureEmail() throws (same "write a ledger
 // row, never throw" discipline as lib/audit/log.ts's writeAuditLog()) --

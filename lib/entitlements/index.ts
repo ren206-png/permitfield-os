@@ -59,6 +59,16 @@ const LEGACY_DEFAULT_TIER: ResolvedTier = {
     'jurisdiction.requirements',
     'analytics',
     'ai',
+    // Gate 4 (Quotes & Payments), Phase A addition: kept in lockstep with
+    // this constant's own "every org got every feature before this build"
+    // contract (see this file's header comment) -- PERMITFIELD_FF_BILLING
+    // being off must not become a reason Gate 4's own, separate
+    // PERMITFIELD_FF_QUOTES_PAYMENTS flag is the only thing standing
+    // between an org and these entitlements while every OTHER feature is
+    // wide open on this legacy path.
+    'quotes.manage',
+    'invoices.manage',
+    'payments.manage',
   ],
   limits: {
     'projects.active_max': 50,

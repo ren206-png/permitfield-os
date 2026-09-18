@@ -53,17 +53,17 @@ const clientPortalServiceClientRestriction = {
 // path, so this build fails if a future author wires the Gemini key into a
 // route handler, Server Action, or any other end-user-facing module.
 //
-// Unlike clientPortalServiceClientRestriction, there is no separate
-// live-test-file exemption here: lib/ai/gemini/client.ts has no dedicated
-// test file yet (same as the existing Voyage client, lib/ai/embed.ts, which
-// also has none -- see that module's header for why: a thin REST wrapper
-// with no local logic to unit-test in isolation, exercised live via
-// eval/run.ts instead). If a future test needs one, add it to `ignores`
-// alongside lib/ai/router.ts at that time, following the exact precedent
-// set by clientPortalServiceClientRestriction's own test-file exemption.
+// Health-check audit follow-up: lib/ai/gemini/client.ts now has a dedicated
+// test file, lib/ai/gemini/client.test.ts (covering the
+// AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS) addition from that same
+// audit), added to `ignores` alongside lib/ai/router.ts, following the exact
+// precedent set by clientPortalServiceClientRestriction's own test-file
+// exemption above. lib/ai/embed.ts (the Voyage client) has no equivalent
+// import-boundary rule to exempt from -- it isn't gated by one, since
+// VOYAGE_API_KEY has no analogous single-module restriction in this file.
 const geminiClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/ai/router.ts"],
+  ignores: ["lib/ai/router.ts", "lib/ai/gemini/client.test.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -72,7 +72,7 @@ const geminiClientRestriction = {
           {
             group: ["**/gemini/client", "**/gemini/client.ts"],
             message:
-              "lib/ai/gemini/client.ts (the Gemini API client, GEMINI_API_KEY) may only be imported from lib/ai/router.ts -- see that module's header comment and GATE_AI_1_FINDINGS.md §H's KEY_LEAK scenario.",
+              "lib/ai/gemini/client.ts (the Gemini API client, GEMINI_API_KEY) may only be imported from lib/ai/router.ts or its own test file (lib/ai/gemini/client.test.ts) -- see that module's header comment and GATE_AI_1_FINDINGS.md §H's KEY_LEAK scenario.",
           },
         ],
       },
@@ -86,16 +86,25 @@ const geminiClientRestriction = {
 // relative-path module -- `patterns` (glob-matched relative/aliased
 // specifiers) can't match a bare package name, so this uses `paths`
 // instead, matching the specifier string exactly. Only
-// lib/billing/subscriptions.ts may import it -- every other file,
-// including app/**, is forbidden, whether by the "@/" alias or a direct
-// `from 'stripe'` import, so this build fails if a future author wires the
-// Stripe secret key into a route handler, Server Action, or any other
-// end-user-facing module. Same "only one designated module reads this
-// credential" discipline as STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own
-// .env.example comments.
+// lib/billing/subscriptions.ts (and, following the exact precedent
+// clientPortalServiceClientRestriction set above, its own live test file,
+// lib/billing/subscriptions.live.test.ts) may import it -- every other
+// file, including app/**, is forbidden, whether by the "@/" alias or a
+// direct `from 'stripe'` import, so this build fails if a future author
+// wires the Stripe secret key into a route handler, Server Action, or any
+// other end-user-facing module. The test-file exemption is narrow and
+// deliberate, not a loosening of the boundary: that file's whole job is
+// constructing real signed webhook payloads (via `stripe.webhooks.
+// generateTestHeaderString()`) to exercise handleStripeWebhookEvent()'s
+// actual signature-verification path, work that has to import the SDK
+// directly to build a valid `Stripe-Signature` header -- the same
+// "bypasses the module's own public functions to set up" reason
+// client-portal.live.test.ts's own header gives for its exemption. Same
+// "only one designated module reads this credential" discipline as
+// STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own .env.example comments.
 const stripeClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/billing/subscriptions.ts"],
+  ignores: ["lib/billing/subscriptions.ts", "lib/billing/subscriptions.live.test.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -117,26 +126,31 @@ const stripeClientRestriction = {
 // mechanism as stripeClientRestriction above -- applied to the bare
 // `resend` npm package instead of a relative-path module, for the same
 // reason (`patterns` can't match a bare package specifier, so this uses
-// `paths`). Two designated modules may import it, not one: this branch's
+// `paths`). THREE designated modules may import it, not one: this branch's
 // own lib/email/resend-client.ts (RESEND_API_KEY/RESEND_FROM_ADDRESS,
-// failure-notification emails, subscriber to permit.notify_on_failure) and
+// failure-notification emails, subscriber to permit.notify_on_failure),
 // Gate 5.3's lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL,
-// digested lifecycle-notification emails, subscriber to permit.notify) --
-// the two were built in parallel on separate branches, neither aware of
-// the other, with distinct env vars and call patterns (see each module's
-// own header comment). Reconciling them into one shared sender is a real
+// digested lifecycle-notification emails, subscriber to permit.notify), and
+// Gate 4 Phase A's lib/email/client.ts (PERMITFIELD_RESEND_API_KEY/
+// PERMITFIELD_RESEND_FROM_ADDRESS, HTML invoice/estimate emails via
+// lib/email/send.ts) -- all three were built in parallel on separate
+// branches, none aware of the others, with deliberately distinct env vars
+// and failure semantics (resend-client.ts and send.ts throw; lib/email/
+// send.ts returns a typed {success:false} result instead, see that
+// module's header). Reconciling them into one shared sender is a real
 // follow-up design decision, not something to force here -- this
-// restriction just keeps the credential from leaking to a THIRD call site
+// restriction just keeps the credential from leaking to a FOURTH call site
 // (a route handler, Server Action, or other end-user-facing module) while
-// both existing ones stay intentionally separate. Same "only designated
-// modules read this credential" discipline as RESEND_API_KEY's own
-// .env.example comment. Note this does NOT restrict
-// lib/notifications/recipients.ts (org_members/auth.admin lookups) or
-// lib/notifications/content.ts (pure derivation) -- neither imports
-// `resend` at all, so neither needs (or gets) an exemption here.
+// all three existing ones stay intentionally separate. Same "only
+// designated modules read this credential" discipline as RESEND_API_KEY/
+// RESEND_FROM_EMAIL/PERMITFIELD_RESEND_API_KEY's own .env.example comments.
+// Note this does NOT restrict lib/notifications/recipients.ts (org_members/
+// auth.admin lookups) or lib/notifications/content.ts (pure derivation) --
+// neither imports `resend` at all, so neither needs (or gets) an exemption
+// here.
 const resendClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/email/resend-client.ts", "lib/notifications/send.ts"],
+  ignores: ["lib/email/resend-client.ts", "lib/notifications/send.ts", "lib/email/client.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -145,7 +159,7 @@ const resendClientRestriction = {
           {
             name: "resend",
             message:
-              "The resend package may only be imported from lib/email/resend-client.ts (RESEND_API_KEY, failure-notification emails) or lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL, Gate 5.3 lifecycle-notification emails) -- see each module's header comment and GATE_5_FINDINGS.md §K/§J.4.",
+              "The resend package may only be imported from lib/email/resend-client.ts (RESEND_API_KEY, failure-notification emails), lib/notifications/send.ts (RESEND_API_KEY/RESEND_FROM_EMAIL, Gate 5.3 lifecycle-notification emails), or lib/email/client.ts (PERMITFIELD_RESEND_API_KEY, Gate 4 Phase A invoice/estimate emails) -- see each module's header comment and GATE_5_FINDINGS.md §K/§J.4.",
           },
         ],
       },

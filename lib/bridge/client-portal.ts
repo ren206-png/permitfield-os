@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { isAllowedMimeType, MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
-import { isClientPortalEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
 import { writeAuditLog } from '@/lib/audit/log';
 
 // Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3), extended by sub-phase 2.5.
@@ -127,7 +127,17 @@ type DenialDetail =
   // itself failed for a reason other than the legitimate "already exists"
   // re-submission case (which is not a denial at all -- see uploadDocument's
   // own comment).
-  | 'upload_failed';
+  | 'upload_failed'
+  // Gate 4 (Quotes & Payments), Phase A -- resolveTargetToken only (see
+  // "TARGET-KIND OPERATIONS" section below). 'target_kind_mismatch': the
+  // token resolved but was issued for a different target_kind than the
+  // caller expected (e.g. an invoice link opened at the estimate route).
+  // 'target_not_found': the live re-check against the main project's
+  // estimates/invoices table (targetExistsInOrg) found no matching,
+  // same-org row -- same "deleted, moved orgs, or never existed" collapse
+  // loadScopedApplication's own comment describes for permit applications.
+  | 'target_kind_mismatch'
+  | 'target_not_found';
 
 // Optional request metadata a future route handler can supply for the
 // `client_access_log.ip`/`user_agent` columns. Deliberately NOT part of any
@@ -218,6 +228,17 @@ type ResolvedToken = {
   // is `not null` on client_access_tokens (20260814000001), unlike
   // `recipient_name`, so this is always a real value to fall back on.
   recipientEmailDisplay: string;
+  // Gate 4 (Quotes & Payments), Phase A -- added alongside the migration
+  // 20260816000001 columns of the same name. Always populated (never null)
+  // by the time a row reaches here: either the caller set both explicitly,
+  // or that migration's BEFORE INSERT trigger defaulted them from
+  // `applicationId` for every pre-existing/permit-application caller. Only
+  // `resolveTargetToken` below reads these two fields today -- every
+  // pre-existing client-facing operation (resolveToken,
+  // getApplicationSummary, etc.) keeps working unmodified, since this is a
+  // pure addition to the type, not a change to any existing field.
+  targetKind: string;
+  targetId: string;
 };
 
 // Hash-lookup + status/expiry check, shared by every operation. Returns the
@@ -236,7 +257,7 @@ async function resolveValidToken(
 
   const { data: row, error } = await portal
     .from('client_access_tokens')
-    .select('id, application_id, org_id, status, expires_at, recipient_name, recipient_email_display')
+    .select('id, application_id, org_id, status, expires_at, recipient_name, recipient_email_display, target_kind, target_id')
     .eq('token_hash', tokenHash)
     .maybeSingle();
 
@@ -275,6 +296,8 @@ async function resolveValidToken(
       orgId: row.org_id,
       recipientName: row.recipient_name,
       recipientEmailDisplay: row.recipient_email_display,
+      targetKind: row.target_kind,
+      targetId: row.target_id,
     },
   };
 }
@@ -1265,4 +1288,328 @@ export async function listTokensForApplication(applicationId: string): Promise<L
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// TARGET-KIND OPERATIONS (Gate 4, Quotes & Payments, Phase A)
+// ---------------------------------------------------------------------------
+//
+// GATE_4_FINDINGS.md §4 resolved the client-facing token question for
+// estimates/invoices as "extend this table, don't build a second one" --
+// migration 20260816000001 (supabase-client-portal) is that extension:
+// nullable `target_kind`/`target_id` alongside the pre-existing
+// `application_id`, defaulted by a BEFORE INSERT trigger for every caller
+// that doesn't set them (every pre-existing call site above). The four
+// functions below are the first callers that DO set them explicitly.
+//
+// Two deliberate departures from that migration's own header comment, both
+// worth reading before touching this section again:
+//
+// 1. `application_id` placeholder. The migration's header comment
+//    envisions a quote/invoice-link caller "continuing to also set
+//    `application_id` to whatever permit application the estimate/
+//    invoice's project is associated with, if any." This code does NOT do
+//    that -- `issueTargetToken` below always sets `application_id =
+//    targetId` (the estimate's or invoice's own id), never a real permit
+//    application id. Reason: `client_access_tokens_one_active_per_recipient`
+//    is a partial unique index on `(recipient_email, application_id)` --
+//    if two different estimates for the same permit application were sent
+//    to the same recipient email, setting `application_id` to the shared
+//    permit application id would make issuing the second token silently
+//    supersede the first estimate's still-valid link. Setting
+//    `application_id = targetId` instead keeps that uniqueness guarantee
+//    scoped to what it needs to be scoped to here: one active link per
+//    recipient PER ESTIMATE/INVOICE, not per permit application. This is a
+//    considered deviation, not an oversight -- flagged again in this pass's
+//    final report. `application_id` remaining `not null` (not relaxed by
+//    this pass, per its own explicitly-out-of-scope note) is exactly why a
+//    placeholder is needed here at all.
+//
+// 2. Double flag gate. Every function below checks BOTH
+//    `isClientPortalEnabled()` (the token mechanism itself) AND
+//    `isQuotesPaymentsEnabled()` (the feature the token points at) before
+//    doing anything else -- unlike the six permit-application operations
+//    above, which only ever needed the one flag. A quote/invoice link is
+//    meaningless with either flag off: with Quotes & Payments off, the
+//    estimates/invoices tables this token points at are themselves
+//    unreachable through every other code path in this repo, so a token
+//    that resolved successfully while that flag was off would be resolving
+//    into a feature that doesn't otherwise exist yet.
+//
+// `resolveTargetToken` (client-facing) follows the same generic-error
+// discipline as every operation above it: every denial, from "flag off"
+// through "wrong target_kind" through "target row deleted," collapses to
+// `{ error: 'link_unavailable' }`, with the real reason logged via
+// logAttempt() only. `issueTargetToken` (staff-facing) follows the
+// STAFF-FACING OPERATIONS section's opposite discipline (typed error
+// union, no generic collapse) for the same reason `issueToken` above does:
+// its caller is already a trusted, authenticated org member (this file's
+// own contract -- see each function's own comment for exactly what
+// authorization its caller is expected to have already checked, since
+// neither of these two functions re-derives org membership or entitlement
+// itself).
+
+export type TargetKind = 'estimate' | 'invoice';
+
+function targetTable(targetKind: TargetKind): 'estimates' | 'invoices' {
+  return targetKind === 'estimate' ? 'estimates' : 'invoices';
+}
+
+// The live re-check `resolveTargetToken` runs against project 1, mirroring
+// `loadScopedApplication`'s own "hash lookup gives a hint, a live read is
+// the authority" discipline -- but deliberately narrower: a bare
+// existence + org-match check (`select id`), not a full row load. Loading
+// the estimate/invoice's actual business data (line items, totals, status)
+// for rendering is the CALLER's job (the public route/page, using its own
+// scoped service-role read or lib/quotes-payments/*), per this pass's own
+// task framing of "validate via the bridge, load via the service layer" as
+// two distinct steps -- this bridge module has no reason to learn the
+// estimates/invoices schema beyond confirming the row is still there and
+// still in the token's org.
+async function targetExistsInOrg(main: MainProjectClient, targetKind: TargetKind, targetId: string, orgId: string): Promise<boolean> {
+  const { data, error } = await main.from(targetTable(targetKind)).select('id').eq('id', targetId).eq('org_id', orgId).maybeSingle();
+
+  if (error) {
+    console.error(`[lib/bridge/client-portal] ${targetTable(targetKind)} live re-check failed: ${error.message}`);
+    return false;
+  }
+
+  return data !== null;
+}
+
+export type ResolveTargetTokenResult =
+  | {
+      tokenId: string;
+      orgId: string;
+      targetId: string;
+      recipientName: string | null;
+      recipientEmailDisplay: string;
+    }
+  | BridgeErrorResponse;
+
+// Client-facing: raw token + the kind of target the caller expects (an
+// `/estimate/[token]` route passes `'estimate'`, an `/invoice/[token]`
+// route passes `'invoice'`) in, enough identity for the caller to load and
+// render that estimate/invoice. Deliberately does NOT return the
+// estimate/invoice's business data itself -- see this section's header
+// comment on why that stays the caller's job.
+export async function resolveTargetToken(
+  rawToken: string,
+  expectedKind: TargetKind,
+  context?: BridgeRequestContext
+): Promise<ResolveTargetTokenResult> {
+  if (!isClientPortalEnabled() || !isQuotesPaymentsEnabled()) {
+    return { error: 'link_unavailable' };
+  }
+
+  const portal = createClientPortalServiceClient();
+  const operation = `resolveTargetToken:${expectedKind}`;
+  const resolved = await resolveValidToken(portal, rawToken, operation, context);
+  if (!resolved.ok) {
+    return { error: 'link_unavailable' };
+  }
+  const { token } = resolved;
+
+  if (token.targetKind !== expectedKind) {
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation,
+      resourceType: token.targetKind,
+      resourceId: token.targetId,
+      outcome: 'denied',
+      detail: 'target_kind_mismatch',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  const main = createServiceClient();
+  const exists = await targetExistsInOrg(main, expectedKind, token.targetId, token.orgId);
+  if (!exists) {
+    await logAttempt(portal, {
+      tokenId: token.tokenId,
+      operation,
+      resourceType: expectedKind,
+      resourceId: token.targetId,
+      outcome: 'denied',
+      detail: 'target_not_found',
+      context,
+    });
+    return { error: 'link_unavailable' };
+  }
+
+  await logAttempt(portal, {
+    tokenId: token.tokenId,
+    operation,
+    resourceType: expectedKind,
+    resourceId: token.targetId,
+    outcome: 'success',
+    context,
+  });
+
+  return {
+    tokenId: token.tokenId,
+    orgId: token.orgId,
+    targetId: token.targetId,
+    recipientName: token.recipientName,
+    recipientEmailDisplay: token.recipientEmailDisplay,
+  };
+}
+
+export type IssueTargetTokenParams = {
+  targetKind: TargetKind;
+  targetId: string;
+  orgId: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  // The issuing org member's project-1 user id -- same bare, non-FK pointer
+  // discipline as IssueTokenParams.issuedByOrgUserId above.
+  issuedByOrgUserId: string;
+  ttlDays?: number;
+};
+
+export type IssueTargetTokenResult =
+  | { rawToken: string; tokenId: string; expiresAt: string }
+  | { error: 'client_portal_disabled' | 'quotes_payments_disabled' | 'target_not_found' | 'invalid_recipient_email' | 'issue_failed' };
+
+// Staff-facing: mints a bearer token pointing at one estimate or invoice,
+// superseding any existing active token for the same (recipient, target)
+// pair first -- same supersede-then-insert-with-23505-retry shape as
+// `issueToken` above, see that function's own comments for the full
+// reasoning (not re-derived here).
+//
+// Authorization contract (this function does NOT check any of this
+// itself, unlike `issueToken`'s own requireAdmin()-gated-caller contract):
+// the caller must have already verified the invoking org member holds the
+// relevant entitlement ('quotes.manage' for an estimate, 'invoices.manage'
+// for an invoice) for `orgId`. In practice this pass's only callers are the
+// "Generate client link" Server Actions in app/(app)/estimates/[id]/actions.ts
+// and app/(app)/invoices/[id]/actions.ts, which re-derive org membership via
+// requireOrgContext() and re-check the entitlement before calling this --
+// the same "each caller re-derives its own authorization" discipline this
+// codebase already applies to every other Server Action, not a new
+// exception. This is deliberately NOT gated by requireAdmin(): unlike a
+// permit-application client-portal link (a platform-admin action today),
+// generating a quote/invoice link is an ordinary action for any org member
+// who can already manage that quote/invoice -- requiring platform-admin
+// involvement for every quote sent would not match how this feature is
+// used.
+export async function issueTargetToken(params: IssueTargetTokenParams): Promise<IssueTargetTokenResult> {
+  if (!isClientPortalEnabled()) {
+    return { error: 'client_portal_disabled' };
+  }
+  if (!isQuotesPaymentsEnabled()) {
+    return { error: 'quotes_payments_disabled' };
+  }
+
+  const main = createServiceClient();
+  const exists = await targetExistsInOrg(main, params.targetKind, params.targetId, params.orgId);
+  if (!exists) {
+    return { error: 'target_not_found' };
+  }
+
+  const recipientEmailDisplay = params.recipientEmail.trim();
+  const recipientEmail = recipientEmailDisplay.toLowerCase();
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    return { error: 'invalid_recipient_email' };
+  }
+
+  const portal = createClientPortalServiceClient();
+  const ttlDays = params.ttlDays ?? DEFAULT_TOKEN_TTL_DAYS;
+  const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
+  // See this section's header comment, point 1: always the target's own
+  // id, never a real permit_applications id, to keep the
+  // (recipient_email, application_id) uniqueness index scoped per-target.
+  const applicationIdPlaceholder = params.targetId;
+
+  const MAX_ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { data: existingActive, error: existingError } = await portal
+      .from('client_access_tokens')
+      .select('id')
+      .eq('recipient_email', recipientEmail)
+      .eq('target_kind', params.targetKind)
+      .eq('target_id', params.targetId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (existingError) {
+      console.error(`[lib/bridge/client-portal] issueTargetToken existing-active lookup failed: ${existingError.message}`);
+      return { error: 'issue_failed' };
+    }
+
+    if (existingActive) {
+      const { error: supersedeError } = await portal
+        .from('client_access_tokens')
+        .update({ status: 'superseded' })
+        .eq('id', existingActive.id)
+        .eq('status', 'active');
+
+      if (supersedeError) {
+        console.error(`[lib/bridge/client-portal] issueTargetToken supersede of ${existingActive.id} failed: ${supersedeError.message}`);
+        return { error: 'issue_failed' };
+      }
+
+      const { error: supersedeLifecycleError } = await portal.from('token_lifecycle_events').insert({
+        token_id: existingActive.id,
+        from_status: 'active',
+        to_status: 'superseded',
+        triggered_by_org_user_id: params.issuedByOrgUserId,
+      });
+      if (supersedeLifecycleError) {
+        console.error(
+          `[lib/bridge/client-portal] token_lifecycle_events insert failed for supersede of ${existingActive.id}: ${supersedeLifecycleError.message}`
+        );
+      }
+    }
+
+    const rawToken = generateRawToken();
+    const tokenHash = hashToken(rawToken);
+
+    const { data: inserted, error: insertError } = await portal
+      .from('client_access_tokens')
+      .insert({
+        application_id: applicationIdPlaceholder,
+        org_id: params.orgId,
+        recipient_email_display: recipientEmailDisplay,
+        recipient_email: recipientEmail,
+        recipient_name: params.recipientName ?? null,
+        token_hash: tokenHash,
+        status: 'active',
+        expires_at: expiresAt,
+        target_kind: params.targetKind,
+        target_id: params.targetId,
+      })
+      .select('id')
+      .maybeSingle();
+
+    if (insertError) {
+      if (insertError.code === '23505' && attempt < MAX_ATTEMPTS) {
+        continue;
+      }
+      console.error(`[lib/bridge/client-portal] issueTargetToken insert failed: ${insertError.message}`);
+      return { error: 'issue_failed' };
+    }
+
+    if (!inserted) {
+      console.error('[lib/bridge/client-portal] issueTargetToken insert returned no row and no error.');
+      return { error: 'issue_failed' };
+    }
+
+    const { error: issueLifecycleError } = await portal.from('token_lifecycle_events').insert({
+      token_id: inserted.id,
+      from_status: null,
+      to_status: 'active',
+      triggered_by_org_user_id: params.issuedByOrgUserId,
+    });
+    if (issueLifecycleError) {
+      console.error(
+        `[lib/bridge/client-portal] token_lifecycle_events insert failed for issuance of ${inserted.id}: ${issueLifecycleError.message}`
+      );
+    }
+
+    return { rawToken, tokenId: inserted.id, expiresAt };
+  }
+
+  return { error: 'issue_failed' };
 }

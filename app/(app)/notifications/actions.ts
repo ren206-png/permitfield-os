@@ -15,7 +15,7 @@ import { isFailureNotificationsEnabled } from '@/lib/flags';
 // Uses the session-scoped client (lib/supabase/server.ts), not
 // lib/supabase/service-client.ts -- marking a notification read is an
 // end-user action, and notifications_update's RLS policy
-// (20260806000051_notifications.sql, is_org_member(org_id)) is the actual
+// (20260806000059_notifications.sql, is_org_member(org_id)) is the actual
 // enforcement surface here: the .eq('org_id', orgId) below is redundant
 // with RLS but kept anyway for the same "reads correctly on its own"
 // reason app/(app)/applications/page.tsx's header comment gives, and the

@@ -31,6 +31,12 @@ interface AppSidebarProps {
    * in the layout (see that file's own header comment) -- 0 when the flag
    * above is off, since the layout never queries in that case. */
   unreadNotificationCount: number;
+  /** isQuotesPaymentsEnabled() -- Gate 4 (Quotes & Payments), Phase A. Same
+   * flag-only shape as the others above, not an access check: visible to
+   * every org member the moment the flag is on, with the entitlement-gated
+   * "locked" state rendered inside the pages themselves (see e.g.
+   * app/(app)/estimates/page.tsx), not by hiding these links. */
+  showQuotesPaymentsLinks: boolean;
 }
 
 // Left-hand feature navigation for the authenticated app shell. Replaces the
@@ -53,6 +59,7 @@ export function AppSidebar({
   showDashboardLink,
   showNotificationsLink,
   unreadNotificationCount,
+  showQuotesPaymentsLinks,
 }: AppSidebarProps) {
   const pathname = usePathname();
 
@@ -64,6 +71,13 @@ export function AppSidebar({
     // gated feature.
     { href: '/clients', label: 'Clients' },
     ...(showDashboardLink ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
+    ...(showQuotesPaymentsLinks
+      ? [
+          { href: '/estimates', label: 'Estimates' },
+          { href: '/invoices', label: 'Invoices' },
+          { href: '/settings/tax-profile', label: 'Tax profile' },
+        ]
+      : []),
     ...(showNotificationsLink
       ? [{ href: '/notifications', label: 'Notifications', badge: unreadNotificationCount }]
       : []),

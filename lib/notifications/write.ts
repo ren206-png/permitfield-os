@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS, see
 // lib/flags.ts's isFailureNotificationsEnabled() header comment) --
 // infrastructure for writing to the notifications ledger
-// (20260806000051_notifications.sql). Sole caller today is
+// (20260806000059_notifications.sql). Sole caller today is
 // lib/inngest/functions/notify-on-failure.ts, which always passes a
 // service-role client (notifications has no client-facing INSERT policy --
 // see that migration's header comment on why this mirrors audit_logs'
