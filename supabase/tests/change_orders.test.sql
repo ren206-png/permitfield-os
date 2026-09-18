@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase B / 20260806000052_change_orders_and_credit_notes.sql.
+-- Gate 4 (Quotes & Payments), Phase B / 20260806000062_change_orders_and_credit_notes.sql.
 -- Proves:
 --   1. Draft-mutable RLS + the "ADDITIONS ONLY" unit_price_cents >= 0 CHECK
 --      on change_order_line_items (a change order can never represent a

@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase B service layer -- credit note
 // lifecycle: draft creation, `issue_credit_note()`, `void_credit_note()`
-// (see supabase/migrations/20260806000052_change_orders_and_credit_notes.sql
+// (see supabase/migrations/20260806000062_change_orders_and_credit_notes.sql
 // for the full RPC/RLS contract this module wraps).
 //
 // Deliberately much thinner than invoices.ts/change-orders.ts: a credit

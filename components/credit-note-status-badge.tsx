@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase B UI. Same pattern as
 // invoice-status-badge.tsx. credit_notes.status is a fixed enum
-// (supabase/migrations/20260806000052_change_orders_and_credit_notes.sql).
+// (supabase/migrations/20260806000062_change_orders_and_credit_notes.sql).
 type CreditNoteStatus = 'draft' | 'issued' | 'void';
 
 const LABELS: Record<CreditNoteStatus, string> = {

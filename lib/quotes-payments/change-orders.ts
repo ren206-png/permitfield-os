@@ -2,7 +2,7 @@
 // lifecycle: draft creation, draft line-item editing,
 // `send_change_order_for_acceptance()`, `record_change_order_acceptance()`,
 // `issue_change_order()`, and `void_change_order()` (see
-// supabase/migrations/20260806000052_change_orders_and_credit_notes.sql for
+// supabase/migrations/20260806000062_change_orders_and_credit_notes.sql for
 // the full RPC/RLS contract this module wraps). Mirrors
 // lib/quotes-payments/invoices.ts's shape deliberately -- same
 // draft/immutable-snapshot split, same tax-then-RPC ordering for the

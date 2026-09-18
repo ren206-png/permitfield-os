@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase B / 20260806000052_change_orders_and_credit_notes.sql.
+-- Gate 4 (Quotes & Payments), Phase B / 20260806000062_change_orders_and_credit_notes.sql.
 -- Proves:
 --   1. Draft-mutable RLS, same shape as invoices/change_orders.
 --   2. issue_credit_note(): role-gated (is_org_billing_manager), draft-
