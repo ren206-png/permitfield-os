@@ -2,16 +2,16 @@
 // totaling domain module -- type definitions.
 //
 // Framework-free, DB-free. Mirrors the shapes already established by
-// supabase/migrations/20260806000044_org_tax_profiles.sql (tax_registration_status,
+// supabase/migrations/20260806000051_org_tax_profiles.sql (tax_registration_status,
 // the independent gst_hst_status/bc_pst_status pair) and
-// 20260806000045_estimates.sql / 20260806000047_invoices.sql (quantity as a
+// 20260806000052_estimates.sql / 20260806000054_invoices.sql (quantity as a
 // decimal string, unit_price_cents as bigint, the mutually-exclusive
 // discount_percent/discount_fixed_cents pair) -- this module consumes those
 // exact shapes rather than inventing parallel ones, so a future service
 // layer can pass a DB row's fields straight in with minimal translation.
 
 /**
- * Mirrors `tax_registration_status` (20260806000044_org_tax_profiles.sql).
+ * Mirrors `tax_registration_status` (20260806000051_org_tax_profiles.sql).
  * `'unknown'` is a real, legitimate value -- not an error state -- and must
  * be handled distinctly from both `'registered'` and `'unregistered'` (see
  * engine.ts's header comment and `TaxCalculationReviewRequired` below).

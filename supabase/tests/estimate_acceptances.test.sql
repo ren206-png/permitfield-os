@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000046_estimate_acceptances.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000053_estimate_acceptances.sql.
 -- Proves:
 --   1. record_estimate_acceptance() happy path (service_role caller, the
 --      future bridge layer's shape) -- inserts the acceptance and flips the
@@ -197,7 +197,7 @@ reset role;
 
 -- Step 7 (append-only): estimate_acceptances cannot be touched by
 -- UPDATE/DELETE. `authenticated` has no UPDATE/DELETE grant on this table
--- at all (20260806000046's grant section), so this is rejected at the
+-- at all (20260806000053's grant section), so this is rejected at the
 -- grant layer before the forbid_update_delete() trigger even runs -- same
 -- "permission denied, not a trigger message" shape
 -- permit_status_machine.test.sql's own application_status_history

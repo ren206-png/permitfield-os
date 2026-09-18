@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000050_reminder_jobs.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000057_reminder_jobs.sql.
 -- Proves:
 --   1. Any org member can create/cancel a pending reminder_job (no
 --      billing-manager gate -- scheduling is not one of this gate's listed
@@ -139,7 +139,7 @@ end $$;
 
 -- Step 6 (append-only): reminder_delivery_attempts cannot be UPDATE/DELETEd,
 -- even by service_role. service_role only has select+insert grant on this
--- table (20260806000050's grant section), so this is rejected at the grant
+-- table (20260806000057's grant section), so this is rejected at the grant
 -- layer before the forbid_update_delete() trigger even runs -- same
 -- "permission denied, not a trigger message" shape
 -- permit_status_machine.test.sql's own application_status_history

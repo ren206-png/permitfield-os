@@ -1,5 +1,5 @@
 -- Gate 4 (Quotes & Payments), Phase A -- security fix for record_payment()
--- (20260806000049_payments.sql). Adversarial review found that the original
+-- (20260806000056_payments.sql). Adversarial review found that the original
 -- function validated only that a payment's allocations *sum* to its own
 -- amount (structural/arithmetic, per that migration's own comment), but
 -- performed NO check on the target invoice(s) at all: it happily inserted a

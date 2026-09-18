@@ -130,7 +130,15 @@ begin
     values ('20000000-0000-0000-0000-00000000000a', 'assistant', 'gemini', 'test-model', 'succeeded', 1, 1);
     raise exception 'FAIL: authenticated was able to INSERT an ai_jobs row (should be service_role only)';
   exception
-    when insufficient_privilege or others then
+    -- Deliberately NOT "or others" here (see notifications.test.sql's own
+    -- version of this same assertion for the full reasoning) -- `others`
+    -- would also match the `raise exception 'FAIL...'` line immediately
+    -- above on the success path, silently turning a real test failure into
+    -- a printed PASS. `authenticated` has neither an INSERT policy nor an
+    -- INSERT table grant on ai_jobs (this migration's header comment), so
+    -- this reliably raises 42501 (insufficient_privilege) -- matching that
+    -- one condition precisely is both sufficient and safer.
+    when insufficient_privilege then
       raise notice 'PASS: INSERT on ai_jobs correctly rejected for authenticated (%)', sqlerrm;
   end;
 end $$;
@@ -220,7 +228,15 @@ begin
     where id = '62000000-0000-0000-0000-00000000000a';
     raise exception 'FAIL: org A owner was able to attribute a decision to a different user (forged reviewer_user_id)';
   exception
-    when insufficient_privilege or others then
+    -- Deliberately NOT "or others" here, same reasoning as the INSERT
+    -- assertion above and notifications.test.sql's precedent -- `others`
+    -- would also match the `raise exception 'FAIL...'` line immediately
+    -- above on the success path. ai_human_reviews_decide's WITH CHECK
+    -- (reviewer_user_id = auth.uid()) rejects the forged new row, which
+    -- reliably raises 42501 (insufficient_privilege, "new row violates
+    -- row-level security policy"), so matching that one condition precisely
+    -- is both sufficient and safer.
+    when insufficient_privilege then
       raise notice 'PASS: forged reviewer_user_id update correctly rejected (%)', sqlerrm;
   end;
 end $$;
@@ -275,15 +291,25 @@ reset role;
 -- === 5. TRUNCATE: control (gap would be real without the revoke), then assert (revoke closes it) ===
 -- Runs as the connecting role (postgres) to perform the GRANT/REVOKE DDL,
 -- same pattern as service_role_truncate_append_only.test.sql.
+--
+-- Gate 5.1 (20260806000045_drawing_review_schema.sql) added drawing_reviews
+-- with a FK to ai_jobs(id), so a bare `truncate table ai_jobs, ...` now fails
+-- with "cannot truncate a table referenced in a foreign key constraint"
+-- regardless of privileges. drawing_reviews/drawing_findings are included in
+-- the same TRUNCATE statement (and temporarily granted here, same as the
+-- three original tables) purely to keep this control/assert pair executable
+-- -- their own permanent TRUNCATE revoke is asserted separately by
+-- supabase/tests/drawing_review_schema.test.sql and is unaffected by this
+-- temporary grant, which is revoked again below before end of transaction.
 
-grant truncate on ai_jobs, ai_token_ledger, ai_human_reviews to service_role;
+grant truncate on ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings to service_role;
 
 set role service_role;
 
 do $$
 begin
-  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews';
-  raise notice 'PASS (control): service_role TRUNCATE succeeded on all three AI-1.1 tables while the grant is present -- confirms the row-level triggers alone do not stop TRUNCATE, same as the original seven append-only tables.';
+  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
+  raise notice 'PASS (control): service_role TRUNCATE succeeded on all three AI-1.1 tables (plus the Gate 5.1 tables FK-linked to ai_jobs, truncated in the same statement out of necessity) while the grant is present -- confirms the row-level triggers alone do not stop TRUNCATE, same as the original seven append-only tables.';
 exception
   when insufficient_privilege then
     raise exception 'FAIL (control): service_role TRUNCATE was rejected even with the grant present -- the later failure assertion would prove nothing without this control succeeding first. (%)', sqlerrm;
@@ -291,17 +317,17 @@ end $$;
 
 reset role;
 
-revoke truncate on ai_jobs, ai_token_ledger, ai_human_reviews from service_role;
+revoke truncate on ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings from service_role;
 
 set role service_role;
 
 do $$
 begin
-  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews';
+  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
   raise exception 'FAIL (assert): service_role TRUNCATE succeeded on the AI-1.1 tables after the grant was revoked -- this migration''s TRUNCATE revoke is not actually in effect.';
 exception
   when insufficient_privilege then
-    raise notice 'PASS (assert): service_role TRUNCATE on all three AI-1.1 tables correctly rejected once the grant is revoked (restoring this migration''s actual, already-applied effect). (%)', sqlerrm;
+    raise notice 'PASS (assert): service_role TRUNCATE on all three AI-1.1 tables (plus the Gate 5.1 tables named above) correctly rejected once the grant is revoked (restoring this migration''s actual, already-applied effect). (%)', sqlerrm;
 end $$;
 
 reset role;

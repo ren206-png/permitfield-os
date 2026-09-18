@@ -67,7 +67,7 @@ export async function upsertTaxProfileAction(
 
   // Same "registered without a number is very likely incomplete data
   // entry" nudge the DB's own CHECK constraint enforces
-  // (20260806000044_org_tax_profiles.sql) -- validated here too so the
+  // (20260806000051_org_tax_profiles.sql) -- validated here too so the
   // error surfaces as a field-level message rather than a raw Postgres
   // CHECK-violation string.
   if (gstHstStatus === 'registered' && !gstHstNumber) {

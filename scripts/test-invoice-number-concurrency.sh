@@ -2,7 +2,7 @@
 #
 # Gate 4 (Quotes & Payments), Phase A -- real concurrency proof for
 # issue_invoice()'s per-org sequential numbering
-# (supabase/migrations/20260806000047_invoices.sql).
+# (supabase/migrations/20260806000054_invoices.sql).
 #
 # A single supabase/tests/*.test.sql file (run.sql, one psql -f process, one
 # connection) cannot exercise genuine lock contention between two OVERLAPPING
@@ -22,7 +22,7 @@
 # releases the lock. If B's issue_invoice() call returns and prints its
 # result BEFORE A's sleep has elapsed, the lock did not actually serialize
 # the two calls and this script's core claim (which migration
-# 20260806000047's header comment makes) is false; this script measures
+# 20260806000054's header comment makes) is false; this script measures
 # exactly that and fails loudly if so.
 #
 # Expected, correct outcome: invoice A gets number 1, invoice B gets number

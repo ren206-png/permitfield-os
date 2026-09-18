@@ -3,7 +3,7 @@
 // class map, unknown values fall back to a neutral style + the raw string)
 // -- the only existing badge pattern in this codebase, see that file's own
 // header comment. estimates.status is a fixed enum
-// (supabase/migrations/20260806000045_estimates.sql), kept as a literal
+// (supabase/migrations/20260806000052_estimates.sql), kept as a literal
 // union here rather than imported from a generated types file for the same
 // reason status-badge.tsx does: no database.types.ts exists in this repo.
 type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'void';

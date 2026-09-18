@@ -59,7 +59,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   }
 
   // invoice_contact_name/invoice_contact_email do exist on this table
-  // (supabase/migrations/20260806000044_org_tax_profiles.sql) -- selected
+  // (supabase/migrations/20260806000051_org_tax_profiles.sql) -- selected
   // here now, unlike this page's original `select('legal_name')`-only
   // query, so the "how do I actually pay this" gap flagged below can be
   // closed for any org that has filled them in, with no schema change.
@@ -275,7 +275,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
 
       {/*
         org_tax_profiles does have invoice_contact_name/invoice_contact_email
-        columns (20260806000044_org_tax_profiles.sql) -- a prior pass here
+        columns (20260806000051_org_tax_profiles.sql) -- a prior pass here
         missed them and only selected `legal_name`, leaving this "how do I
         actually pay this" line with no way to act on it. Now selected
         above and rendered as a mailto: link when an email is on file;

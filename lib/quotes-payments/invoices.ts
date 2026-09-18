@@ -1,7 +1,7 @@
 // Gate 4 (Quotes & Payments), Phase A service layer -- invoice lifecycle:
 // draft creation (standalone or from an accepted estimate), draft line-item
 // editing, `issue_invoice()` issuance, and `void_invoice()` (see
-// supabase/migrations/20260806000047_invoices.sql for the full RPC/RLS
+// supabase/migrations/20260806000054_invoices.sql for the full RPC/RLS
 // contract this module wraps). Mirrors lib/quotes-payments/estimates.ts's
 // shape deliberately -- same draft/immutable-snapshot split, same
 // tax-then-RPC ordering, same audit-log discipline -- so the two lifecycle

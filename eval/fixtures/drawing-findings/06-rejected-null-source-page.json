@@ -1,0 +1,15 @@
+{
+  "description": "Drawing review's SECOND citation axis (NEW vs. audit): the DB check constraint 'kind = missing_document OR source_page IS NOT NULL' (20260806000044_drawing_review_schema.sql) is mirrored in DrawingFindingSchema's second .refine() -- a code_conflict with a valid code_chunk_id but a null source_page (no visual-evidence location on the drawing) is rejected here, not left to fail at the database insert.",
+  "shownChunkIds": ["11111111-1111-4111-8111-111111111111"],
+  "rawFinding": {
+    "kind": "code_conflict",
+    "severity": "warning",
+    "issue": "A conflict asserted with a rule citation but no page location on the drawing itself.",
+    "action_required": "N/A -- this finding should be rejected before it reaches a human.",
+    "code_chunk_id": "11111111-1111-4111-8111-111111111111",
+    "source_page": null,
+    "source_region": null,
+    "confidence": 0.6
+  },
+  "expected": { "ok": false, "reasonContains": "source_page is required" }
+}

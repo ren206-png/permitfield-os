@@ -2,7 +2,7 @@
 -- line items, and the concurrency-safe per-org sequential invoice-numbering
 -- mechanism the master prompt requires be "proven, not assumed."
 --
--- Overall shape deliberately mirrors 20260806000045_estimates.sql: a mutable
+-- Overall shape deliberately mirrors 20260806000052_estimates.sql: a mutable
 -- draft (invoices/invoice_line_items, editable while status = 'draft') plus
 -- an immutable point-in-time snapshot taken at the moment of a privileged
 -- state transition (issue_invoice() below), exactly the way
@@ -81,7 +81,7 @@ create table invoices (
   -- Immutable issue-time snapshot: a full copy of the line items as they
   -- existed the instant issue_invoice() ran, exactly the same
   -- jsonb-snapshot-over-relational-child-table choice made for
-  -- estimate_revisions.line_items (20260806000045) and for the identical
+  -- estimate_revisions.line_items (20260806000052) and for the identical
   -- reason -- no query needs relational access to a past invoice's line
   -- items, only "show me exactly what this PDF said," which a jsonb blob
   -- answers directly.
@@ -92,7 +92,7 @@ create table invoices (
   issued_total_cents bigint check (issued_total_cents is null or issued_total_cents >= 0),
   -- Content hash of the issued snapshot, same "second independent proof of
   -- exactly what was issued" reasoning as estimate_acceptances.revision_hash
-  -- (20260806000046) -- computed by the caller, stored verbatim, not
+  -- (20260806000053) -- computed by the caller, stored verbatim, not
   -- computed in SQL.
   document_hash text,
 
@@ -135,7 +135,7 @@ alter table invoices enable row level security;
 -- issue/void transitions themselves go through the SECURITY DEFINER RPCs
 -- below (which bypass RLS and do their own role check), matching
 -- transition_permit_status()'s pattern (20260806000022) and this gate's
--- own is_org_billing_manager() role tier (20260806000044).
+-- own is_org_billing_manager() role tier (20260806000051).
 create policy invoices_select on invoices
   for select to authenticated
   using (is_org_member(org_id));
@@ -157,7 +157,7 @@ grant select, insert, update, delete on invoices to authenticated;
 grant select, insert, update, delete on invoices to service_role;
 
 -- invoice_line_items: same shape discipline as estimate_line_items
--- (20260806000045) -- fractional quantity, bigint cents, mutually exclusive
+-- (20260806000052) -- fractional quantity, bigint cents, mutually exclusive
 -- percent-or-fixed discount, no calculation logic in SQL. See that
 -- migration's header comment for the full rounding/discount-order contract
 -- this table's rows feed into; it is not repeated verbatim here since it is
@@ -220,7 +220,7 @@ grant select, insert, update, delete on invoice_line_items to service_role;
 -- an invoice_number is ever assigned. Role-gated to org_owner/permit_manager
 -- tier (GATE_4_FINDINGS.md §I item 2: issuance is one of the listed
 -- consequential actions), via the same is_org_billing_manager() predicate
--- defined in 20260806000044 rather than re-typing its four-value role list
+-- defined in 20260806000051 rather than re-typing its four-value role list
 -- a third time.
 --
 -- Concurrency-safety mechanism (the master prompt's explicit "prove it, do

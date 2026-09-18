@@ -19,7 +19,7 @@
 // one -- the master prompt's entitlement list only covers
 // quotes/invoices/payments), and RLS itself is the real gate here
 // (org_tax_profiles_insert/_update both require is_org_billing_manager(),
-// 20260806000044_org_tax_profiles.sql) so a member without that role gets a
+// 20260806000051_org_tax_profiles.sql) so a member without that role gets a
 // thrown Postgres RLS error regardless of what this module checks. This
 // module therefore gates only on isQuotesPaymentsEnabled() (the tax profile
 // is Gate 4 scope, not a standalone feature) plus 'invoices.manage' as the
@@ -149,7 +149,7 @@ export interface UpsertOrgTaxProfileParams {
 
 /**
  * Creates or updates the org's org_tax_profiles row (upsert on the
- * `org_id` unique constraint -- see 20260806000044's `org_id uuid not null
+ * `org_id` unique constraint -- see 20260806000051's `org_id uuid not null
  * unique`). `country_code`/`currency_code` are never accepted as params:
  * both are CHECK-pinned to 'CA'/'CAD' at the DB layer for this launch scope
  * (that migration's own header comment), so this function relies on the

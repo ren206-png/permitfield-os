@@ -47,7 +47,7 @@ export interface PaymentAllocationForEligibility {
   /** The *payment's* own status (payments.status), not the allocation's
    * own row -- payment_allocations has no status column of its own; see
    * sumRecordedAllocationCents()'s own comment below and
-   * supabase/migrations/20260806000049_payments.sql's header comment for
+   * supabase/migrations/20260806000056_payments.sql's header comment for
    * why a reversed payment's allocations must be excluded from "amount
    * paid." */
   paymentStatus: 'recorded' | 'reversed';
@@ -56,7 +56,7 @@ export interface PaymentAllocationForEligibility {
 /**
  * Sums only the allocations belonging to a still-`recorded` payment,
  * excluding any belonging to a `reversed` one -- the exact rule
- * 20260806000049_payments.sql's own header comment prescribes for
+ * 20260806000056_payments.sql's own header comment prescribes for
  * deriving "how much of this invoice has actually been paid," since
  * `invoices` carries no paid/unpaid status column of its own.
  */

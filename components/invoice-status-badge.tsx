@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase A UI. Same pattern as
 // estimate-status-badge.tsx / components/status-badge.tsx. invoices.status
-// is a fixed enum (supabase/migrations/20260806000047_invoices.sql).
+// is a fixed enum (supabase/migrations/20260806000054_invoices.sql).
 type InvoiceStatus = 'draft' | 'issued' | 'void';
 
 const LABELS: Record<InvoiceStatus, string> = {

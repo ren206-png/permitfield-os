@@ -4,7 +4,7 @@
 -- function computes a tax amount, no trigger derives one, no CHECK
 -- encodes a rate formula) -- that belongs to a future TypeScript domain
 -- engine, exactly like the discount/rounding math documented-but-not-
--- implemented in 20260806000045_estimates.sql.
+-- implemented in 20260806000052_estimates.sql.
 --
 -- GATE_4_FINDINGS.md §I item 7 (NOT resolved, explicitly named a release
 -- blocker by the master prompt itself, and explicitly NOT re-litigated in

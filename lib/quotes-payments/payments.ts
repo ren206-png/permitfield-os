@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase A service layer -- manual payment
 // recording (e-transfer / cheque only, per
-// supabase/migrations/20260806000049_payments.sql's own header comment: "no
+// supabase/migrations/20260806000056_payments.sql's own header comment: "no
 // online/card payment processor integration exists anywhere in this
 // migration, and none is implied by it"). Thin wrappers around
 // `record_payment()` and `reverse_payment()`, the sole write paths (there is

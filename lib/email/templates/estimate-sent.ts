@@ -9,7 +9,7 @@ export interface EstimateSentEmailInput {
   recipientName?: string | null;
   organizationName: string;
   /** Customer-facing "view my quote" link -- see send_estimate()'s own
-   * header comment (20260806000045_estimates.sql) for what this points at;
+   * header comment (20260806000052_estimates.sql) for what this points at;
    * construction of the actual URL is this template's caller's concern,
    * not this template's. */
   viewUrl: string;

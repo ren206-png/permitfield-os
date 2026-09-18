@@ -1,4 +1,4 @@
--- Gate 4 (Quotes & Payments), Phase A / 20260806000044_org_tax_profiles.sql.
+-- Gate 4 (Quotes & Payments), Phase A / 20260806000051_org_tax_profiles.sql.
 -- Proves: (1) tenant isolation, (2) write access is billing-manager tier
 -- (org_owner/permit_manager), stricter than read (any member), exercised
 -- via a real 'member'-role fixture -- same discipline as

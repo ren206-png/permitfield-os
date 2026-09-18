@@ -1,7 +1,7 @@
 // Gate 4 (Quotes & Payments) UX polish. Same Record<Status,string>
 // label/class-map pattern as components/estimate-status-badge.tsx /
 // invoice-status-badge.tsx / payment-status-badge.tsx -- reminder_jobs.status
-// is a fixed enum (supabase/migrations/20260806000050_reminder_jobs.sql).
+// is a fixed enum (supabase/migrations/20260806000057_reminder_jobs.sql).
 type ReminderJobStatus = 'pending' | 'sent' | 'skipped' | 'canceled';
 
 const LABELS: Record<ReminderJobStatus, string> = {

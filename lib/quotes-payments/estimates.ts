@@ -1,6 +1,6 @@
 // Gate 4 (Quotes & Payments), Phase A service layer -- estimate (quote)
 // lifecycle: draft creation, draft line-item editing, and `send_estimate()`
-// issuance (see supabase/migrations/20260806000045_estimates.sql for the
+// issuance (see supabase/migrations/20260806000052_estimates.sql for the
 // full RPC/RLS contract this module wraps).
 //
 // Every exported function here is gated behind isQuotesPaymentsEnabled()
@@ -158,7 +158,7 @@ export interface CreateDraftEstimateParams {
   actorRole: Role;
 }
 
-/** Creates a draft estimate + its initial line items in one call. Both writes are ordinary RLS-enforced INSERTs (no RPC needed -- drafting is not a privileged action, see 20260806000045's own policy comments). */
+/** Creates a draft estimate + its initial line items in one call. Both writes are ordinary RLS-enforced INSERTs (no RPC needed -- drafting is not a privileged action, see 20260806000052's own policy comments). */
 export async function createDraftEstimate(supabase: QPClient, params: CreateDraftEstimateParams): Promise<EstimateRecord> {
   await assertQuotesEntitlement(params.orgId);
 
@@ -218,7 +218,7 @@ export interface ReplaceDraftEstimateLineItemsParams {
  * Replaces the full set of line items on a still-draft estimate (delete
  * all, then insert the new set) -- the simplest correct semantics for
  * "update draft line items" given the RLS policies only ever allow this
- * while `status = 'draft'` (20260806000045_estimates.sql); an estimate that
+ * while `status = 'draft'` (20260806000052_estimates.sql); an estimate that
  * has already been sent will fail both the delete and the insert at the
  * RLS layer, surfacing as a thrown Postgres error here rather than a
  * partial, silently-ignored write.
@@ -283,7 +283,7 @@ export type SendEstimateResult =
  * computeTaxOutcome()/resolveOrgTaxContext() -- never assumes one exists)
  * and calls calculateTax() BEFORE the RPC, exactly matching this gate's
  * "no calculation logic in SQL, totals are computed here and passed in
- * already-computed" contract (20260806000045's own header comment). A
+ * already-computed" contract (20260806000052's own header comment). A
  * `'review_required'` tax outcome (missing profile, unsupported province,
  * unknown registration status) is returned to the caller as a typed result
  * -- `send_estimate()` is never called in that case, so no state changes

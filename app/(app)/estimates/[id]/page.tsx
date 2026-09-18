@@ -123,7 +123,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
   }
 
   // Reminder visibility. reminder_jobs/reminder_delivery_attempts
-  // (supabase/migrations/20260806000050_reminder_jobs.sql) are both
+  // (supabase/migrations/20260806000057_reminder_jobs.sql) are both
   // already `authenticated`-readable via is_org_member(org_id) RLS -- no
   // schema change needed for this read, only a UI that hadn't existed
   // anywhere in the app until this pass. See reminder-labels.ts's header
