@@ -17,7 +17,9 @@ export interface PermitEventPayloads {
   'permit/application.documents_ready': { applicationId: string };
   // Emitted after permit.extract persists an extractions row, success or
   // failure. Phase 3's audit function (lib/inngest/functions/audit.ts) is
-  // the subscriber to the success case.
+  // the subscriber to the success case; permit.notify_on_failure
+  // (lib/inngest/functions/notify-on-failure.ts, PERMITFIELD_FF_FAILURE_NOTIFICATIONS)
+  // is the subscriber to the failure case (zodValid: false).
   'permit/application.extracted': {
     applicationId: string;
     extractionId: string;
@@ -26,9 +28,16 @@ export interface PermitEventPayloads {
   // Emitted after permit.audit finishes, including the "skipped" case (AI
   // audit disabled by flag, or the jurisdiction's coverage_level isn't
   // 'verified'). `audited: false` distinguishes a deliberate skip from a
-  // completed audit. Gate 5, sub-phase 5.3 (GATE_5_FINDINGS.md §K):
-  // lib/inngest/functions/notify.ts's permitNotify is the first real
-  // subscriber.
+  // completed audit -- two independent subscribers now read this event:
+  // permit.notify_on_failure (lib/inngest/functions/notify-on-failure.ts,
+  // PERMITFIELD_FF_FAILURE_NOTIFICATIONS), which re-derives
+  // permit_applications.status live rather than trusting `audited: false`
+  // alone, since that one boolean covers both a genuine audit_failed and
+  // the two benign skip cases (see that module's classifyFailure() header
+  // comment for the full breakdown); and, from Gate 5, sub-phase 5.3
+  // (GATE_5_FINDINGS.md §K), lib/inngest/functions/notify.ts's permitNotify.
+  // generate-pdf.ts is also a subscriber, on the 'assisted'-tier
+  // direct-fill path.
   'permit/application.audited': {
     applicationId: string;
     auditId: string | null;
@@ -51,8 +60,13 @@ export interface PermitEventPayloads {
   // own coverage_level re-check). `succeeded: false` with a non-empty
   // generatedDocumentIds array cannot happen -- either every eligible filing
   // produced a row, or none did and the application is routed to
-  // 'document_generation_failed'. Gate 5, sub-phase 5.3: permitNotify (see
-  // 'permit/application.audited' above) is the first real subscriber.
+  // 'document_generation_failed'. Same two independent subscribers as the
+  // 'audited' event above: permit.notify_on_failure
+  // (lib/inngest/functions/notify-on-failure.ts,
+  // PERMITFIELD_FF_FAILURE_NOTIFICATIONS), which re-derives status live
+  // before treating a `succeeded: false` as a real failure, since the
+  // ineligible-skip case also emits `succeeded: false` and is not itself a
+  // failure; and Gate 5, sub-phase 5.3's permitNotify.
   'permit/application.pdf_generated': {
     applicationId: string;
     generatedDocumentIds: string[];

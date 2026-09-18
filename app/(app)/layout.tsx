@@ -2,9 +2,16 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
-import { isAdminPanelEnabled, isBillingEnabled, isQuotesPaymentsEnabled, isDashboardEnabled } from '@/lib/flags';
+import {
+  isAdminPanelEnabled,
+  isBillingEnabled,
+  isDashboardEnabled,
+  isFailureNotificationsEnabled,
+  isQuotesPaymentsEnabled,
+} from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
+import { createClient } from '@/lib/supabase/server';
 import { AppSidebar } from '@/components/app-sidebar';
 
 // Shared chrome for every authenticated, org-scoped page. requireOrgContext()
@@ -16,7 +23,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 // a prop or context provider that could go stale across a client-side
 // navigation.
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const { orgName } = await requireOrgContext();
+  const { orgId, orgName } = await requireOrgContext();
   // Cheap enough to check on every (app) page load (one env var read plus a
   // getUser() call that's already been made by requireOrgContext() above --
   // requireUser() inside isCurrentUserAdmin() re-hits auth.getUser(), same
@@ -44,6 +51,27 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // "flag says the route exists, the page itself decides visibility"
   // division of labor that page's own header comment documents.
   const showDashboardLink = isDashboardEnabled();
+
+  // Failure-notification system (PERMITFIELD_FF_FAILURE_NOTIFICATIONS, see
+  // lib/flags.ts's isFailureNotificationsEnabled() header comment). Flag
+  // checked first, same as showAdminLink above -- an environment with the
+  // flag off never queries the notifications table at all, byte-identical
+  // to before this build. A fresh createClient() call rather than threading
+  // one down from requireOrgContext(), matching this file's own header
+  // comment's "re-derive from the DB, don't thread trust through props"
+  // habit; a `head: true` count avoids fetching any row body just to get a
+  // number, and needs no pagination guard the way a real .select() would
+  // (PostgREST's 1000-row cap only bounds returned rows, not a count).
+  let unreadNotificationCount = 0;
+  if (isFailureNotificationsEnabled()) {
+    const supabase = await createClient();
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('read_at', null);
+    unreadNotificationCount = count ?? 0;
+  }
 
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
@@ -82,6 +110,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           showBillingLink={showBillingLink}
           showAdminLink={showAdminLink}
           showDashboardLink={showDashboardLink}
+          showNotificationsLink={isFailureNotificationsEnabled()}
+          unreadNotificationCount={unreadNotificationCount}
           showQuotesPaymentsLinks={showQuotesPaymentsLinks}
         />
         <main className="min-w-0 flex-1">{children}</main>

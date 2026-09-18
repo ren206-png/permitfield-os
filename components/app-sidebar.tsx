@@ -6,6 +6,9 @@ import { usePathname } from 'next/navigation';
 interface SidebarLink {
   href: string;
   label: string;
+  /** Unread count badge (failure-notification system only) -- omitted or 0
+   * renders no badge at all. */
+  badge?: number;
 }
 
 interface AppSidebarProps {
@@ -20,6 +23,14 @@ interface AppSidebarProps {
    * 'analytics' entitlement gate lives in app/(app)/dashboard/page.tsx
    * itself (renders LockedFeature rather than 404ing), not here. */
   showDashboardLink: boolean;
+  /** isFailureNotificationsEnabled() -- same flag-only shape as the others
+   * above. Flag checked in the layout, not here, matching this component's
+   * own "gating booleans computed upstream" pattern. */
+  showNotificationsLink: boolean;
+  /** Count of unread rows in the notifications table for this org, computed
+   * in the layout (see that file's own header comment) -- 0 when the flag
+   * above is off, since the layout never queries in that case. */
+  unreadNotificationCount: number;
   /** isQuotesPaymentsEnabled() -- Gate 4 (Quotes & Payments), Phase A. Same
    * flag-only shape as the others above, not an access check: visible to
    * every org member the moment the flag is on, with the entitlement-gated
@@ -46,6 +57,8 @@ export function AppSidebar({
   showBillingLink,
   showAdminLink,
   showDashboardLink,
+  showNotificationsLink,
+  unreadNotificationCount,
   showQuotesPaymentsLinks,
 }: AppSidebarProps) {
   const pathname = usePathname();
@@ -64,6 +77,9 @@ export function AppSidebar({
           { href: '/invoices', label: 'Invoices' },
           { href: '/settings/tax-profile', label: 'Tax profile' },
         ]
+      : []),
+    ...(showNotificationsLink
+      ? [{ href: '/notifications', label: 'Notifications', badge: unreadNotificationCount }]
       : []),
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),
@@ -90,6 +106,11 @@ export function AppSidebar({
               }`}
             >
               {link.label}
+              {!!link.badge && (
+                <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-white">
+                  {link.badge}
+                </span>
+              )}
             </Link>
           );
         })}
