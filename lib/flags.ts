@@ -348,6 +348,23 @@ export function isQuotesPaymentsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_QUOTES_PAYMENTS');
 }
 
+// Gate 4 (Quotes & Payments), Phase C (GATE_4_PHASE_C_FINDINGS.md). Independent
+// sub-flag for online payment collection (Stripe Connect, "flow B" -- a
+// contractor's own customer paying an issued invoice) -- deliberately
+// separate from isQuotesPaymentsEnabled() above so the existing offline
+// e-transfer/cheque pilot is never blocked on this integration landing, per
+// GATE_4_FINDINGS.md §3.1's original recommendation for this exact flag name.
+// Gates the new lib/quotes-payments/stripe-connect.ts module, the
+// app/api/webhooks/stripe-connect/ route, the Connect-onboarding settings
+// surface, and the "Pay now" affordance on app/invoice/[token]/page.tsx --
+// checked before anything else runs in each, same "flag off means unreachable,
+// not merely inert" discipline as isClientPortalEnabled() above. Structurally
+// separate from isBillingEnabled() (flow A, PermitField's own SaaS billing) --
+// the two flows must never be conflated (GATE_4_FINDINGS.md §2).
+export function isQuotesPaymentsOnlineEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_QUOTES_PAYMENTS_ONLINE');
+}
+
 // Gate 5, sub-phase 5.2 (GATE_5_FINDINGS.md §K). Master kill switch for the
 // drawing-review AI pipeline (lib/inngest/functions/drawing-review.ts) --
 // same "ops-level rollback lever, independent of the per-jurisdiction

@@ -37,6 +37,15 @@ interface AppSidebarProps {
    * "locked" state rendered inside the pages themselves (see e.g.
    * app/(app)/estimates/page.tsx), not by hiding these links. */
   showQuotesPaymentsLinks: boolean;
+  /** isQuotesPaymentsOnlineEnabled() -- Gate 4 (Quotes & Payments), Phase C.
+   * A deliberately separate boolean from showQuotesPaymentsLinks above (see
+   * that flag's own declaration in app/(app)/layout.tsx for why) -- gates
+   * the org-facing Stripe Connect onboarding/administration settings page,
+   * not an access check: every org member sees the link once the flag is
+   * on, and the `payments.online` entitlement gate renders inside
+   * app/(app)/settings/payments-online/page.tsx itself, same division of
+   * labor as showBillingLink and showQuotesPaymentsLinks above. */
+  showQuotesPaymentsOnlineLink: boolean;
 }
 
 // Left-hand feature navigation for the authenticated app shell. Replaces the
@@ -60,6 +69,7 @@ export function AppSidebar({
   showNotificationsLink,
   unreadNotificationCount,
   showQuotesPaymentsLinks,
+  showQuotesPaymentsOnlineLink,
 }: AppSidebarProps) {
   const pathname = usePathname();
 
@@ -78,6 +88,7 @@ export function AppSidebar({
           { href: '/settings/tax-profile', label: 'Tax profile' },
         ]
       : []),
+    ...(showQuotesPaymentsOnlineLink ? [{ href: '/settings/payments-online', label: 'Online payments' }] : []),
     ...(showNotificationsLink
       ? [{ href: '/notifications', label: 'Notifications', badge: unreadNotificationCount }]
       : []),

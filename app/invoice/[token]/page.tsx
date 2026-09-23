@@ -4,16 +4,34 @@ import { resolveTargetToken } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
+import { isQuotesPaymentsOnlineEnabled } from '@/lib/flags';
+import { getOrgStripeConnectAccountStatus } from '@/lib/quotes-payments/stripe-connect';
 import { InvoiceStatusBadge } from '@/components/invoice-status-badge';
 import { PaymentStatusBadge } from '@/components/payment-status-badge';
+import { PayNowButton } from './pay-now-button';
 
 // Gate 4 (Quotes & Payments), Phase A. Route shape mirrors
 // app/estimate/[token]/page.tsx exactly -- see that file's own header
 // comment for why the bearer token alone, with no invoice id alongside it,
-// is this URL's only identifier. No online payment on this page (Phase C,
-// explicitly out of scope for this pass) -- this is a read-only "here is
-// what you owe and how it was paid so far" view plus a PDF download link.
+// is this URL's only identifier. This is a read-only "here is what you owe
+// and how it was paid so far" view plus a PDF download link -- PLUS, per
+// Gate 4 Phase C (GATE_4_PHASE_C_FINDINGS.md §I), a "Pay now" button when
+// online payment collection is enabled, this org has completed Stripe
+// Connect onboarding, and there is a real outstanding balance. See
+// pay-now-button.tsx and actions.ts's own header comments for why that
+// button's action has no entitlement check (this visitor is a customer,
+// not an org member).
 export const dynamic = 'force-dynamic';
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  e_transfer: 'E-transfer',
+  cheque: 'Cheque',
+  // Gate 4 Phase C addition (§I question 1's 'card' enum value) -- this
+  // record replaces the file's previous two-way ternary specifically so a
+  // future additive payment_method value only needs a new entry here, not a
+  // new nested ternary branch.
+  card: 'Card',
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -176,6 +194,17 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     }
   }
 
+  // "Pay now" precondition (Gate 4 Phase C, §I question 3): flag on, a real
+  // outstanding balance, AND this org has a charges-enabled Stripe Connect
+  // account -- checked with the same service-role client as everything else
+  // on this page, never an entitlement lookup (this visitor has no org-actor
+  // shape to check one against).
+  let canPayOnline = false;
+  if (isQuotesPaymentsOnlineEnabled() && invoice.status === 'issued' && outstandingCents !== null && outstandingCents > 0n) {
+    const connectAccount = await getOrgStripeConnectAccountStatus(supabase, orgId);
+    canPayOnline = connectAccount?.chargesEnabled ?? false;
+  }
+
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col px-6 py-16">
       <p className="text-sm text-zinc-500">{taxProfile?.legal_name ?? 'Invoice'}</p>
@@ -301,6 +330,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
 
       {invoice.status !== 'draft' && (
         <div className="mt-6 flex flex-wrap items-start gap-4">
+          {canPayOnline && <PayNowButton token={token} />}
           <a
             href={`/api/public/invoice/${token}/pdf`}
             className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50"
@@ -318,7 +348,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
               <li key={p.id} className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-2 text-sm">
                 <div>
                   <p className="text-zinc-900">
-                    {centsToDollarsString(p.amountCents)} · {p.method === 'e_transfer' ? 'E-transfer' : 'Cheque'}
+                    {centsToDollarsString(p.amountCents)} · {PAYMENT_METHOD_LABEL[p.method] ?? p.method}
                   </p>
                   <p className="text-xs text-zinc-500">{p.receivedAt}</p>
                 </div>
