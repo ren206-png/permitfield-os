@@ -20,7 +20,10 @@
 --      first proves the row-level triggers alone would NOT have stopped a
 --      TRUNCATE, so the revoke is the one thing actually closing this gap
 --      (same control-then-assert shape as
---      service_role_truncate_append_only.test.sql).
+--      service_role_truncate_append_only.test.sql). ai_jobs itself is proven
+--      via information_schema.role_table_grants metadata rather than a live
+--      TRUNCATE -- see this section's own header comment below for why
+--      (Gate AI-1, sub-phase AI-1.3's application_documents FK to ai_jobs).
 --
 -- HOW TO RUN: same as every other file in this directory --
 --   1. supabase start
@@ -295,21 +298,57 @@ reset role;
 -- Gate 5.1 (20260806000045_drawing_review_schema.sql) added drawing_reviews
 -- with a FK to ai_jobs(id), so a bare `truncate table ai_jobs, ...` now fails
 -- with "cannot truncate a table referenced in a foreign key constraint"
--- regardless of privileges. drawing_reviews/drawing_findings are included in
+-- regardless of privileges. drawing_reviews/drawing_findings were included in
 -- the same TRUNCATE statement (and temporarily granted here, same as the
 -- three original tables) purely to keep this control/assert pair executable
 -- -- their own permanent TRUNCATE revoke is asserted separately by
 -- supabase/tests/drawing_review_schema.test.sql and is unaffected by this
 -- temporary grant, which is revoked again below before end of transaction.
+--
+-- Gate AI-1, sub-phase AI-1.3 (20260806000064_application_documents_ai_classification.sql)
+-- went one step further and added application_documents.ai_classification_job_id,
+-- ALSO a FK to ai_jobs(id). That breaks the "just add the new referencing
+-- table to the list" fix used above for drawing_reviews: application_documents
+-- is itself referenced by document_revisions, permit_applications
+-- (decision_document_id), readiness_checklist_items (related_document_id),
+-- application_document_chunks, notification_log, drawing_findings_rejected,
+-- and notification_pending_events -- and permit_applications is in turn
+-- referenced by nearly every other domain table, so including
+-- application_documents here would transitively require including most of
+-- the schema, or TRUNCATE ... CASCADE, which would need TRUNCATE privilege
+-- on document_revisions/application_status_history -- tables that already
+-- have TRUNCATE permanently revoked (20260806000033) -- so a CASCADE attempt
+-- would fail with insufficient_privilege for a reason that has nothing to do
+-- with ai_jobs's own revoke, proving nothing. ai_jobs's TRUNCATE-gap is
+-- therefore proven below via information_schema.role_table_grants metadata
+-- instead (same pattern drawing_review_schema.test.sql's own TRUNCATE-gap
+-- section uses), while ai_token_ledger/ai_human_reviews/drawing_reviews/
+-- drawing_findings -- none of which has any inbound FK from outside this
+-- set -- keep the live control-then-assert TRUNCATE proof.
 
-grant truncate on ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings to service_role;
+do $$
+declare
+  grant_count int;
+begin
+  select count(*) into grant_count
+  from information_schema.role_table_grants
+  where table_name = 'ai_jobs'
+    and grantee = 'service_role'
+    and privilege_type = 'TRUNCATE';
+  if grant_count <> 0 then
+    raise exception 'FAIL: service_role still holds a TRUNCATE grant on ai_jobs';
+  end if;
+  raise notice 'PASS: service_role has no TRUNCATE grant on ai_jobs (20260806000036''s revoke is in effect; see this section''s header comment for why ai_jobs is proven via metadata rather than a live TRUNCATE)';
+end $$;
+
+grant truncate on ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings to service_role;
 
 set role service_role;
 
 do $$
 begin
-  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
-  raise notice 'PASS (control): service_role TRUNCATE succeeded on all three AI-1.1 tables (plus the Gate 5.1 tables FK-linked to ai_jobs, truncated in the same statement out of necessity) while the grant is present -- confirms the row-level triggers alone do not stop TRUNCATE, same as the original seven append-only tables.';
+  execute 'truncate table ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
+  raise notice 'PASS (control): service_role TRUNCATE succeeded on ai_token_ledger/ai_human_reviews (plus the Gate 5.1 tables FK-linked to each other) while the grant is present -- confirms the row-level triggers alone do not stop TRUNCATE, same as the original seven append-only tables. (ai_jobs itself is proven separately above via grant metadata.)';
 exception
   when insufficient_privilege then
     raise exception 'FAIL (control): service_role TRUNCATE was rejected even with the grant present -- the later failure assertion would prove nothing without this control succeeding first. (%)', sqlerrm;
@@ -317,17 +356,17 @@ end $$;
 
 reset role;
 
-revoke truncate on ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings from service_role;
+revoke truncate on ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings from service_role;
 
 set role service_role;
 
 do $$
 begin
-  execute 'truncate table ai_jobs, ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
-  raise exception 'FAIL (assert): service_role TRUNCATE succeeded on the AI-1.1 tables after the grant was revoked -- this migration''s TRUNCATE revoke is not actually in effect.';
+  execute 'truncate table ai_token_ledger, ai_human_reviews, drawing_reviews, drawing_findings';
+  raise exception 'FAIL (assert): service_role TRUNCATE succeeded on ai_token_ledger/ai_human_reviews/drawing_reviews/drawing_findings after the grant was revoked -- this migration''s TRUNCATE revoke is not actually in effect.';
 exception
   when insufficient_privilege then
-    raise notice 'PASS (assert): service_role TRUNCATE on all three AI-1.1 tables (plus the Gate 5.1 tables named above) correctly rejected once the grant is revoked (restoring this migration''s actual, already-applied effect). (%)', sqlerrm;
+    raise notice 'PASS (assert): service_role TRUNCATE on ai_token_ledger/ai_human_reviews/drawing_reviews/drawing_findings correctly rejected once the grant is revoked (restoring this migration''s actual, already-applied effect). (%)', sqlerrm;
 end $$;
 
 reset role;

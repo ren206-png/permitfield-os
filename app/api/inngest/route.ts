@@ -7,6 +7,7 @@ import { notifyOnFailure } from '@/lib/inngest/functions/notify-on-failure';
 import { permitQuotesPaymentsReminders } from '@/lib/inngest/functions/reminders';
 import { permitDrawingReview } from '@/lib/inngest/functions/drawing-review';
 import { permitNotify, permitNotifyFlush } from '@/lib/inngest/functions/notify';
+import { permitClassifyDocuments } from '@/lib/inngest/functions/classify-documents';
 
 // Registers permit.extract, permit.audit, permit.generate_pdf,
 // permit.notify_on_failure, the Gate 4 (Quotes & Payments)
@@ -23,7 +24,11 @@ import { permitNotify, permitNotifyFlush } from '@/lib/inngest/functions/notify'
 // and both must be discoverable by Inngest, not just the one that owns the
 // original four trigger names. App Router (Next.js >=13) requires exporting
 // each HTTP method individually rather than a default export -- see
-// node_modules/inngest/next.d.ts's own example.
+// node_modules/inngest/next.d.ts's own example. Gate AI-1, sub-phase AI-1.3:
+// permit-classify-documents is registered alongside permitExtract as a
+// second, independent subscriber to 'permit/application.documents_ready' --
+// same "multiple independent subscribers to one event" shape as
+// permit-notify/permit-notify-on-failure above, just for a different event.
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
@@ -35,5 +40,6 @@ export const { GET, POST, PUT } = serve({
     permitDrawingReview,
     permitNotify,
     permitNotifyFlush,
+    permitClassifyDocuments,
   ],
 });
