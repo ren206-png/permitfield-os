@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { PRODUCT_NAME } from '@/lib/brand';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
@@ -32,7 +32,7 @@ export default async function PublicCreditNotePage({ params }: { params: Promise
   // Every non-success outcome collapses to notFound() -- same discipline as
   // every other client-portal page (see app/estimate/[token]/page.tsx's
   // header comment).
-  const resolved = await resolveTargetToken(token, 'credit_note');
+  const resolved = await resolveTargetToken(token, 'credit_note', await getBridgeRequestContext());
   if ('error' in resolved) {
     notFound();
   }

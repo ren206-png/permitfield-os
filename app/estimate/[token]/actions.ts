@@ -1,9 +1,8 @@
 'use server';
 
 import { createHash } from 'node:crypto';
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { recordEstimateAcceptance } from '@/lib/quotes-payments/estimate-acceptances';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
@@ -40,12 +39,18 @@ export async function acceptEstimateAction(
     return { error: 'Enter your full name and your role/title to accept this estimate.' };
   }
 
+  // Computed once, reused both for resolveTargetToken's own rate-limit
+  // pre-check (lib/bridge/client-portal.ts's own header comment on
+  // BridgeRequestContext) and, below, for recordEstimateAcceptance's
+  // ip/userAgent audit columns -- no need to derive it twice.
+  const context = await getBridgeRequestContext();
+
   // Re-validated here, independently of whatever the page component checked
   // moments ago when it rendered -- this action has no access to that
   // render's result and must never trust it implicitly (same "the caller
   // must validate first" contract estimate-acceptances.ts's own header
   // comment states record_estimate_acceptance() itself does NOT enforce).
-  const resolved = await resolveTargetToken(token, 'estimate');
+  const resolved = await resolveTargetToken(token, 'estimate', context);
   if ('error' in resolved) {
     return { error: GENERIC_ERROR };
   }
@@ -101,17 +106,14 @@ export async function acceptEstimateAction(
     .update(JSON.stringify({ lineItems: revision.line_items, totals }), 'utf8')
     .digest('hex');
 
-  // No existing repo convention extracts request ip/user-agent inside a
-  // Server Action (grepped app/ and lib/ for x-forwarded-for/headers()/
-  // request.ip/user-agent -- no relevant prior art found beyond unrelated
-  // type-definition fields and app/robots.ts's own unrelated userAgent: '*'
-  // field). next/headers's headers() is the standard Next.js primitive for
-  // this and is used here as a from-scratch decision, not a mirrored
-  // pattern.
-  const requestHeaders = await headers();
-  const forwardedFor = requestHeaders.get('x-forwarded-for');
-  const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
-  const userAgent = requestHeaders.get('user-agent');
+  // ip/userAgent: the same BridgeRequestContext computed above for
+  // resolveTargetToken's rate-limit pre-check, not re-derived -- see
+  // lib/bridge/client-portal.ts's getBridgeRequestContext() for the
+  // x-forwarded-for/user-agent extraction this now consolidates (this file
+  // used to do it inline; see git history for the prior "no existing repo
+  // convention" note that decision was made under).
+  const ip = context.ip ?? null;
+  const userAgent = context.userAgent ?? null;
 
   const externalActorLabel = recipientName ? `${recipientName} <${recipientEmailDisplay}>` : recipientEmailDisplay;
 

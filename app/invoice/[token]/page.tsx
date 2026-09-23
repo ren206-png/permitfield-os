@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { PRODUCT_NAME } from '@/lib/brand';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
@@ -45,7 +45,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
 
   // Same generic-collapse discipline as app/estimate/[token]/page.tsx -- see
   // that file's comment on this exact call.
-  const resolved = await resolveTargetToken(token, 'invoice');
+  const resolved = await resolveTargetToken(token, 'invoice', await getBridgeRequestContext());
   if ('error' in resolved) {
     notFound();
   }

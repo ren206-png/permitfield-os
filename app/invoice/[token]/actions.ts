@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { isQuotesPaymentsOnlineEnabled } from '@/lib/flags';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
@@ -41,7 +41,7 @@ export async function payInvoiceAction(_prevState: PayInvoiceState, formData: Fo
     return { error: GENERIC_ERROR };
   }
 
-  const resolved = await resolveTargetToken(token, 'invoice');
+  const resolved = await resolveTargetToken(token, 'invoice', await getBridgeRequestContext());
   if ('error' in resolved) {
     return { error: GENERIC_ERROR };
   }

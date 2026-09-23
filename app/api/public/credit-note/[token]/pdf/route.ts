@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { generateCreditNotePdf } from '@/lib/pdf/credit-note-pdf';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
@@ -13,7 +13,7 @@ import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-m
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const resolved = await resolveTargetToken(token, 'credit_note');
+  const resolved = await resolveTargetToken(token, 'credit_note', await getBridgeRequestContext());
   if ('error' in resolved) {
     return NextResponse.json({ error: 'Not found.' }, { status: 404 });
   }
