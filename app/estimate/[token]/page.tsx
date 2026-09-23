@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { PRODUCT_NAME } from '@/lib/brand';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
@@ -40,7 +40,7 @@ export default async function PublicEstimatePage({ params }: { params: Promise<{
   // "link_unavailable" response every denial reason produces, so a visitor
   // can never distinguish "wrong token" from "revoked" from "this was never
   // an estimate link" from the page they're shown.
-  const resolved = await resolveTargetToken(token, 'estimate');
+  const resolved = await resolveTargetToken(token, 'estimate', await getBridgeRequestContext());
   if ('error' in resolved) {
     notFound();
   }

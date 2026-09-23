@@ -1,9 +1,8 @@
 'use server';
 
 import { createHash } from 'node:crypto';
-import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { resolveTargetToken } from '@/lib/bridge/client-portal';
+import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { recordChangeOrderAcceptance } from '@/lib/quotes-payments/change-orders';
 
@@ -39,10 +38,15 @@ export async function acceptChangeOrderAction(
     return { error: 'Enter your full name and your role/title to accept this change order.' };
   }
 
+  // Computed once, reused both for resolveTargetToken's own rate-limit
+  // pre-check and, below, for recordChangeOrderAcceptance's ip/userAgent
+  // audit columns -- same consolidation as acceptEstimateAction.
+  const context = await getBridgeRequestContext();
+
   // Re-validated here, independently of whatever the page component checked
   // moments ago when it rendered -- same "never trust the prior render"
   // contract as acceptEstimateAction.
-  const resolved = await resolveTargetToken(token, 'change_order');
+  const resolved = await resolveTargetToken(token, 'change_order', context);
   if ('error' in resolved) {
     return { error: GENERIC_ERROR };
   }
@@ -84,10 +88,10 @@ export async function acceptChangeOrderAction(
   };
   const snapshotHash = createHash('sha256').update(JSON.stringify(snapshot), 'utf8').digest('hex');
 
-  const requestHeaders = await headers();
-  const forwardedFor = requestHeaders.get('x-forwarded-for');
-  const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
-  const userAgent = requestHeaders.get('user-agent');
+  // ip/userAgent: the same BridgeRequestContext computed above, not
+  // re-derived -- see acceptEstimateAction's identical consolidation.
+  const ip = context.ip ?? null;
+  const userAgent = context.userAgent ?? null;
 
   const externalActorLabel = recipientName ? `${recipientName} <${recipientEmailDisplay}>` : recipientEmailDisplay;
 

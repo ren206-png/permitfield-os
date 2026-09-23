@@ -131,3 +131,53 @@ export const DRAWING_REVIEW_MAX_VALIDATION_ATTEMPTS = 2;
 // more and gives the model more surface area to cite something it wasn't
 // actually shown carefully.
 export const DRAWING_REVIEW_MAX_RETRIEVED_CHUNKS = 8;
+
+// Gate AI-1, sub-phase AI-1.3. Same purpose as EXTRACTION_PROMPT_VERSION/
+// AUDIT_PROMPT_VERSION/DRAWING_REVIEW_PROMPT_VERSION above, for the new
+// document-classification prompt (lib/ai/classify-document.ts). Persisted
+// via the ai_jobs row referenced by
+// application_documents.ai_classification_job_id
+// (20260806000064_application_documents_ai_classification.sql), not a
+// column of application_documents itself -- same "lives on the referenced
+// ai_jobs row" convention DRAWING_REVIEW_PROMPT_VERSION's own header
+// describes for drawing_reviews.
+export const CLASSIFICATION_PROMPT_VERSION = 'classification-v1';
+
+// Same retry-once-then-fail-closed policy as
+// EXTRACTION_MAX_VALIDATION_ATTEMPTS/AUDIT_MAX_VALIDATION_ATTEMPTS/
+// DRAWING_REVIEW_MAX_VALIDATION_ATTEMPTS, applied to the classification
+// response. lib/ai/gemini/client.ts's generateContent has no tool-use/
+// forced-JSON support (that file's own header), so "structurally invalid"
+// here means either unparseable JSON or a JSON value that fails
+// DocumentClassificationSchema -- both are treated identically to a
+// malformed tool-use block on the Anthropic call sites.
+export const CLASSIFICATION_MAX_VALIDATION_ATTEMPTS = 2;
+
+// Gate AI-1, sub-phase AI-1.4 (GATE_AI_1_FINDINGS.md §G/§H RUNAWAY_SPEND).
+// *** PROVISIONAL, NOT CONFIRMED. *** Same unresolved-source-of-truth gap
+// this file's own header documents for GEMINI_ASSISTANT_MODEL_ID/
+// GEMINI_CLASSIFICATION_MODEL_ID: PERMITFIELD_AI_MODEL_DECISION.md does not
+// exist in this repo, so there is no ratified spend-cap figure to read
+// either. These two integer-USD-cents caps are round, order-of-magnitude
+// placeholders -- not a considered business decision -- picked only so
+// isAiTokenCapsEnabled() (lib/flags.ts) has a real number to enforce once
+// turned on rather than nothing at all. Changing either before a real number
+// exists is a one-file constant change, not a rewrite (same discipline as
+// every other PROVISIONAL constant in this file).
+//
+// AI_ORG_MONTHLY_COST_CAP_USD_CENTS has a real, wired caller today:
+// lib/inngest/functions/classify-documents.ts checks it (via
+// lib/ai/cost-caps.ts) before every model call it makes, directly answering
+// RUNAWAY_SPEND's "one org submits a 900-page bylaw package 500 times"
+// scenario for the classification job. AI_USER_DAILY_COST_CAP_USD_CENTS has
+// no caller yet -- ai_jobs.requested_by_user_id (the column it would filter
+// on) is only ever populated by a user-initiated call, and the one place
+// that would make one -- the AI-1.4 assistant UI -- is deliberately deferred
+// per this same findings file's §G ("the CONFIRMED/AI_INTERPRETATION
+// visual-distinction requirement... is genuinely new design work, not a
+// wiring task"). Declared now, alongside the org cap it's a sibling to, so
+// that future UI only has to call lib/ai/cost-caps.ts's already-written
+// checkUserDailyCostCap(), not invent the constant too -- same "declared
+// ahead of its consumer" pattern as isAiAssistantEnabled() itself.
+export const AI_ORG_MONTHLY_COST_CAP_USD_CENTS = 5_000;
+export const AI_USER_DAILY_COST_CAP_USD_CENTS = 500;

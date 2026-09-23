@@ -35,6 +35,18 @@
 // no product requirement yet for issuance and, say, drafting to be gated
 // separately -- narrower keys can be split out later without a breaking
 // rename if a real product need for that granularity appears.
+// Gate 4, Phase C addition: `payments.online` is deliberately a SEPARATE
+// entitlement from `payments.manage`, not a reuse -- GATE_4_PHASE_C_FINDINGS.md
+// §I question 3's recommendation. `payments.manage` gates the org-facing
+// manual-recording surface (recordPayment()/reversePayment(), a real
+// authenticated org actor calling `can(orgId, ...)`); `payments.online` gates
+// the org-facing Stripe Connect onboarding/administration surface (starting
+// onboarding, viewing connected-account status) for the exact same reason --
+// both assume `can(orgId, entitlement)`'s actor-shape (an authenticated org
+// member), which the customer-facing "Pay now" click on
+// app/invoice/[token]/page.tsx never has (that surface is gated by
+// isQuotesPaymentsOnlineEnabled() + a data-level onboarding-complete check
+// instead, not by this entitlement -- see that recommendation for why).
 export type Entitlement =
   | 'projects.create'
   | 'readiness.checker'
@@ -44,7 +56,8 @@ export type Entitlement =
   | 'ai'
   | 'quotes.manage'
   | 'invoices.manage'
-  | 'payments.manage';
+  | 'payments.manage'
+  | 'payments.online';
 export type LimitKey = 'projects.active_max';
 
 export type BillingTierId = 'starter' | 'pro' | 'enterprise';
@@ -70,6 +83,7 @@ const ALL_FEATURES: readonly Entitlement[] = [
   'quotes.manage',
   'invoices.manage',
   'payments.manage',
+  'payments.online',
 ];
 
 // BILLING_PROPOSAL.md §2's ratified two-self-serve-tier + Enterprise table

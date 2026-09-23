@@ -102,9 +102,21 @@ const geminiClientRestriction = {
 // client-portal.live.test.ts's own header gives for its exemption. Same
 // "only one designated module reads this credential" discipline as
 // STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET's own .env.example comments.
+// Gate 4 (Quotes & Payments), Phase C: widened to TWO designated modules,
+// not one -- lib/quotes-payments/stripe-connect.ts (flow B, Stripe Connect
+// online payments) alongside lib/billing/subscriptions.ts (flow A,
+// PermitField's own SaaS billing). See stripe-connect.ts's own header
+// comment for why these stay two separate modules rather than merging into
+// one -- same "ignores is additive" mechanism this repo already uses below
+// for resendClientRestriction's own three designated modules.
 const stripeClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/billing/subscriptions.ts", "lib/billing/subscriptions.live.test.ts"],
+  ignores: [
+    "lib/billing/subscriptions.ts",
+    "lib/billing/subscriptions.live.test.ts",
+    "lib/quotes-payments/stripe-connect.ts",
+    "lib/quotes-payments/stripe-connect.live.test.ts",
+  ],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -113,7 +125,7 @@ const stripeClientRestriction = {
           {
             name: "stripe",
             message:
-              "The stripe package (STRIPE_SECRET_KEY) may only be imported from lib/billing/subscriptions.ts -- see that module's header comment and BILLING_PROPOSAL.md §3.",
+              "The stripe package (STRIPE_SECRET_KEY) may only be imported from lib/billing/subscriptions.ts (flow A) or lib/quotes-payments/stripe-connect.ts (flow B) -- see those modules' header comments, BILLING_PROPOSAL.md §3, and GATE_4_PHASE_C_FINDINGS.md §I.",
           },
         ],
       },

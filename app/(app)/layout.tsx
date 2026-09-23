@@ -8,6 +8,7 @@ import {
   isDashboardEnabled,
   isFailureNotificationsEnabled,
   isQuotesPaymentsEnabled,
+  isQuotesPaymentsOnlineEnabled,
 } from '@/lib/flags';
 import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
@@ -45,6 +46,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // hiding the nav entry, so a member without the entitlement still learns
   // the feature exists rather than it silently vanishing.
   const showQuotesPaymentsLinks = isQuotesPaymentsEnabled();
+  // Gate 4 (Quotes & Payments), Phase C. Deliberately a SEPARATE boolean
+  // from showQuotesPaymentsLinks above, not folded into that array's own
+  // conditional spread -- this link (Stripe Connect onboarding
+  // administration) makes sense even for an org that has the online-
+  // payments flag on but the base quotes/invoices flag off (flow B doesn't
+  // structurally depend on flow A's estimates/invoices UI existing, only
+  // on the entitlement/RPCs this migration adds), so it gets its own
+  // independent gate rather than inheriting showQuotesPaymentsLinks's.
+  const showQuotesPaymentsOnlineLink = isQuotesPaymentsOnlineEnabled();
   // Same flag-only shape as showBillingLink above, not an access check --
   // app/(app)/dashboard/page.tsx does its own can(orgId, 'analytics') check
   // and renders LockedFeature for an org whose plan lacks it, exactly the
@@ -113,6 +123,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           showNotificationsLink={isFailureNotificationsEnabled()}
           unreadNotificationCount={unreadNotificationCount}
           showQuotesPaymentsLinks={showQuotesPaymentsLinks}
+          showQuotesPaymentsOnlineLink={showQuotesPaymentsOnlineLink}
         />
         <main className="min-w-0 flex-1">{children}</main>
       </div>

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
+import { headers } from 'next/headers';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { isAllowedMimeType, MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
@@ -137,17 +138,45 @@ type DenialDetail =
   // same-org row -- same "deleted, moved orgs, or never existed" collapse
   // loadScopedApplication's own comment describes for permit applications.
   | 'target_kind_mismatch'
-  | 'target_not_found';
+  | 'target_not_found'
+  // GATE_5_FINDINGS.md §A.4 follow-up: the token-lookup rate limit below
+  // (checkIpRateLimit/evaluateIpRateLimit) tripped for this ip before the
+  // hash lookup even ran -- see resolveValidToken's own comment for why
+  // this is checked first, not last.
+  | 'rate_limited';
 
-// Optional request metadata a future route handler can supply for the
-// `client_access_log.ip`/`user_agent` columns. Deliberately NOT part of any
-// operation's authorization surface (§3: "no operation accepts an arbitrary
-// application_id/org_id parameter from the caller") -- these two fields are
-// audit context only, never consulted by any authorization check below.
+// Optional request metadata a route handler can supply for the
+// `client_access_log.ip`/`user_agent` columns. NOT part of any operation's
+// *resource*-authorization surface (§3: "no operation accepts an arbitrary
+// application_id/org_id parameter from the caller" -- still true, `ip`
+// never influences which application/document/target a token resolves
+// to) -- but `ip` IS now consulted by resolveValidToken's own rate-limit
+// pre-check below (GATE_5_FINDINGS.md §A.4: "no rate limiting on
+// resolveToken/client_access_tokens" was a named, real gap, not a
+// hypothetical one, on this exact lookup). `userAgent` remains pure audit
+// context, consulted by nothing.
 export type BridgeRequestContext = {
   ip?: string;
   userAgent?: string;
 };
+
+// Gate 5.4 follow-up (§A.4). Consolidates the x-forwarded-for/user-agent
+// extraction that app/estimate/[token]/actions.ts and
+// app/change-order/[token]/actions.ts each independently wrote inline
+// (grepped for prior art before adding this -- those two files' own header
+// comments note "no existing repo convention" at the time they were
+// written) into one shared helper, so every client-portal call site builds
+// its BridgeRequestContext the same way rather than re-deriving `ip` from
+// the first hop of `x-forwarded-for` in N different places. Callable from
+// Server Components, Server Actions, and Route Handlers alike -- next/headers'
+// headers() works in all three.
+export async function getBridgeRequestContext(): Promise<BridgeRequestContext> {
+  const requestHeaders = await headers();
+  const forwardedFor = requestHeaders.get('x-forwarded-for');
+  const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : undefined;
+  const userAgent = requestHeaders.get('user-agent') ?? undefined;
+  return { ip, userAgent };
+}
 
 type ClientPortalClient = ReturnType<typeof createClientPortalServiceClient>;
 type MainProjectClient = ReturnType<typeof createServiceClient>;
@@ -171,6 +200,66 @@ type MainProjectClient = ReturnType<typeof createServiceClient>;
 // hit (`unique (token_hash)`, §2) rather than a per-row-salted scan.
 function hashToken(rawToken: string): string {
   return createHash('sha256').update(rawToken, 'utf8').digest('hex');
+}
+
+// GATE_5_FINDINGS.md §A.4: "resolveToken/client_access_tokens ... is a
+// deterministic hash match with no lockout/backoff -- a real gap if Gate 5
+// adds any new externally-reachable token-gated surface." That gap was
+// never closed even for the pre-existing surfaces (estimate/invoice/
+// change-order/credit-note portal links, Gate 4) -- resolveValidToken below
+// is the single shared choke point for every client-facing operation, so
+// fixing it here fixes it for all of them at once, not just whichever
+// surface "finally needs it."
+//
+// PROVISIONAL, NOT CONFIRMED -- same situation lib/ai/config.ts's own
+// header documents for its cost-cap constants: no ratified security policy
+// exists for these numbers. Round, order-of-magnitude placeholders so the
+// limit enforces *something* rather than nothing. Counts DENIED attempts
+// only (see countRecentDeniedAttemptsForIp below) -- a legitimate visitor
+// reloading their own valid link never accumulates a denial, so this
+// cannot lock out real traffic, only repeated invalid-token guesses from
+// one ip. Known, accepted limitation: an ip is a shared-NAT/proxy
+// approximation, not a guaranteed-unique visitor -- enough attackers behind
+// the same ip as a legitimate visitor could still exhaust their shared
+// budget. No better identifier is available without adding a CAPTCHA or
+// similar friction, which is out of scope for this pass.
+const RATE_LIMIT_WINDOW_MINUTES = 15;
+const RATE_LIMIT_MAX_DENIED_ATTEMPTS = 20;
+
+// Pure decision, unit-tested in client-portal.test.ts -- same "pure core /
+// thin DB wrapper" split lib/ai/cost-caps.ts's evaluateCostCap() already
+// establishes for an identical shape of problem (a count compared against
+// a cap, with a caller-side pre-flight check).
+export function evaluateIpRateLimit(recentDeniedAttempts: number, maxDeniedAttempts: number): boolean {
+  if (recentDeniedAttempts < 0) {
+    throw new Error(`evaluateIpRateLimit requires a nonnegative recentDeniedAttempts, got ${recentDeniedAttempts}`);
+  }
+  return recentDeniedAttempts < maxDeniedAttempts;
+}
+
+// Thin, untested DB wrapper around evaluateIpRateLimit's pure decision --
+// same division of testing effort as checkOrgMonthlyCostCap vs.
+// evaluateCostCap. Counts this ip's own `client_access_log` denied rows
+// across every operation (not just the one about to run), since a token
+// guesser rotating which operation they call is still the same attacker.
+// Fails OPEN on a read error (returns 0, i.e. "no denials on record") --
+// rate limiting is defense-in-depth layered in front of the hash lookup,
+// never the primary authorization check, so an outage here must not turn
+// into a portal-wide outage of its own.
+async function countRecentDeniedAttemptsForIp(portal: ClientPortalClient, ip: string): Promise<number> {
+  const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60_000).toISOString();
+  const { count, error } = await portal
+    .from('client_access_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('ip', ip)
+    .eq('outcome', 'denied')
+    .gte('created_at', since);
+
+  if (error) {
+    console.error(`[lib/bridge/client-portal] client_access_log rate-limit count failed: ${error.message}`);
+    return 0;
+  }
+  return count ?? 0;
 }
 
 // Writes one `client_access_log` row for every invocation, success or
@@ -253,6 +342,24 @@ async function resolveValidToken(
   operation: string,
   context?: BridgeRequestContext
 ): Promise<{ ok: true; token: ResolvedToken } | { ok: false }> {
+  // GATE_5_FINDINGS.md §A.4 follow-up -- checked BEFORE the hash lookup
+  // below, not after: the point is to stop spending a DB round trip (and,
+  // more importantly, to stop giving an attacker a response at all) on a
+  // guess from an ip that has already accumulated too many denials, rather
+  // than doing the lookup first and only refusing to act on the result.
+  // Skipped entirely when the caller supplied no ip (context?.ip is
+  // undefined for every call site that predates this check, until each is
+  // updated to pass one) -- fails open on missing data, same "defense in
+  // depth, not the primary gate" posture as countRecentDeniedAttemptsForIp's
+  // own read-error handling.
+  if (context?.ip) {
+    const recentDenied = await countRecentDeniedAttemptsForIp(portal, context.ip);
+    if (!evaluateIpRateLimit(recentDenied, RATE_LIMIT_MAX_DENIED_ATTEMPTS)) {
+      await logAttempt(portal, { tokenId: null, operation, outcome: 'denied', detail: 'rate_limited', context });
+      return { ok: false };
+    }
+  }
+
   const tokenHash = hashToken(rawToken);
 
   const { data: row, error } = await portal
