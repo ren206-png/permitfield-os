@@ -3,11 +3,14 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
+import { isDrawingReviewEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
 import { FindingsList } from './findings-list';
 import { ReviewActions } from './review-actions';
+import { DrawingTriggerButton } from './drawing-trigger-button';
+import { DrawingFindingsList } from './drawing-findings-list';
 import type { PermitExtraction, ExtractedFieldKey } from '@/lib/ai/schemas/extraction';
 
 const SIGNED_URL_TTL_SECONDS = 300;
@@ -21,6 +24,18 @@ const EXTRACTION_FIELD_LABELS: Record<ExtractedFieldKey, string> = {
   scope_of_work_summary: 'Scope of work',
 };
 const EXTRACTION_FIELD_ORDER = Object.keys(EXTRACTION_FIELD_LABELS) as ExtractedFieldKey[];
+
+interface DrawingFindingViewModel {
+  id: string;
+  kind: string;
+  severity: string;
+  issue: string;
+  action_required: string;
+  confidence: number;
+  review_status: string;
+  sourcePage: number | null;
+  codeChunk: { code_section: string; source_url: string } | null;
+}
 
 // requireOrgContext() re-derives org membership on every page load (this
 // project's standing "re-derive from DB, don't thread trust through props"
@@ -130,6 +145,78 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         codeChunk: chunk ? { code_section: chunk.code_section, source_url: chunk.source_url } : null,
       };
     });
+  }
+
+  // Gate 5, sub-phase 5.4. blueprintDocuments filters the already-fetched
+  // `documents` query result client-side rather than issuing a second
+  // application_documents query -- doc_kind is already selected above, so
+  // this is free. Everything below is gated behind isDrawingReviewEnabled()
+  // (both the DB round-trips and the section render further down): with the
+  // flag off, this page does exactly the same number of queries it did
+  // before this sub-phase.
+  const drawingReviewEnabled = isDrawingReviewEnabled();
+  const blueprintDocuments = (documents ?? []).filter((doc) => doc.doc_kind === 'blueprint');
+
+  const latestDrawingReviewByDocumentId = new Map<string, { id: string }>();
+  const drawingFindingsByReviewId = new Map<string, DrawingFindingViewModel[]>();
+
+  if (drawingReviewEnabled && blueprintDocuments.length > 0) {
+    // drawing_reviews is append-only per document (see this page's own
+    // header on the audit-findings equivalent, and 20260806000045's own
+    // header on why); ordering desc and taking the first row per
+    // application_document_id via this Map is the same "latest review per
+    // document" reduction findings-list.tsx's sibling route
+    // (drawing-findings review route) already documents as the UI's own
+    // convention, kept consistent here.
+    const { data: reviews, error: reviewsError } = await supabase
+      .from('drawing_reviews')
+      .select('id, application_document_id, created_at')
+      .eq('application_id', applicationId)
+      .order('created_at', { ascending: false });
+
+    if (reviewsError) {
+      throw new Error(`Failed to load drawing reviews: ${reviewsError.message}`);
+    }
+
+    for (const review of reviews ?? []) {
+      if (!latestDrawingReviewByDocumentId.has(review.application_document_id)) {
+        latestDrawingReviewByDocumentId.set(review.application_document_id, { id: review.id });
+      }
+    }
+
+    const latestDrawingReviewIds = [...latestDrawingReviewByDocumentId.values()].map((r) => r.id);
+
+    if (latestDrawingReviewIds.length > 0) {
+      const { data: drawingFindingRows, error: drawingFindingsError } = await supabase
+        .from('drawing_findings')
+        .select(
+          'id, drawing_review_id, kind, severity, issue, action_required, confidence, review_status, source_page, jurisdiction_code_chunks ( code_section, source_url )'
+        )
+        .in('drawing_review_id', latestDrawingReviewIds)
+        .order('created_at', { ascending: true });
+
+      if (drawingFindingsError) {
+        throw new Error(`Failed to load drawing findings: ${drawingFindingsError.message}`);
+      }
+
+      for (const f of drawingFindingRows ?? []) {
+        const chunk = Array.isArray(f.jurisdiction_code_chunks) ? f.jurisdiction_code_chunks[0] : f.jurisdiction_code_chunks;
+        const mapped: DrawingFindingViewModel = {
+          id: f.id,
+          kind: f.kind,
+          severity: f.severity,
+          issue: f.issue,
+          action_required: f.action_required,
+          confidence: f.confidence,
+          review_status: f.review_status,
+          sourcePage: f.source_page ?? null,
+          codeChunk: chunk ? { code_section: chunk.code_section, source_url: chunk.source_url } : null,
+        };
+        const list = drawingFindingsByReviewId.get(f.drawing_review_id) ?? [];
+        list.push(mapped);
+        drawingFindingsByReviewId.set(f.drawing_review_id, list);
+      }
+    }
   }
 
   // Signed URLs are generated with the caller's own RLS-scoped session
@@ -281,6 +368,43 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           <FindingsList applicationId={applicationId} findings={findings} coverageLevel={coverageLevel} />
         </div>
       </section>
+
+      {drawingReviewEnabled && (
+        <section>
+          <h2 className="text-sm font-semibold text-zinc-900">Drawing review</h2>
+          <div className="mt-2 flex flex-col gap-4">
+            {blueprintDocuments.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No blueprint documents uploaded yet. Upload one above (document type &quot;Blueprint&quot;) to start
+                a drawing review.
+              </p>
+            ) : (
+              blueprintDocuments.map((doc) => {
+                const review = latestDrawingReviewByDocumentId.get(doc.id);
+                return (
+                  <div key={doc.id} className="rounded-lg border border-zinc-200 bg-white p-4">
+                    <p className="text-sm font-medium text-zinc-900">{doc.original_filename}</p>
+                    <div className="mt-2">
+                      {review ? (
+                        <DrawingFindingsList
+                          applicationId={applicationId}
+                          findings={drawingFindingsByReviewId.get(review.id) ?? []}
+                        />
+                      ) : (
+                        <DrawingTriggerButton
+                          applicationId={applicationId}
+                          documentId={doc.id}
+                          coverageLevel={coverageLevel}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-semibold text-zinc-900">Generated documents</h2>
