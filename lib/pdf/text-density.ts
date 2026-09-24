@@ -1,4 +1,4 @@
-import { PDFParse } from 'pdf-parse';
+import type { PDFParse as PDFParseType } from 'pdf-parse';
 
 // SS7 adversarial self-check #2 ("the scanned blueprint"): a 40 MB flat scan
 // run through a text extractor doesn't throw -- it returns a handful of
@@ -28,10 +28,22 @@ export interface TextDensityResult {
  * Decides whether a PDF's text layer is dense enough to extract from
  * directly (`pdf-parse`) or whether it must be routed to Claude's native PDF
  * vision path (scanned pages, drawings, or a corrupt/absent text layer).
+ *
+ * `pdf-parse` is imported dynamically (not as a top-level `import`)
+ * deliberately: it pulls in `pdfjs-dist`, which requires the native,
+ * per-platform `@napi-rs/canvas` package at module-evaluation time to
+ * polyfill `DOMMatrix`. A production incident (see next.config.ts's
+ * `serverExternalPackages` comment) traced back to that import being
+ * eager -- it crashed at module load, which took down every function
+ * registered alongside this one on the same Inngest route, not just the
+ * document-extraction path that actually calls this function. Deferring
+ * the import to call time contains any future failure of this kind to
+ * just this function's callers instead of the whole route.
  */
 export async function computeTextDensity(bytes: Buffer): Promise<TextDensityResult> {
-  let parser: PDFParse | null = null;
+  let parser: PDFParseType | null = null;
   try {
+    const { PDFParse } = await import('pdf-parse');
     parser = new PDFParse({ data: bytes });
     const result = await parser.getText();
     const pageCount = Math.max(result.total, 1);
