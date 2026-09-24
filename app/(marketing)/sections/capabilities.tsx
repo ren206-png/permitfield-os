@@ -9,13 +9,11 @@ const CAPABILITIES = [
     title: 'Centralized intake & tracking',
     body: "Every application's documents, status, and history in one record.",
     ledgerRef: '§1, §18',
-    accent: 'from-indigo-600 to-indigo-500',
   },
   {
     title: 'AI-assisted document extraction',
     body: 'Key fields pulled from your uploads for review, not blind auto-fill.',
     ledgerRef: '§2',
-    accent: 'from-sky-600 to-sky-500',
   },
   {
     title: 'Form auto-fill where supported',
@@ -23,7 +21,6 @@ const CAPABILITIES = [
       'For the Toronto Electrical Service Upgrade form today, with more ' +
       'forms being added over time.',
     ledgerRef: '§3',
-    accent: 'from-violet-600 to-violet-500',
   },
   {
     title: 'Organization-level data isolation',
@@ -31,7 +28,6 @@ const CAPABILITIES = [
       'Your applications are scoped to your organization, enforced at the ' +
       'database layer.',
     ledgerRef: '§10',
-    accent: 'from-teal-600 to-teal-500',
   },
 ] as const;
 
@@ -45,11 +41,9 @@ export function Capabilities() {
         {CAPABILITIES.map((capability) => (
           <div
             key={capability.title}
-            className="group rounded-xl border border-zinc-200 p-6 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg hover:shadow-zinc-100 dark:border-zinc-800 dark:hover:border-zinc-700 dark:hover:shadow-none"
+            className="group rounded-xl border border-zinc-200 p-6 transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-100 dark:border-zinc-800 dark:hover:border-orange-800/60 dark:hover:shadow-none"
           >
-            <span
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold text-white shadow-sm dark:shadow-none ${capability.accent}`}
-            >
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-sm font-semibold text-white shadow-sm shadow-orange-200 dark:shadow-none">
               {capability.title.charAt(0)}
             </span>
             <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
