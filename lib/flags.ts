@@ -392,3 +392,24 @@ export function isDrawingReviewEnabled(): boolean {
 export function isNotificationsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_NOTIFICATIONS');
 }
+
+// Deadline/expiry alerts, slice 1 (MARKETING_CAPABILITY_LEDGER.md §17
+// follow-up; 20260806000065_contractor_license_expiry_reminders.sql).
+// Master kill switch for the contractor-license-expiry reminder's
+// send-side only -- lib/inngest/functions/reminders.ts's 'contractor'
+// target_kind branch checks this before any Resend call is made, same
+// "ops-level rollback lever" shape as isNotificationsEnabled()/
+// isDrawingReviewEnabled() above. Deliberately does NOT gate
+// app/(app)/contractors/new/actions.ts's reminder_jobs insert -- that row
+// is inert scheduling data, not an external side effect, so contractors
+// created while this flag is off still get a dormant reminder_jobs row
+// queued for whenever it's turned on, rather than silently losing that
+// data. Deliberately independent of isQuotesPaymentsEnabled(): this
+// reminder kind has nothing to do with estimates/invoices and must not be
+// gated by (or gate) that flag. Default OFF per the same global
+// engineering rule as every flag in this file -- no environment sends a
+// real license-expiry reminder until this is explicitly turned on AND
+// PERMITFIELD_RESEND_API_KEY/PERMITFIELD_RESEND_FROM_ADDRESS are configured.
+export function isDeadlineRemindersEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_DEADLINE_REMINDERS');
+}

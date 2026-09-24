@@ -1,4 +1,6 @@
 -- Gate 4 (Quotes & Payments), Phase A / 20260806000057_reminder_jobs.sql.
+-- Extended by 20260806000065_contractor_license_expiry_reminders.sql
+-- (Deadline/expiry alerts, slice 1) -- Step 8 below.
 -- Proves:
 --   1. Any org member can create/cancel a pending reminder_job (no
 --      billing-manager gate -- scheduling is not one of this gate's listed
@@ -9,6 +11,10 @@
 --   3. reminder_delivery_attempts: authenticated select-only, service_role
 --      the only writer, and append-only.
 --   4. Tenant isolation.
+--   8. The 'contractor_license_expiring' enum value and 'contractor'
+--      target_kind (added by 20260806000065) are both usable end to end --
+--      the exact gap that migration exists to close (before it, nothing in
+--      this schema could represent this reminder kind at all).
 
 begin;
 
@@ -31,6 +37,11 @@ on conflict (id) do nothing;
 
 insert into invoices (id, org_id, client_id) values
   ('65000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-00000000000a', '61000000-0000-0000-0000-00000000000a')
+on conflict (id) do nothing;
+
+-- Fixture for Step 8 (20260806000065's 'contractor' target_kind).
+insert into contractors (id, org_id, company_name, license_expires_on) values
+  ('67000000-0000-0000-0000-00000000000c', '20000000-0000-0000-0000-00000000000a', 'Org A Test Contractor', current_date + 20)
 on conflict (id) do nothing;
 
 create temporary table _test_ids (label text primary key, id uuid not null);
@@ -176,6 +187,33 @@ begin
     raise exception 'FAIL (tenant isolation): org B could read org A''s reminder_jobs';
   end if;
   raise notice 'PASS (tenant isolation): org B cannot read org A''s reminder_jobs.';
+end $$;
+
+reset role;
+
+-- Step 8 (new enum value + target_kind, end to end): the
+-- 'contractor_license_expiring' kind and 'contractor' target_kind, both
+-- added by 20260806000065, are usable by a plain org member under RLS --
+-- before that migration, this insert would fail: the old CHECK constraint
+-- only admitted target_kind in ('estimate', 'invoice'), and the enum
+-- value did not exist at all.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-0000000000e1","role":"authenticated"}';
+
+do $$
+declare
+  v_id uuid;
+  v_kind reminder_job_kind;
+  v_target_kind text;
+begin
+  insert into reminder_jobs (org_id, kind, target_kind, target_id, send_after)
+  values ('20000000-0000-0000-0000-00000000000a', 'contractor_license_expiring', 'contractor', '67000000-0000-0000-0000-00000000000c', now() + interval '20 days')
+  returning id, kind, target_kind into v_id, v_kind, v_target_kind;
+
+  if v_kind <> 'contractor_license_expiring' or v_target_kind <> 'contractor' then
+    raise exception 'FAIL: reminder_jobs did not round-trip kind/target_kind (kind=%, target_kind=%)', v_kind, v_target_kind;
+  end if;
+  raise notice 'PASS: org member creates a contractor_license_expiring/contractor reminder_job (id=%).', v_id;
 end $$;
 
 reset role;
