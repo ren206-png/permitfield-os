@@ -8,11 +8,13 @@ import { sendEmail } from '@/lib/email/send';
 import { renderEstimateSentEmail } from '@/lib/email/templates/estimate-sent';
 import { renderInvoiceDueReminderEmail } from '@/lib/email/templates/invoice-due-reminder';
 import { renderContractorLicenseExpiringEmail } from '@/lib/email/templates/contractor-license-expiring';
+import { renderPermitExpiringEmail } from '@/lib/email/templates/permit-expiring';
 import { resolveOrgNotificationRecipients } from '@/lib/notifications/recipients';
 import {
   evaluateEstimateReminderEligibility,
   evaluateInvoiceReminderEligibility,
   evaluateContractorLicenseReminderEligibility,
+  evaluatePermitExpiryReminderEligibility,
   sumRecordedAllocationCents,
   type EstimateStatus,
   type InvoiceStatus,
@@ -41,14 +43,15 @@ import type { QPClient } from '@/lib/quotes-payments/types';
 // flag-gated surface in this codebase (lib/flags.ts's own header comment
 // on the "off means byte-identical to before this pass shipped" rule).
 //
-// Deadline/expiry alerts, slice 1 (MARKETING_CAPABILITY_LEDGER.md §17
-// follow-up) extends this same poller to a 'contractor' target_kind
-// (reminder_jobs.kind = 'contractor_license_expiring') rather than adding
-// a second cron function -- this function's own job-loading query is
-// already kind-agnostic (`select ... where status = 'pending' and
-// send_after <= now()`, no `kind`/`target_kind` filter), so a second
-// poller would just mean two functions racing to claim the same
-// `reminder_jobs` table for no benefit. Gated independently by
+// Deadline/expiry alerts, slices 1 and 2 (MARKETING_CAPABILITY_LEDGER.md
+// §17 follow-up) extend this same poller to 'contractor' and 'permit'
+// target_kinds (reminder_jobs.kind = 'contractor_license_expiring' /
+// 'permit_expiring') rather than adding a second cron function per kind --
+// this function's own job-loading query is already kind-agnostic
+// (`select ... where status = 'pending' and send_after <= now()`, no
+// `kind`/`target_kind` filter), so a separate poller per kind would just
+// mean multiple functions racing to claim the same `reminder_jobs` table
+// for no benefit. Both slices are gated independently by
 // isDeadlineRemindersEnabled(), checked per-job inside decideAndSend()
 // below (not here at the function's top level) so a quotes-payments-only
 // environment (or vice versa) never has one flag silently gate the other
@@ -108,8 +111,8 @@ export const permitQuotesPaymentsReminders = inngest.createFunction(
 interface DueReminderJobRow {
   id: string;
   org_id: string;
-  kind: 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue' | 'contractor_license_expiring';
-  target_kind: 'estimate' | 'invoice' | 'contractor';
+  kind: 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue' | 'contractor_license_expiring' | 'permit_expiring';
+  target_kind: 'estimate' | 'invoice' | 'contractor' | 'permit';
   target_id: string;
 }
 
@@ -222,6 +225,59 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
       .filter((error): error is string => error !== null)
       .join('; ');
     return { outcome: 'send-failed', error: errors || 'All recipient sends failed.' };
+  }
+
+  if (job.target_kind === 'permit') {
+    if (!isDeadlineRemindersEnabled()) {
+      return { outcome: 'skipped', reason: 'Deadline reminders are disabled (PERMITFIELD_FF_DEADLINE_REMINDERS).' };
+    }
+
+    const permit = await loadPermitSnapshot(supabase, job.org_id, job.target_id);
+    if (!permit) {
+      return { outcome: 'skipped', reason: `Permit application ${job.target_id} no longer exists.` };
+    }
+    const eligibility = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: permit.permitExpiresOn });
+    if (!eligibility.eligible) {
+      return { outcome: 'skipped', reason: eligibility.reason };
+    }
+
+    // Internal/staff-facing, same as the contractor branch above (and for
+    // the same reason: a permit's expiry is the org's own compliance
+    // concern, not one this codebase has ever emailed a client about) --
+    // broadcasts to every notifiable org member rather than a single
+    // contact.
+    const recipients = await resolveOrgNotificationRecipients(supabase, job.org_id);
+    if (recipients.length === 0) {
+      return { outcome: 'skipped', reason: 'No org member has a notifiable email address on file.' };
+    }
+
+    const overdue = new Date(`${permit.permitExpiresOn}T00:00:00.000Z`).getTime() < Date.now();
+    const results = await Promise.all(
+      recipients.map((recipient) =>
+        sendEmail(
+          renderPermitExpiringEmail({
+            recipientEmail: recipient.email,
+            organizationName: orgName,
+            projectTitle: permit.projectTitle,
+            projectAddress: permit.projectAddress,
+            expiresOnDisplay: permit.permitExpiresOn as string,
+            overdue,
+          })
+        )
+      )
+    );
+
+    // Same fan-out-but-one-Decision cardinality as the contractor branch
+    // above.
+    const succeeded = results.find((result) => result.success);
+    if (succeeded && succeeded.success) {
+      return { outcome: 'sent', messageId: succeeded.id };
+    }
+    const permitErrors = results
+      .map((result) => (result.success ? null : result.error))
+      .filter((error): error is string => error !== null)
+      .join('; ');
+    return { outcome: 'send-failed', error: permitErrors || 'All recipient sends failed.' };
   }
 
   const invoice = await loadInvoiceSnapshot(supabase, job.org_id, job.target_id);
@@ -390,6 +446,34 @@ async function loadContractorSnapshot(
   return {
     companyName: data.company_name as string,
     licenseExpiresOn: (data.license_expires_on as string | null) ?? null,
+  };
+}
+
+interface PermitSnapshot {
+  projectTitle: string;
+  projectAddress: string;
+  permitExpiresOn: string | null;
+}
+
+async function loadPermitSnapshot(
+  supabase: QPClient,
+  orgId: string,
+  applicationId: string
+): Promise<PermitSnapshot | null> {
+  const { data, error } = await supabase
+    .from('permit_applications')
+    .select('project_title, project_address, permit_expires_on')
+    .eq('org_id', orgId)
+    .eq('id', applicationId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load permit_applications row ${applicationId}: ${error.message}`);
+  }
+  if (!data) return null;
+  return {
+    projectTitle: data.project_title as string,
+    projectAddress: data.project_address as string,
+    permitExpiresOn: (data.permit_expires_on as string | null) ?? null,
   };
 }
 

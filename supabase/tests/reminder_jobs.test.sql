@@ -1,6 +1,7 @@
 -- Gate 4 (Quotes & Payments), Phase A / 20260806000057_reminder_jobs.sql.
 -- Extended by 20260806000065_contractor_license_expiry_reminders.sql
--- (Deadline/expiry alerts, slice 1) -- Step 8 below.
+-- (Deadline/expiry alerts, slice 1) -- Step 8 below -- and by
+-- 20260806000066_permit_expiry_reminders.sql (slice 2) -- Step 9 below.
 -- Proves:
 --   1. Any org member can create/cancel a pending reminder_job (no
 --      billing-manager gate -- scheduling is not one of this gate's listed
@@ -15,6 +16,9 @@
 --      target_kind (added by 20260806000065) are both usable end to end --
 --      the exact gap that migration exists to close (before it, nothing in
 --      this schema could represent this reminder kind at all).
+--   9. The 'permit_expiring' enum value and 'permit' target_kind (added by
+--      20260806000066) are both usable end to end -- same gap, closed for
+--      permit_applications.
 
 begin;
 
@@ -214,6 +218,36 @@ begin
     raise exception 'FAIL: reminder_jobs did not round-trip kind/target_kind (kind=%, target_kind=%)', v_kind, v_target_kind;
   end if;
   raise notice 'PASS: org member creates a contractor_license_expiring/contractor reminder_job (id=%).', v_id;
+end $$;
+
+reset role;
+
+-- Step 9 (new enum value + target_kind, end to end): the 'permit_expiring'
+-- kind and 'permit' target_kind, both added by 20260806000066, are usable by
+-- a plain org member under RLS -- before that migration, this insert would
+-- fail the same way Step 8's did: the old CHECK constraint only admitted
+-- target_kind in ('estimate', 'invoice', 'contractor'), and the enum value
+-- did not exist at all. Reuses seed.sql's org A permit_applications fixture
+-- (40000000-0000-0000-0000-00000000000a) as target_id -- reminder_jobs.
+-- target_id carries no FK constraint (it is polymorphic by convention, per
+-- 20260806000057's own header comment), so no new fixture insert is needed.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-0000000000e1","role":"authenticated"}';
+
+do $$
+declare
+  v_id uuid;
+  v_kind reminder_job_kind;
+  v_target_kind text;
+begin
+  insert into reminder_jobs (org_id, kind, target_kind, target_id, send_after)
+  values ('20000000-0000-0000-0000-00000000000a', 'permit_expiring', 'permit', '40000000-0000-0000-0000-00000000000a', now() + interval '30 days')
+  returning id, kind, target_kind into v_id, v_kind, v_target_kind;
+
+  if v_kind <> 'permit_expiring' or v_target_kind <> 'permit' then
+    raise exception 'FAIL: reminder_jobs did not round-trip kind/target_kind (kind=%, target_kind=%)', v_kind, v_target_kind;
+  end if;
+  raise notice 'PASS: org member creates a permit_expiring/permit reminder_job (id=%).', v_id;
 end $$;
 
 reset role;

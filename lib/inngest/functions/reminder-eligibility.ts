@@ -126,3 +126,30 @@ export function evaluateContractorLicenseReminderEligibility(
   }
   return { eligible: true, reason: `License expires on ${snapshot.licenseExpiresOn}.` };
 }
+
+export interface PermitExpiryReminderSnapshot {
+  /** permit_applications.permit_expires_on, re-loaded live at fire time --
+   * null if it was ever cleared after the reminder_job was created. */
+  permitExpiresOn: string | null;
+}
+
+/**
+ * Deadline/expiry alerts, slice 2 (MARKETING_CAPABILITY_LEDGER.md §17
+ * follow-up). Same shape as evaluateContractorLicenseReminderEligibility()
+ * above and the identical reasoning: permit_expires_on being cleared is
+ * the only thing that can make a previously-scheduled reminder stale here
+ * (the row having been deleted entirely is checked by the caller first,
+ * same "no longer exists" pattern every other branch in
+ * reminders.ts::decideAndSend() follows). Deliberately does not check
+ * either status column (application_status or permit_status) -- neither
+ * represents "this permit is no longer valid" today; see
+ * 20260806000066_permit_expiry_reminders.sql's header comment for why.
+ */
+export function evaluatePermitExpiryReminderEligibility(
+  snapshot: PermitExpiryReminderSnapshot
+): ReminderEligibilityResult {
+  if (!snapshot.permitExpiresOn) {
+    return { eligible: false, reason: 'Permit application no longer has an expiry date on file.' };
+  }
+  return { eligible: true, reason: `Permit expires on ${snapshot.permitExpiresOn}.` };
+}

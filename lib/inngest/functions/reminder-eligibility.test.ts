@@ -3,6 +3,7 @@ import {
   evaluateEstimateReminderEligibility,
   evaluateInvoiceReminderEligibility,
   evaluateContractorLicenseReminderEligibility,
+  evaluatePermitExpiryReminderEligibility,
   sumRecordedAllocationCents,
   type EstimateStatus,
 } from './reminder-eligibility';
@@ -118,6 +119,20 @@ describe('evaluateContractorLicenseReminderEligibility', () => {
 
   it('is not eligible once the expiry date has been cleared', () => {
     const result = evaluateContractorLicenseReminderEligibility({ licenseExpiresOn: null });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain('no longer has');
+  });
+});
+
+describe('evaluatePermitExpiryReminderEligibility', () => {
+  it('is eligible when a permit expiry date is still on file', () => {
+    const result = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: '2027-01-01' });
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toContain('2027-01-01');
+  });
+
+  it('is not eligible once the expiry date has been cleared', () => {
+    const result = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: null });
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain('no longer has');
   });
