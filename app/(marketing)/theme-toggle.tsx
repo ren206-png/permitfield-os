@@ -30,9 +30,12 @@ function getSnapshot() {
 }
 
 function getServerSnapshot() {
-  // Matches what the server renders (no `dark` class yet -- only the
-  // client-side no-FOUC script or a user click ever adds it).
-  return false;
+  // Matches what the server renders: #marketing-root always ships with the
+  // `dark` class server-side now (dark is this page's default theme, see
+  // marketing-homepage.tsx's header comment) -- only the client-side
+  // no-FOUC script (for a visitor who previously chose light) or a user
+  // click on this toggle ever removes it.
+  return true;
 }
 
 function toggleTheme() {
