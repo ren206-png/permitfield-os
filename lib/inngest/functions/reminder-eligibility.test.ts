@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   evaluateEstimateReminderEligibility,
   evaluateInvoiceReminderEligibility,
+  evaluateContractorLicenseReminderEligibility,
+  evaluatePermitExpiryReminderEligibility,
   sumRecordedAllocationCents,
   type EstimateStatus,
 } from './reminder-eligibility';
@@ -105,5 +107,33 @@ describe('evaluateInvoiceReminderEligibility', () => {
     });
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain('outstanding balance');
+  });
+});
+
+describe('evaluateContractorLicenseReminderEligibility', () => {
+  it('is eligible when a license expiry date is still on file', () => {
+    const result = evaluateContractorLicenseReminderEligibility({ licenseExpiresOn: '2027-01-01' });
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toContain('2027-01-01');
+  });
+
+  it('is not eligible once the expiry date has been cleared', () => {
+    const result = evaluateContractorLicenseReminderEligibility({ licenseExpiresOn: null });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain('no longer has');
+  });
+});
+
+describe('evaluatePermitExpiryReminderEligibility', () => {
+  it('is eligible when a permit expiry date is still on file', () => {
+    const result = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: '2027-01-01' });
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toContain('2027-01-01');
+  });
+
+  it('is not eligible once the expiry date has been cleared', () => {
+    const result = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: null });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain('no longer has');
   });
 });

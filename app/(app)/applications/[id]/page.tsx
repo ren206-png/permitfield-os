@@ -11,6 +11,7 @@ import { FindingsList } from './findings-list';
 import { ReviewActions } from './review-actions';
 import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
+import { PermitExpiryField } from './permit-expiry-field';
 import type { PermitExtraction, ExtractedFieldKey } from '@/lib/ai/schemas/extraction';
 
 const SIGNED_URL_TTL_SECONDS = 300;
@@ -51,7 +52,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const { data: application, error: applicationError } = await supabase
     .from('permit_applications')
     .select(
-      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at,
+      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at, permit_expires_on,
        contractors ( company_name ),
        permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
     )
@@ -297,6 +298,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </dd>
           </div>
         </dl>
+
+        <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4">
+          <PermitExpiryField
+            applicationId={applicationId}
+            permitExpiresOn={(application.permit_expires_on as string | null) ?? null}
+          />
+          <p className="mt-2 text-xs text-zinc-500">
+            Once issued, set the permit&apos;s expiry date here to get an email alert before (and after) it lapses.
+          </p>
+        </div>
       </div>
 
       <ReviewActions applicationId={applicationId} status={application.status} />
