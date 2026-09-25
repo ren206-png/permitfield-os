@@ -28,6 +28,7 @@
 // in this codebase mocks Supabase, so DB-touching logic (resolveOrgTier)
 // stays a thin wrapper around this pure core rather than being tested
 // itself.
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { isBillingEnabled } from '@/lib/flags';
 import { BILLING_TIERS, type BillingTierId, type Entitlement, type LimitKey } from '@/lib/billing/tiers';
@@ -69,6 +70,7 @@ const LEGACY_DEFAULT_TIER: ResolvedTier = {
     'quotes.manage',
     'invoices.manage',
     'payments.manage',
+    'api.access',
   ],
   limits: {
     'projects.active_max': 50,
@@ -115,12 +117,16 @@ export function resolveEffectiveTier(row: OrgSubscriptionRow | null, now: Date =
 // DB-touching wrapper around resolveEffectiveTier() -- deliberately thin
 // (one query, one call to the pure function) so the branching logic worth
 // testing stays in the pure function above.
-async function resolveOrgTier(orgId: string): Promise<ResolvedTier> {
+// `client` lets a caller with no Supabase Auth session (app/api/v1/*, which
+// authenticates by API key) supply the service-role client it already
+// holds; the session client would read zero org_subscriptions rows under
+// RLS and wrongly resolve every org to NO_PLAN_TIER.
+async function resolveOrgTier(orgId: string, client?: SupabaseClient): Promise<ResolvedTier> {
   if (!isBillingEnabled()) {
     return LEGACY_DEFAULT_TIER;
   }
 
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase
     .from('org_subscriptions')
     .select('tier, status, trial_ends_at')
@@ -139,8 +145,8 @@ async function resolveOrgTier(orgId: string): Promise<ResolvedTier> {
 
 // orgId is accepted (not swallowed) the same way it always was in this
 // file's pre-billing version -- now it's actually used on the on-path.
-export async function can(orgId: string, entitlement: Entitlement): Promise<boolean> {
-  const tier = await resolveOrgTier(orgId);
+export async function can(orgId: string, entitlement: Entitlement, client?: SupabaseClient): Promise<boolean> {
+  const tier = await resolveOrgTier(orgId, client);
   return tier.features.includes(entitlement);
 }
 

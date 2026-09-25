@@ -57,7 +57,9 @@ export type Entitlement =
   | 'quotes.manage'
   | 'invoices.manage'
   | 'payments.manage'
-  | 'payments.online';
+  | 'payments.online'
+  // Public API v1: Pro/Enterprise only, same tier placement as analytics.
+  | 'api.access';
 export type LimitKey = 'projects.active_max';
 
 export type BillingTierId = 'starter' | 'pro' | 'enterprise';
@@ -84,6 +86,7 @@ const ALL_FEATURES: readonly Entitlement[] = [
   'invoices.manage',
   'payments.manage',
   'payments.online',
+  'api.access',
 ];
 
 // BILLING_PROPOSAL.md §2's ratified two-self-serve-tier + Enterprise table

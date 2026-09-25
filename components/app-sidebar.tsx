@@ -46,6 +46,10 @@ interface AppSidebarProps {
    * app/(app)/settings/payments-online/page.tsx itself, same division of
    * labor as showBillingLink and showQuotesPaymentsLinks above. */
   showQuotesPaymentsOnlineLink: boolean;
+  /** isPublicApiEnabled() -- flag-only, same shape as showBillingLink; the
+   * entitlement and owner-role checks render inside
+   * app/(app)/settings/api-keys/page.tsx itself. */
+  showApiKeysLink: boolean;
 }
 
 // Left-hand feature navigation for the authenticated app shell. Replaces the
@@ -70,6 +74,7 @@ export function AppSidebar({
   unreadNotificationCount,
   showQuotesPaymentsLinks,
   showQuotesPaymentsOnlineLink,
+  showApiKeysLink,
 }: AppSidebarProps) {
   const pathname = usePathname();
 
@@ -93,6 +98,7 @@ export function AppSidebar({
       ? [{ href: '/notifications', label: 'Notifications', badge: unreadNotificationCount }]
       : []),
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
+    ...(showApiKeysLink ? [{ href: '/settings/api-keys', label: 'API keys' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),
   ];
 

@@ -54,6 +54,15 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // this file's own rule above requires a new exception to be spelled out
 // explicitly rather than silently added to. Do not read any OTHER table
 // from these routes without narrowing the scoping the same way.
+//
+// Exception 3 (Public API v1, app/api/v1/*): same structural reason as
+// Exception 2 -- the caller holds an API key, not a Supabase Auth session.
+// Only lib/public-api/handler.ts constructs this client for those routes,
+// and it resolves `orgId` solely from the org_api_keys row the presented
+// key's SHA-256 hash matches (never from the request). Every data query in
+// lib/public-api/resources.ts is then filtered `.eq('org_id', orgId)` with
+// that server-derived value. New v1 endpoints must go through
+// handleApiRequest() and keep that filter on every query.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

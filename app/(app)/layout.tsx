@@ -7,6 +7,7 @@ import {
   isBillingEnabled,
   isDashboardEnabled,
   isFailureNotificationsEnabled,
+  isPublicApiEnabled,
   isQuotesPaymentsEnabled,
   isQuotesPaymentsOnlineEnabled,
 } from '@/lib/flags';
@@ -124,6 +125,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           unreadNotificationCount={unreadNotificationCount}
           showQuotesPaymentsLinks={showQuotesPaymentsLinks}
           showQuotesPaymentsOnlineLink={showQuotesPaymentsOnlineLink}
+          showApiKeysLink={isPublicApiEnabled()}
         />
         <main className="min-w-0 flex-1">{children}</main>
       </div>

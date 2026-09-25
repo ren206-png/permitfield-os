@@ -66,6 +66,11 @@ describe('can() (PERMITFIELD_FF_BILLING off -- legacy path)', () => {
   it('ai is not sensitive to orgId', async () => {
     expect(await can('org-a', 'ai')).toBe(await can('org-b', 'ai'));
   });
+
+  it('grants api.access under the legacy default tier for any orgId', async () => {
+    expect(await can('20000000-0000-0000-0000-00000000000a', 'api.access')).toBe(true);
+    expect(await can('some-other-org-id', 'api.access')).toBe(true);
+  });
 });
 
 describe('limit() (PERMITFIELD_FF_BILLING off -- legacy path)', () => {
@@ -118,6 +123,7 @@ describe('resolveEffectiveTier()', () => {
     const tier = resolveEffectiveTier(row, now);
     expect(tier.features).toContain('projects.create');
     expect(tier.features).toContain('ai');
+    expect(tier.features).toContain('api.access');
   });
 
   it('resolves to the row tier when trialing and trial_ends_at is null (should not happen post-migration, but must not crash)', () => {
@@ -137,6 +143,7 @@ describe('resolveEffectiveTier()', () => {
     // Starter is deliberately narrower than Pro (BILLING_PROPOSAL.md §2) --
     // confirms this isn't accidentally resolving to the all-features tier.
     expect(tier.features).not.toContain('analytics');
+    expect(tier.features).not.toContain('api.access');
   });
 
   it('resolves to the row tier when past_due (still has access -- past_due is not a hard cutoff)', () => {

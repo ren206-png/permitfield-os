@@ -413,3 +413,10 @@ export function isNotificationsEnabled(): boolean {
 export function isDeadlineRemindersEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_DEADLINE_REMINDERS');
 }
+
+// Public API v1 (20260806000067_public_api_keys.sql). Gates every
+// app/api/v1/* route (404 when off, before any key lookup) and the
+// /settings/api-keys page. Default OFF per the global engineering rule.
+export function isPublicApiEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_PUBLIC_API');
+}
