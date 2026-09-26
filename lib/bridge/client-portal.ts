@@ -253,7 +253,7 @@ async function countRecentDeniedAttemptsForIp(portal: ClientPortalClient, ip: st
     .select('id', { count: 'exact', head: true })
     .eq('ip', ip)
     .eq('outcome', 'denied')
-    .gte('created_at', since);
+    .gte('occurred_at', since);
 
   if (error) {
     console.error(`[lib/bridge/client-portal] client_access_log rate-limit count failed: ${error.message}`);
