@@ -1,6 +1,6 @@
 import { inngest, type PermitEventPayloads } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { isFailureNotificationsEnabled } from '@/lib/flags';
+import { isFailureNotificationsEnabled, isNotificationsEnabled } from '@/lib/flags';
 import { writeNotification, type NotificationKind } from '@/lib/notifications/write';
 import { sendFailureEmail } from '@/lib/email/resend-client';
 
@@ -95,6 +95,10 @@ export const notifyOnFailure = inngest.createFunction(
       }
     });
 
+    if (!shouldSendFailureEmail(classification.kind, isNotificationsEnabled())) {
+      return { applicationId, notified: true, kind: classification.kind, recipientCount: 0, emailedBy: 'digest' as const };
+    }
+
     const recipients = await step.run('load-recipients', async () => {
       return loadNotifiedRecipientEmails(supabase, application.orgId);
     });
@@ -113,6 +117,21 @@ export const notifyOnFailure = inngest.createFunction(
     return { applicationId, notified: true, kind: classification.kind, recipientCount: recipients.length };
   }
 );
+
+// lib/inngest/functions/notify.ts's digest (PERMITFIELD_FF_NOTIFICATIONS)
+// already emails these two failure kinds (lib/notifications/content.ts), so
+// with both flags on this function still writes the in-app row but leaves
+// the email to the digest -- otherwise the same failure is emailed twice.
+// audit_failed is NOT in the set: content.ts deliberately skips
+// audited=false, so this function remains its only email path.
+const DIGEST_EMAILED_FAILURE_KINDS: ReadonlySet<NotificationKind> = new Set([
+  'extraction_failed',
+  'document_generation_failed',
+]);
+
+export function shouldSendFailureEmail(kind: NotificationKind, digestNotificationsEnabled: boolean): boolean {
+  return !(digestNotificationsEnabled && DIGEST_EMAILED_FAILURE_KINDS.has(kind));
+}
 
 export interface FailureClassification {
   kind: NotificationKind;

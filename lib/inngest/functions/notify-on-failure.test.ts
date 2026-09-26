@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFailure } from './notify-on-failure';
+import { classifyFailure, shouldSendFailureEmail } from './notify-on-failure';
+
+describe('shouldSendFailureEmail()', () => {
+  it('emails every failure kind when the digest notifications are off', () => {
+    expect(shouldSendFailureEmail('extraction_failed', false)).toBe(true);
+    expect(shouldSendFailureEmail('audit_failed', false)).toBe(true);
+    expect(shouldSendFailureEmail('document_generation_failed', false)).toBe(true);
+  });
+
+  it('defers to the digest for the kinds it already emails, so no failure is emailed twice', () => {
+    expect(shouldSendFailureEmail('extraction_failed', true)).toBe(false);
+    expect(shouldSendFailureEmail('document_generation_failed', true)).toBe(false);
+  });
+
+  it('still emails audit failures when the digest is on, since the digest skips them', () => {
+    expect(shouldSendFailureEmail('audit_failed', true)).toBe(true);
+  });
+});
 
 // PERMITFIELD_FF_FAILURE_NOTIFICATIONS. Pure-function tests, no network/DB --
 // same discipline as lib/ai/router.test.ts. classifyFailure() is exported
