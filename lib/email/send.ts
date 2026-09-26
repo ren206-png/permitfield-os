@@ -29,11 +29,14 @@ export async function sendEmail(email: RenderedEmail): Promise<SendEmailResult> 
 
   try {
     const { data, error } = await client.emails.send({
-      from: fromAddress,
+      from: formatFromHeader(fromAddress, email.fromName),
       to: email.to,
       subject: email.subject,
       text: email.text,
       html: email.html,
+      ...(email.replyTo ? { replyTo: email.replyTo } : {}),
+      ...(email.cc ? { cc: email.cc } : {}),
+      ...(email.attachments?.length ? { attachments: email.attachments } : {}),
     });
 
     if (error) {
@@ -43,4 +46,17 @@ export async function sendEmail(email: RenderedEmail): Promise<SendEmailResult> 
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// PERMITFIELD_RESEND_FROM_ADDRESS may be a bare address or already
+// "Name <address>"; either way only the address is kept when a display name
+// is supplied. The name is stripped of characters that could break out of
+// the header (quotes, angle brackets, line breaks).
+export function formatFromHeader(fromAddress: string, fromName?: string): string {
+  if (!fromName) {
+    return fromAddress;
+  }
+  const address = /<([^>]+)>/.exec(fromAddress)?.[1] ?? fromAddress.trim();
+  const name = fromName.replace(/["<>\r\n]/g, '').replace(/\s+/g, ' ').trim();
+  return name ? `"${name}" <${address}>` : address;
 }

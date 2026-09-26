@@ -27,6 +27,11 @@
 -- of privilege) if a table with an unlisted incoming foreign key exists;
 -- listing every table in one TRUNCATE statement (which this migration's
 -- own revoke list already enumerates) satisfies that without CASCADE.
+-- filing_submissions (20260806000070) was added to this set because it
+-- references generated_documents, so generated_documents can only be
+-- truncated together with it; it is itself append-only with TRUNCATE
+-- revoked, so it belongs here anyway.
+--
 -- Confirmed via grep that no table outside this set of seven has a foreign
 -- key into any of them, so no other tables need to be included.
 --
@@ -51,15 +56,15 @@ begin;
 -- confirm service_role can actually truncate them -- the gap this
 -- migration fixes was live, not hypothetical.
 grant truncate on extractions, audits, audit_findings, generated_documents,
-  audit_logs, application_status_history, document_revisions to service_role;
+  audit_logs, application_status_history, document_revisions, filing_submissions to service_role;
 
 set role service_role;
 
 do $$
 begin
   execute 'truncate table extractions, audits, audit_findings, generated_documents, '
-       || 'audit_logs, application_status_history, document_revisions';
-  raise notice 'PASS (control): service_role TRUNCATE succeeded on all seven append-only tables while the grant is present -- confirms the platform-default gap this migration closes was real and reachable, not merely asserted from reading a grants file.';
+       || 'audit_logs, application_status_history, document_revisions, filing_submissions';
+  raise notice 'PASS (control): service_role TRUNCATE succeeded on all eight append-only tables while the grant is present -- confirms the platform-default gap this migration closes was real and reachable, not merely asserted from reading a grants file.';
 exception
   when insufficient_privilege then
     raise exception 'FAIL (control): service_role TRUNCATE was rejected even with the grant present -- the later failure assertion would prove nothing without this control succeeding first. (%)', sqlerrm;
@@ -70,7 +75,7 @@ reset role;
 -- Step 2: revoke again, restoring this migration's actual (already
 -- applied, pre-existing) effect for the assert step below.
 revoke truncate on extractions, audits, audit_findings, generated_documents,
-  audit_logs, application_status_history, document_revisions from service_role;
+  audit_logs, application_status_history, document_revisions, filing_submissions from service_role;
 
 -- Step 3 (assert): the identical TRUNCATE now fails with
 -- insufficient_privilege -- proving 20260806000033's revoke actually
@@ -81,11 +86,11 @@ set role service_role;
 do $$
 begin
   execute 'truncate table extractions, audits, audit_findings, generated_documents, '
-       || 'audit_logs, application_status_history, document_revisions';
+       || 'audit_logs, application_status_history, document_revisions, filing_submissions';
   raise exception 'FAIL (assert): service_role TRUNCATE succeeded on the append-only tables after the grant was revoked -- the TRUNCATE gap this migration was meant to close is still open.';
 exception
   when insufficient_privilege then
-    raise notice 'PASS (assert): service_role TRUNCATE on all seven append-only tables correctly rejected (permission denied) once the grant is revoked. (%)', sqlerrm;
+    raise notice 'PASS (assert): service_role TRUNCATE on all eight append-only tables correctly rejected (permission denied) once the grant is revoked. (%)', sqlerrm;
 end $$;
 
 reset role;

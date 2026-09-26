@@ -8,7 +8,17 @@ import { useRouter } from 'next/navigation';
 // preconditions server-side (e.g. "every finding reviewed" for confirm-review),
 // so this component's only job is to call them and surface whatever error
 // they return, never to duplicate that logic client-side.
-export function ReviewActions({ applicationId, status }: { applicationId: string; status: string }) {
+// hideSubmit: the submission panel (PERMITFIELD_FF_CITY_SUBMISSION) replaces
+// the bare "Mark submitted" button with per-authority filing.
+export function ReviewActions({
+  applicationId,
+  status,
+  hideSubmit = false,
+}: {
+  applicationId: string;
+  status: string;
+  hideSubmit?: boolean;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +41,7 @@ export function ReviewActions({ applicationId, status }: { applicationId: string
     }
   }
 
-  if (status !== 'ready_for_review' && status !== 'documents_generated') {
+  if (status !== 'ready_for_review' && !(status === 'documents_generated' && !hideSubmit)) {
     return null;
   }
 
@@ -53,7 +63,7 @@ export function ReviewActions({ applicationId, status }: { applicationId: string
         </>
       )}
 
-      {status === 'documents_generated' && (
+      {status === 'documents_generated' && !hideSubmit && (
         <>
           <p className="text-sm text-zinc-600">
             Once you&apos;ve filed the generated documents with the authority, mark this application submitted.
