@@ -73,3 +73,56 @@ describe('generateEstimatePdf()', () => {
     expect(header).toBe('%PDF-');
   });
 });
+
+describe('generateEstimatePdf() with an acceptance', () => {
+  const TINY_PNG = new Uint8Array(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    )
+  );
+  const base = {
+    orgLegalName: 'Acme Contracting Co',
+    clientName: 'Jane Client',
+    estimateId: 'est-1',
+    revisionNumber: 1,
+    sentAt: '2026-09-13T00:00:00.000Z',
+    currencyCode: 'CAD',
+    lineItems: [],
+    subtotalCents: 0n,
+    discountTotalCents: 0n,
+    taxTotalCents: 0n,
+    totalCents: 0n,
+  };
+  const acceptance = {
+    typedName: 'Jane Client',
+    claimedAuthority: 'Property owner',
+    acceptedAt: '2026-09-20T15:04:05.000Z',
+    ip: '203.0.113.5',
+    documentHash: 'a'.repeat(64),
+    esignConsentText: 'I agree to sign this document electronically.',
+  };
+
+  async function render(overrides: object) {
+    const bytes = await generateEstimatePdf({ ...base, acceptance: { ...acceptance, ...overrides } as never });
+    return Buffer.from(bytes);
+  }
+
+  it('embeds the drawn signature image', async () => {
+    const withImage = await render({ signatureMethod: 'drawn', signaturePng: TINY_PNG });
+    const typed = await render({ signatureMethod: 'typed', signaturePng: null });
+    expect(withImage.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+    expect(withImage.includes('/Subtype /Image')).toBe(true);
+    expect(typed.includes('/Subtype /Image')).toBe(false);
+  });
+
+  it('renders a legacy acceptance with no e-signature fields', async () => {
+    const legacy = await render({ signatureMethod: null, signaturePng: null, esignConsentText: null });
+    expect(legacy.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+  });
+
+  it('does not throw on signer names outside the standard PDF font', async () => {
+    const pdf = await render({ signatureMethod: 'typed', signaturePng: null, typedName: '王小明 Zoë Đặng', claimedAuthority: 'Владелец' });
+    expect(pdf.subarray(0, 5).toString('utf8')).toBe('%PDF-');
+  });
+});

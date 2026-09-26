@@ -35,6 +35,8 @@
 import { writeAuditLog } from '@/lib/audit/log';
 import { isQuotesPaymentsEnabled } from '@/lib/flags';
 import type { QPClient } from './types';
+import { pngBase64ToBytes, type SignatureSubmission } from '@/lib/esign/signature';
+import type { EstimatePdfAcceptance } from '@/lib/pdf/estimate-pdf';
 import { QuotesPaymentsDisabledError } from './estimates';
 
 export interface EstimateAcceptanceRecord {
@@ -79,6 +81,7 @@ export interface RecordEstimateAcceptanceParams {
   userAgent?: string | null;
   externalActorId: string;
   externalActorLabel: string;
+  signature: SignatureSubmission;
 }
 
 /**
@@ -112,6 +115,9 @@ export async function recordEstimateAcceptance(
     p_claimed_authority: params.claimedAuthority,
     p_ip: params.ip ?? null,
     p_user_agent: params.userAgent ?? null,
+    p_esign_consent_text: params.signature.consentText,
+    p_signature_method: params.signature.method,
+    p_signature_png_base64: params.signature.pngBase64,
   });
 
   if (rpcError) {
@@ -135,6 +141,7 @@ export async function recordEstimateAcceptance(
       revisionId: acceptance.revisionId,
       typedName: acceptance.typedName,
       claimedAuthority: acceptance.claimedAuthority,
+      signatureMethod: params.signature.method,
     },
   });
   if (auditError) {
@@ -142,4 +149,39 @@ export async function recordEstimateAcceptance(
   }
 
   return acceptance;
+}
+
+/**
+ * Loads the acceptance (if any) of `revisionId` in the shape the estimate PDF
+ * renders. Filters on both org and revision: the public PDF route calls this
+ * with a service-role client and a token-verified orgId, where there is no RLS
+ * to fall back on.
+ */
+export async function loadEstimateAcceptanceForPdf(
+  supabase: QPClient,
+  orgId: string,
+  revisionId: string
+): Promise<EstimatePdfAcceptance | null> {
+  const { data, error } = await supabase
+    .from('estimate_acceptances')
+    .select('typed_name, claimed_authority, accepted_at, ip, revision_hash, signature_method, signature_png_base64, esign_consent_text')
+    .eq('org_id', orgId)
+    .eq('revision_id', revisionId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load estimate acceptance for revision ${revisionId}: ${error.message}`);
+  }
+  if (!data) {
+    return null;
+  }
+  return {
+    typedName: data.typed_name,
+    claimedAuthority: data.claimed_authority,
+    acceptedAt: data.accepted_at,
+    ip: data.ip ?? null,
+    documentHash: data.revision_hash,
+    signatureMethod: data.signature_method ?? null,
+    signaturePng: data.signature_png_base64 ? pngBase64ToBytes(data.signature_png_base64) : null,
+    esignConsentText: data.esign_consent_text ?? null,
+  };
 }

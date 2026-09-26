@@ -6,6 +6,7 @@ import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { recordEstimateAcceptance } from '@/lib/quotes-payments/estimate-acceptances';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
+import { parseSignatureSubmission } from '@/lib/esign/signature';
 
 // Gate 4 (Quotes & Payments), Phase A -- "Accept" action for
 // app/estimate/[token]/page.tsx. Same generic-failure discipline
@@ -37,6 +38,14 @@ export async function acceptEstimateAction(
   }
   if (!typedName || !claimedAuthority) {
     return { error: 'Enter your full name and your role/title to accept this estimate.' };
+  }
+  const signature = parseSignatureSubmission({
+    consent: formData.get('esignConsent') as string | null,
+    method: formData.get('signatureMethod') as string | null,
+    drawnDataUrl: formData.get('signatureDataUrl') as string | null,
+  });
+  if (!signature.ok) {
+    return { error: signature.error };
   }
 
   // Computed once, reused both for resolveTargetToken's own rate-limit
@@ -133,6 +142,7 @@ export async function acceptEstimateAction(
       userAgent,
       externalActorId: tokenId,
       externalActorLabel,
+      signature: signature.value,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

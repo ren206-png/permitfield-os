@@ -20,22 +20,44 @@ export class QpPdfWriter {
   readonly doc: PDFDocument;
   readonly font: PDFFont;
   readonly boldFont: PDFFont;
+  readonly italicFont: PDFFont;
   private page: PDFPage;
   private y: number;
+  private readonly encodable: Set<number>;
 
-  private constructor(doc: PDFDocument, font: PDFFont, boldFont: PDFFont) {
+  private constructor(doc: PDFDocument, font: PDFFont, boldFont: PDFFont, italicFont: PDFFont) {
     this.doc = doc;
     this.font = font;
     this.boldFont = boldFont;
+    this.italicFont = italicFont;
     this.page = doc.addPage([QP_PDF_PAGE_WIDTH, QP_PDF_PAGE_HEIGHT]);
     this.y = QP_PDF_PAGE_HEIGHT - QP_PDF_MARGIN;
+    this.encodable = new Set(font.getCharacterSet());
   }
 
   static async create(): Promise<QpPdfWriter> {
     const doc = await PDFDocument.create();
     const font = await doc.embedFont(StandardFonts.Helvetica);
     const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-    return new QpPdfWriter(doc, font, boldFont);
+    const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
+    return new QpPdfWriter(doc, font, boldFont, italicFont);
+  }
+
+  // The standard fonts only cover WinAnsi; drawText() throws on anything
+  // else. Free text here includes names signers type themselves, so
+  // unencodable characters become '?' instead of failing the whole PDF.
+  private safe(text: string): string {
+    let out = '';
+    for (const ch of text) {
+      out += this.encodable.has(ch.codePointAt(0)!) ? ch : '?';
+    }
+    return out;
+  }
+
+  private fontFor(options: { bold?: boolean; italic?: boolean }): PDFFont {
+    if (options.bold) return this.boldFont;
+    if (options.italic) return this.italicFont;
+    return this.font;
   }
 
   /** Starts a fresh page and resets the y-cursor to the top margin. */
@@ -52,23 +74,40 @@ export class QpPdfWriter {
   }
 
   /** Draws one line of text at the current x/y (left-aligned by default), then advances the cursor by one line height. Starts a new page first if needed. */
-  drawLine(text: string, options: { x?: number; size?: number; bold?: boolean } = {}): void {
+  drawLine(text: string, options: { x?: number; size?: number; bold?: boolean; italic?: boolean } = {}): void {
     this.ensureRoom(1);
-    this.page.drawText(text, {
+    this.page.drawText(this.safe(text), {
       x: options.x ?? QP_PDF_MARGIN,
       y: this.y,
       size: options.size ?? QP_PDF_BODY_FONT_SIZE,
-      font: options.bold ? this.boldFont : this.font,
+      font: this.fontFor(options),
       color: rgb(0, 0, 0),
     });
     this.y -= QP_PDF_LINE_HEIGHT;
+  }
+
+  /** Embeds a PNG scaled to fit within maxWidth x maxHeight (never upscaled), left-aligned at the margin, and advances the cursor past it. */
+  async drawPng(pngBytes: Uint8Array, maxWidth: number, maxHeight: number): Promise<void> {
+    const image = await this.doc.embedPng(pngBytes);
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    const lines = Math.ceil(height / QP_PDF_LINE_HEIGHT);
+    this.ensureRoom(lines);
+    this.page.drawImage(image, {
+      x: QP_PDF_MARGIN,
+      y: this.y - height + QP_PDF_LINE_HEIGHT,
+      width,
+      height,
+    });
+    this.y -= lines * QP_PDF_LINE_HEIGHT;
   }
 
   /** Draws a row of column values at fixed x-offsets on one line, then advances the cursor by one line height. `columns` is a list of `{ x, text, size?, bold? }`. */
   drawRow(columns: readonly { x: number; text: string; size?: number; bold?: boolean }[]): void {
     this.ensureRoom(1);
     for (const col of columns) {
-      this.page.drawText(col.text, {
+      this.page.drawText(this.safe(col.text), {
         x: col.x,
         y: this.y,
         size: col.size ?? QP_PDF_BODY_FONT_SIZE,
@@ -101,4 +140,20 @@ export class QpPdfWriter {
  */
 export function splitLines(text: string): string[] {
   return text.split('\n');
+}
+
+/** Greedy word-wrap to at most `maxChars` per line; a single word longer than that gets its own line unbroken. */
+export function wrapWords(text: string, maxChars: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (current && current.length + 1 + word.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }

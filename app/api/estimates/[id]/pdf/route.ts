@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isQuotesPaymentsEnabled } from '@/lib/flags';
 import { can } from '@/lib/entitlements';
 import { generateEstimatePdf, type EstimatePdfLineItem } from '@/lib/pdf/estimate-pdf';
+import { loadEstimateAcceptanceForPdf } from '@/lib/quotes-payments/estimate-acceptances';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
 
 // Gate 4 (Quotes & Payments), Phase A -- "Download PDF" endpoint for a sent
@@ -94,6 +95,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     lineTotalCents: dbValueToCents(li.line_total_cents as number),
   }));
 
+  const acceptance = await loadEstimateAcceptanceForPdf(supabase, orgId, estimate.current_revision_id);
+
   const pdfBytes = await generateEstimatePdf({
     orgLegalName: taxProfile?.legal_name ?? 'Your organization',
     orgAddressLines: taxProfile
@@ -117,6 +120,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     discountTotalCents: dbValueToCents(revision.discount_total_cents),
     taxTotalCents: dbValueToCents(revision.tax_total_cents),
     totalCents: dbValueToCents(revision.total_cents),
+    acceptance,
   });
 
   return new NextResponse(Buffer.from(pdfBytes), {

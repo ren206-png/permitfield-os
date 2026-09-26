@@ -91,7 +91,7 @@ begin
   select id into v_rev1_id from _test_ids where label = 'rev1';
   select id into v_est_id from _test_ids where label = 'est';
 
-  select * into v_acc from record_estimate_acceptance(v_rev1_id, 'hash-abc', '{"line_items":[]}'::jsonb, 'Jane Doe', 'Owner', '203.0.113.5'::inet, 'test-agent/1.0');
+  select * into v_acc from record_estimate_acceptance(v_rev1_id, 'hash-abc', '{"line_items":[]}'::jsonb, 'Jane Doe', 'Owner', '203.0.113.5'::inet, 'test-agent/1.0', 'I agree to sign electronically.', 'typed', null);
 
   if v_acc.revision_id <> v_rev1_id or v_acc.typed_name <> 'Jane Doe' then
     raise exception 'FAIL: record_estimate_acceptance() did not persist expected fields (revision_id=%, typed_name=%)', v_acc.revision_id, v_acc.typed_name;
@@ -112,7 +112,7 @@ declare
 begin
   select id into v_rev1_id from _test_ids where label = 'rev1';
   begin
-    perform record_estimate_acceptance(v_rev1_id, 'hash-abc-2', '{}'::jsonb, 'Someone Else', 'Owner');
+    perform record_estimate_acceptance(v_rev1_id, 'hash-abc-2', '{}'::jsonb, 'Someone Else', 'Owner', null, null, 'I agree to sign electronically.', 'typed', null);
     raise exception 'FAIL: a second acceptance of the same revision was accepted';
   exception
     when unique_violation then
@@ -186,11 +186,16 @@ declare
   v_acc estimate_acceptances;
 begin
   select id into v_rev2_id from _test_ids where label = 'rev2';
-  select * into v_acc from record_estimate_acceptance(v_rev2_id, 'hash-rev2', '{}'::jsonb, 'On Time Accepter', 'Owner');
+  select * into v_acc from record_estimate_acceptance(v_rev2_id, 'hash-rev2', '{}'::jsonb, 'On Time Accepter', 'Owner', null, null, 'I agree to sign electronically.', 'drawn',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
   if v_acc.revision_id <> v_rev2_id then
     raise exception 'FAIL: acceptance of the current revision did not persist as expected';
   end if;
-  raise notice 'PASS: accepting the current revision (rev2) succeeds.';
+  if v_acc.signature_method <> 'drawn' or v_acc.signature_png_base64 is null
+    or v_acc.esign_consent_at is null or v_acc.esign_consent_text <> 'I agree to sign electronically.' then
+    raise exception 'FAIL: drawn e-signature fields not persisted (method=%, consent_at=%)', v_acc.signature_method, v_acc.esign_consent_at;
+  end if;
+  raise notice 'PASS: accepting the current revision (rev2) with a drawn e-signature succeeds and stores consent + signature.';
 end $$;
 
 reset role;
