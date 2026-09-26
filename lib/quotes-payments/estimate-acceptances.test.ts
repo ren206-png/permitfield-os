@@ -12,6 +12,7 @@ afterEach(() => {
 
 const ORG_ID = 'org-1';
 const EXTERNAL_ACTOR = { externalActorId: 'token-1', externalActorLabel: 'jane@client.example' };
+const SIGNATURE = { signature: { consentText: 'I agree to sign electronically.', method: 'typed' as const, pngBase64: null } };
 
 const ACCEPTANCE_ROW = {
   id: 'acc-1',
@@ -46,6 +47,7 @@ describe('recordEstimateAcceptance()', () => {
         typedName: 'Jane Client',
         claimedAuthority: 'Owner',
         ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
       })
     ).rejects.toBeInstanceOf(QuotesPaymentsDisabledError);
   });
@@ -63,6 +65,7 @@ describe('recordEstimateAcceptance()', () => {
       ip: '203.0.113.7',
       userAgent: 'Mozilla/5.0',
       ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
     });
 
     expect(acceptance.id).toBe('acc-1');
@@ -91,6 +94,7 @@ describe('recordEstimateAcceptance()', () => {
         typedName: 'Jane Client',
         claimedAuthority: 'Owner',
         ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
       })
     ).rejects.toThrow(/invalid_transition/);
   });

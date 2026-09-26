@@ -16,7 +16,7 @@
 // Intl.NumberFormat, per this codebase's money discipline.
 import { centsToDollarsString } from '@/lib/money/cents';
 import { QP_PDF_HEADING_FONT_SIZE, QP_PDF_MARGIN, QP_PDF_TITLE_FONT_SIZE } from './config';
-import { QpPdfWriter, splitLines } from './qp-pdf-layout';
+import { QpPdfWriter, splitLines, wrapWords } from './qp-pdf-layout';
 
 export interface EstimatePdfLineItem {
   description: string;
@@ -45,6 +45,20 @@ export interface EstimatePdfInput {
   discountTotalCents: bigint;
   taxTotalCents: bigint;
   totalCents: bigint;
+  // Present once the client has accepted this revision. esign fields are
+  // null for acceptances recorded before e-signature capture existed.
+  acceptance?: EstimatePdfAcceptance | null;
+}
+
+export interface EstimatePdfAcceptance {
+  typedName: string;
+  claimedAuthority: string;
+  acceptedAt: string;
+  ip: string | null;
+  documentHash: string;
+  signatureMethod: 'typed' | 'drawn' | null;
+  signaturePng: Uint8Array | null;
+  esignConsentText: string | null;
 }
 
 const COL_DESC_X = QP_PDF_MARGIN;
@@ -141,5 +155,46 @@ export async function generateEstimatePdf(input: EstimatePdfInput): Promise<Uint
     }
   }
 
+  if (input.acceptance) {
+    await drawAcceptance(writer, input.acceptance);
+  }
+
   return writer.save();
+}
+
+const CERTIFICATE_WRAP_CHARS = 95;
+
+async function drawAcceptance(writer: QpPdfWriter, acceptance: EstimatePdfAcceptance): Promise<void> {
+  writer.spacer();
+  const signed = acceptance.signatureMethod !== null;
+  writer.drawLine(signed ? 'Electronic signature' : 'Acceptance', { size: QP_PDF_HEADING_FONT_SIZE, bold: true });
+
+  if (acceptance.signatureMethod === 'drawn' && acceptance.signaturePng) {
+    await writer.drawPng(acceptance.signaturePng, 200, 60);
+  } else if (acceptance.signatureMethod === 'typed') {
+    writer.drawLine(acceptance.typedName, { size: QP_PDF_TITLE_FONT_SIZE, italic: true });
+  }
+
+  writer.drawLine(`${signed ? 'Signed' : 'Accepted'} by: ${acceptance.typedName} (${acceptance.claimedAuthority})`);
+  writer.drawLine(`${signed ? 'Signed' : 'Accepted'} at: ${formatUtc(acceptance.acceptedAt)}`);
+  if (acceptance.ip) {
+    writer.drawLine(`IP address: ${acceptance.ip}`);
+  }
+  if (signed) {
+    writer.drawLine(`Signature method: ${acceptance.signatureMethod === 'drawn' ? 'drawn' : 'typed name'}`);
+  }
+  writer.drawLine('Document fingerprint (SHA-256):');
+  writer.drawLine(acceptance.documentHash);
+  if (acceptance.esignConsentText) {
+    const [first, ...rest] = wrapWords(`Consent given: "${acceptance.esignConsentText}"`, CERTIFICATE_WRAP_CHARS);
+    writer.drawLine(first);
+    for (const line of rest) {
+      writer.drawLine(line);
+    }
+  }
+}
+
+function formatUtc(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : `${date.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
 }

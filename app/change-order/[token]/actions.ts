@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client-portal';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { recordChangeOrderAcceptance } from '@/lib/quotes-payments/change-orders';
+import { parseSignatureSubmission } from '@/lib/esign/signature';
 
 // Gate 4 (Quotes & Payments), Phase B -- "Accept" action for
 // app/change-order/[token]/page.tsx. Same generic-failure discipline as
@@ -36,6 +37,14 @@ export async function acceptChangeOrderAction(
   }
   if (!typedName || !claimedAuthority) {
     return { error: 'Enter your full name and your role/title to accept this change order.' };
+  }
+  const signature = parseSignatureSubmission({
+    consent: formData.get('esignConsent') as string | null,
+    method: formData.get('signatureMethod') as string | null,
+    drawnDataUrl: formData.get('signatureDataUrl') as string | null,
+  });
+  if (!signature.ok) {
+    return { error: signature.error };
   }
 
   // Computed once, reused both for resolveTargetToken's own rate-limit
@@ -107,6 +116,7 @@ export async function acceptChangeOrderAction(
       userAgent,
       externalActorId: tokenId,
       externalActorLabel,
+      signature: signature.value,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
