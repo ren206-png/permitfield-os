@@ -13,6 +13,7 @@ const initialState: AcceptChangeOrderState = {};
 export function AcceptChangeOrderForm({ token }: { token: string }) {
   const [state, formAction, pending] = useActionState(acceptChangeOrderAction, initialState);
   const [typedName, setTypedName] = useState('');
+  const [claimedAuthority, setClaimedAuthority] = useState('');
 
   if (state.accepted) {
     return <p className="text-sm font-medium text-emerald-700">Thank you -- this change order has been accepted and signed.</p>;
@@ -43,6 +44,8 @@ export function AcceptChangeOrderForm({ token }: { token: string }) {
           type="text"
           name="claimedAuthority"
           required
+          value={claimedAuthority}
+          onChange={(event) => setClaimedAuthority(event.target.value)}
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900"
           placeholder="Property owner, Project manager, etc."
         />

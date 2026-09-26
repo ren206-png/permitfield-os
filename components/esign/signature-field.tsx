@@ -7,13 +7,15 @@ const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 140;
 
 // Renders the consent checkbox and a typed-or-drawn signature inside the
-// caller's <form>. Submits three fields: esignConsent ("yes" when ticked),
+// caller's <form>. Inputs are controlled so a server-side validation error
+// (React resets uncontrolled fields after a form action) doesn't wipe them. Submits three fields: esignConsent ("yes" when ticked),
 // signatureMethod ("typed" | "drawn"), and signatureDataUrl (a PNG data URL,
 // only meaningful when drawn). `typedName` is the signer's name from the
 // surrounding form, previewed as their typed signature.
 export function SignatureField({ typedName }: { typedName: string }) {
   const [method, setMethod] = useState<SignatureMethod>('typed');
   const [dataUrl, setDataUrl] = useState('');
+  const [consented, setConsented] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
 
@@ -115,7 +117,15 @@ export function SignatureField({ typedName }: { typedName: string }) {
       )}
 
       <label className="flex items-start gap-2 text-xs text-zinc-700">
-        <input type="checkbox" name="esignConsent" value="yes" required className="mt-0.5" />
+        <input
+          type="checkbox"
+          name="esignConsent"
+          value="yes"
+          required
+          checked={consented}
+          onChange={(event) => setConsented(event.target.checked)}
+          className="mt-0.5"
+        />
         <span>{ESIGN_CONSENT_TEXT}</span>
       </label>
     </fieldset>
