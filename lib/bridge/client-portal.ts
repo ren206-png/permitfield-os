@@ -1651,9 +1651,10 @@ export type IssueTargetTokenResult =
 // for an invoice, change_order, or credit_note -- per
 // GATE_4_PHASE_B_FINDINGS.md §III Q6, change orders and credit notes fold
 // under the existing invoices.manage entitlement rather than a new one) for
-// `orgId`. In practice this pass's only callers are the "Generate client
-// link" Server Actions in app/(app)/estimates/[id]/actions.ts
-// and app/(app)/invoices/[id]/actions.ts, which re-derive org membership via
+// `orgId`. In practice the staff callers are the "Generate client link"
+// Server Actions in app/(app)/estimates/[id]/actions.ts and
+// app/(app)/invoices/[id]/actions.ts, plus that estimates file's "Send
+// estimate" action (which emails the link), all of which re-derive org membership via
 // requireOrgContext() and re-check the entitlement before calling this --
 // the same "each caller re-derives its own authorization" discipline this
 // codebase already applies to every other Server Action, not a new
