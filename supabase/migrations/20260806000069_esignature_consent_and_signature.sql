@@ -76,7 +76,10 @@ begin
 end;
 $$;
 
-revoke all on function assert_valid_esignature(text, text, text) from public;
+-- Supabase's default privileges grant EXECUTE on new public-schema functions
+-- to anon and authenticated directly, so revoking from PUBLIC alone leaves
+-- both able to call it; revoke them by name.
+revoke all on function assert_valid_esignature(text, text, text) from public, anon, authenticated;
 grant execute on function assert_valid_esignature(text, text, text) to service_role;
 
 -- The acceptance functions gain three trailing parameters (defaulted, so the
@@ -153,7 +156,7 @@ end;
 $$;
 
 revoke all on function record_estimate_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from public;
-revoke all on function record_estimate_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from authenticated;
+revoke all on function record_estimate_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from anon, authenticated;
 grant execute on function record_estimate_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) to service_role;
 
 drop function record_change_order_acceptance(uuid, text, jsonb, text, text, inet, text);
@@ -217,5 +220,5 @@ end;
 $$;
 
 revoke all on function record_change_order_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from public;
-revoke all on function record_change_order_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from authenticated;
+revoke all on function record_change_order_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) from anon, authenticated;
 grant execute on function record_change_order_acceptance(uuid, text, jsonb, text, text, inet, text, text, text, text) to service_role;

@@ -61,4 +61,22 @@ end $$;
 
 reset role;
 
+-- anon: Supabase's default privileges grant EXECUTE on new public functions
+-- to anon directly, so this proves the migration revoked it by name.
+do $$
+declare
+  v_fn text;
+begin
+  foreach v_fn in array array[
+    'assert_valid_esignature(text,text,text)',
+    'record_estimate_acceptance(uuid,text,jsonb,text,text,inet,text,text,text,text)',
+    'record_change_order_acceptance(uuid,text,jsonb,text,text,inet,text,text,text,text)'
+  ] loop
+    if has_function_privilege('anon', v_fn, 'execute') or has_function_privilege('authenticated', v_fn, 'execute') then
+      raise exception 'FAIL: anon or authenticated can execute %', v_fn;
+    end if;
+  end loop;
+  raise notice 'PASS: anon and authenticated cannot execute the e-signature or acceptance functions.';
+end $$;
+
 rollback;
