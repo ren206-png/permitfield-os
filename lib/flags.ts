@@ -420,3 +420,11 @@ export function isDeadlineRemindersEnabled(): boolean {
 export function isPublicApiEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_PUBLIC_API');
 }
+
+// Submit to authority (20260806000070_authority_submissions.sql). Gates the
+// application page's submission panel and its server actions. Default OFF.
+// Outside Vercel Production no submission email ever reaches a real
+// authority -- see lib/submissions/recipient.ts.
+export function isCitySubmissionEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_CITY_SUBMISSION');
+}

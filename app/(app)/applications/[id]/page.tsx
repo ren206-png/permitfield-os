@@ -3,12 +3,13 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
-import { isDrawingReviewEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isDrawingReviewEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
 import { FindingsList } from './findings-list';
 import { ReviewActions } from './review-actions';
+import { SubmissionPanel } from './submission-panel';
 import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
@@ -46,13 +47,13 @@ interface DrawingFindingViewModel {
 // routes in this same family (confirm-review, documents).
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: applicationId } = await params;
-  await requireOrgContext();
+  const { orgId } = await requireOrgContext();
   const supabase = await createClient();
 
   const { data: application, error: applicationError } = await supabase
     .from('permit_applications')
     .select(
-      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at, permit_expires_on,
+      `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at, permit_expires_on, permit_type_id,
        contractors ( company_name ),
        permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
     )
@@ -74,6 +75,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       : permitType.jurisdictions
     : null;
   const coverageLevel = jurisdiction?.coverage_level ?? 'listed';
+  const citySubmission = isCitySubmissionEnabled();
 
   const [{ data: documents, error: documentsError }, { data: extraction, error: extractionError }, { data: latestAudit, error: auditError }, { data: generatedDocs, error: generatedError }] =
     await Promise.all([
@@ -310,7 +312,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         </div>
       </div>
 
-      <ReviewActions applicationId={applicationId} status={application.status} />
+      <ReviewActions applicationId={applicationId} status={application.status} hideSubmit={citySubmission} />
+
+      {citySubmission && (application.status === 'documents_generated' || application.status === 'submitted') && (
+        <SubmissionPanel
+          orgId={orgId}
+          applicationId={applicationId}
+          permitTypeId={application.permit_type_id as string}
+          projectAddress={application.project_address}
+        />
+      )}
 
       <section>
         <h2 className="text-sm font-semibold text-zinc-900">Documents</h2>
