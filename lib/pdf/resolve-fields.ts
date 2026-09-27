@@ -26,7 +26,11 @@ export interface FieldResolutionContext {
   estimatedJobValueCents: number | null;
   application: {
     projectTitle: string | null;
+    projectAddress: string | null;
   };
+  // The applying org's contact email (org_tax_profiles.invoice_contact_email);
+  // the contractor is the applicant on every form mapped so far.
+  orgContactEmail: string | null;
   contractor: {
     companyName: string | null;
     primaryLicenseNumber: string | null;
@@ -68,6 +72,52 @@ function fromExtractedField(
 
 type Resolver = (context: FieldResolutionContext) => ResolvedField;
 
+const PROVINCE_CODES = new Set(['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT']);
+
+export interface CivicAddressParts {
+  civicNumber: string | null;
+  street: string | null;
+  city: string | null;
+}
+
+// Splits a free-text project address ("123 Main St, Richmond, BC V6Y 2C1",
+// "5-100 King St W, Toronto, ON") into the civic number, street and city
+// that split-box forms (ESA's Site Information) ask for. Deterministic, and
+// deliberately conservative: any part it can't identify with confidence is
+// null, so the field is left blank rather than filled with a wrong value.
+export function parseCivicAddress(address: string | null): CivicAddressParts {
+  const empty = { civicNumber: null, street: null, city: null };
+  if (!address) return empty;
+  const segments = address
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return empty;
+
+  const first = segments[0];
+  const unitFirst = /^[A-Za-z]?\d+[A-Za-z]?\s*-\s*(\d+[A-Za-z]?)\s+(.+)$/.exec(first);
+  const plain = /^(\d+[A-Za-z]?)\s+(.+)$/.exec(first);
+  const match = unitFirst ?? plain;
+  const civicNumber = match ? match[1] : null;
+  const street = match ? match[2].trim() : null;
+
+  let city: string | null = null;
+  const provinceIndex = segments.findIndex((seg, i) => i > 0 && PROVINCE_CODES.has(seg.split(/\s+/)[0].toUpperCase()));
+  if (provinceIndex > 1) {
+    city = segments[provinceIndex - 1];
+  } else if (provinceIndex === -1 && match && segments.length >= 2) {
+    city = segments[segments.length - 1];
+  }
+  if (city && /^(unit|suite|apt)\b/i.test(city)) city = null;
+
+  return { civicNumber, street, city };
+}
+
+function fromAddressPart(ctx: FieldResolutionContext, part: keyof CivicAddressParts): ResolvedField {
+  const value = parseCivicAddress(ctx.application.projectAddress)[part];
+  return value ? { value, confidence: 1 } : NO_VALUE;
+}
+
 // One explicit entry per known maps_to path, same "one clear place, easy to
 // extend" convention as lib/ai/config.ts's constants. Every
 // permit_form_fields.maps_to value in this codebase (seed or future) must
@@ -90,6 +140,8 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
     return { value: lastName, confidence: name.confidence };
   },
   'applicant.licenseNumber': (ctx) => fromExtractedField(ctx.extraction?.license_number),
+  'applicant.fullName': (ctx) => fromExtractedField(ctx.extraction?.applicant_name),
+  'applicant.email': (ctx) => (ctx.orgContactEmail ? { value: ctx.orgContactEmail, confidence: 1 } : NO_VALUE),
   'application.estimatedJobValueDollars': (ctx) => {
     if (ctx.estimatedJobValueCents === null) return NO_VALUE;
     // The dollar VALUE is deterministic once cents is known (BigInt string
@@ -103,6 +155,12 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   },
   'application.projectTitle': (ctx) =>
     ctx.application.projectTitle ? { value: ctx.application.projectTitle, confidence: 1 } : NO_VALUE,
+  'application.projectAddress': (ctx) =>
+    ctx.application.projectAddress ? { value: ctx.application.projectAddress, confidence: 1 } : NO_VALUE,
+  'application.projectDescription': (ctx) => fromExtractedField(ctx.extraction?.scope_of_work_summary),
+  'application.addressCivicNumber': (ctx) => fromAddressPart(ctx, 'civicNumber'),
+  'application.addressStreet': (ctx) => fromAddressPart(ctx, 'street'),
+  'application.addressCity': (ctx) => fromAddressPart(ctx, 'city'),
   'application.squareFootage': (ctx) => fromExtractedField(ctx.extraction?.square_footage),
   'application.electricalAmps': (ctx) => fromExtractedField(ctx.extraction?.electrical_amps),
   'application.scopeOfWorkSummary': (ctx) => fromExtractedField(ctx.extraction?.scope_of_work_summary),
@@ -117,6 +175,8 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
       ? { value: ctx.contractor.licenseProvinceCode, confidence: 1 }
       : NO_VALUE,
 };
+
+export const FIELD_RESOLVER_KEYS: readonly string[] = Object.keys(FIELD_RESOLVERS);
 
 export function resolveFieldValue(mapsToPath: string, context: FieldResolutionContext): ResolvedField {
   const resolver = FIELD_RESOLVERS[mapsToPath];
@@ -164,6 +224,8 @@ export function buildFieldResolutionContext(params: {
   parsedData: Record<string, unknown> | null;
   estimatedJobValueCents: number | null;
   projectTitle: string | null;
+  projectAddress: string | null;
+  orgContactEmail: string | null;
   contractor: {
     company_name: string | null;
     primary_license_number: string | null;
@@ -179,7 +241,8 @@ export function buildFieldResolutionContext(params: {
   return {
     extraction,
     estimatedJobValueCents: params.estimatedJobValueCents,
-    application: { projectTitle: params.projectTitle },
+    application: { projectTitle: params.projectTitle, projectAddress: params.projectAddress },
+    orgContactEmail: params.orgContactEmail,
     contractor: params.contractor
       ? {
           companyName: params.contractor.company_name,

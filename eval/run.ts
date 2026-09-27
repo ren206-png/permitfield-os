@@ -395,7 +395,8 @@ function runResolveFieldValueChecks() {
   const baseContext: FieldResolutionContext = {
     extraction: FULL_EXTRACTION,
     estimatedJobValueCents: 1250000,
-    application: { projectTitle: 'Downtown Panel Upgrade' },
+    application: { projectTitle: 'Downtown Panel Upgrade', projectAddress: null },
+    orgContactEmail: null,
     contractor: { companyName: 'Acme Electrical', primaryLicenseNumber: 'ACME-999', licenseProvinceCode: 'ON' },
   };
 
@@ -482,6 +483,8 @@ function runBuildFieldResolutionContextChecks() {
 
   const validParsedData = FULL_EXTRACTION as unknown as Record<string, unknown>;
   const validContext = buildFieldResolutionContext({
+    projectAddress: null,
+    orgContactEmail: null,
     parsedData: validParsedData,
     estimatedJobValueCents: 1250000,
     projectTitle: 'Downtown Panel Upgrade',
@@ -494,6 +497,8 @@ function runBuildFieldResolutionContextChecks() {
   );
 
   const degradedContext = buildFieldResolutionContext({
+    projectAddress: null,
+    orgContactEmail: null,
     parsedData: { applicant_name: 'not-a-valid-extracted-field-object' },
     estimatedJobValueCents: 1250000,
     projectTitle: 'Downtown Panel Upgrade',
@@ -512,6 +517,8 @@ function runBuildFieldResolutionContextChecks() {
   );
 
   const missingParsedDataContext = buildFieldResolutionContext({
+    projectAddress: null,
+    orgContactEmail: null,
     parsedData: null,
     estimatedJobValueCents: null,
     projectTitle: null,
