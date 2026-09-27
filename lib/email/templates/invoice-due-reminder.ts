@@ -54,5 +54,7 @@ export function renderInvoiceDueReminderEmail(input: InvoiceDueReminderEmailInpu
     `<p>If you have already paid, please disregard this reminder. Questions? Reply to this email or contact ${escapeHtml(input.organizationName)} directly.</p>`,
   ].join('\n');
 
-  return { to: input.recipientEmail, subject, text, html };
+  // Sent as the org, same as the estimate emails. No Reply-To: the cron has
+  // no sending member to route replies to.
+  return { to: input.recipientEmail, subject, text, html, fromName: input.organizationName };
 }

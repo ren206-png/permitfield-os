@@ -34,6 +34,13 @@ describe('renderInvoiceDueReminderEmail', () => {
     expect(email.text).toContain('your invoice from Acme Permits Inc. is due on');
   });
 
+  it('sends as the organization, with no Reply-To', () => {
+    const email = renderInvoiceDueReminderEmail({ ...baseInput, overdue: false });
+
+    expect(email.fromName).toBe('Acme Permits Inc.');
+    expect(email.replyTo).toBeUndefined();
+  });
+
   it('falls back to a generic greeting when no recipient name is given', () => {
     const email = renderInvoiceDueReminderEmail({ ...baseInput, recipientName: null, overdue: false });
 
