@@ -152,6 +152,7 @@ export async function generateEstimateClientLinkAction(
         return { error: 'Estimate not found in your organization.' };
       case 'invalid_recipient_email':
         return { error: 'This client’s email on file is not valid -- fix it before generating a client link.' };
+      case 'permit_esign_disabled':
       case 'issue_failed':
         return { error: 'Generating the client link failed. Check server logs and try again.' };
     }

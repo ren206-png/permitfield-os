@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { createClientPortalServiceClient } from '@/lib/supabase/client-portal-service-client';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { isAllowedMimeType, MAX_FILE_SIZE_BYTES, UPLOADS_BUCKET, buildStoragePath, computeSha256 } from '@/lib/storage/documents';
-import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isPermitEsignEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
 import { writeAuditLog } from '@/lib/audit/log';
 
 // Gate 2.0 sub-phase 2.4 (GATE_2_0_SPEC.md §3), extended by sub-phase 2.5.
@@ -1466,9 +1466,19 @@ export async function listTokensForApplication(applicationId: string): Promise<L
 // own `target_kind` column is deliberately unconstrained free text (see
 // that table's migration comment), so no DB-side enum needs updating --
 // only this module's dispatch and the TypeScript union itself.
-export type TargetKind = 'estimate' | 'invoice' | 'change_order' | 'credit_note';
+//
+// E-signature Stage B adds 'permit_signature' (a permit_signature_requests
+// row, app/sign/[token]). It is gated by its own feature flag rather than
+// Quotes & Payments -- see isTargetKindEnabled() below.
+export type TargetKind = 'estimate' | 'invoice' | 'change_order' | 'credit_note' | 'permit_signature';
 
-function targetTable(targetKind: TargetKind): 'estimates' | 'invoices' | 'change_orders' | 'credit_notes' {
+function isTargetKindEnabled(targetKind: TargetKind): boolean {
+  return targetKind === 'permit_signature' ? isPermitEsignEnabled() : isQuotesPaymentsEnabled();
+}
+
+function targetTable(
+  targetKind: TargetKind
+): 'estimates' | 'invoices' | 'change_orders' | 'credit_notes' | 'permit_signature_requests' {
   switch (targetKind) {
     case 'estimate':
       return 'estimates';
@@ -1478,6 +1488,8 @@ function targetTable(targetKind: TargetKind): 'estimates' | 'invoices' | 'change
       return 'change_orders';
     case 'credit_note':
       return 'credit_notes';
+    case 'permit_signature':
+      return 'permit_signature_requests';
   }
 }
 
@@ -1524,7 +1536,7 @@ export async function resolveTargetToken(
   expectedKind: TargetKind,
   context?: BridgeRequestContext
 ): Promise<ResolveTargetTokenResult> {
-  if (!isClientPortalEnabled() || !isQuotesPaymentsEnabled()) {
+  if (!isClientPortalEnabled() || !isTargetKindEnabled(expectedKind)) {
     return { error: 'link_unavailable' };
   }
 
@@ -1596,7 +1608,15 @@ export type IssueTargetTokenParams = {
 
 export type IssueTargetTokenResult =
   | { rawToken: string; tokenId: string; expiresAt: string }
-  | { error: 'client_portal_disabled' | 'quotes_payments_disabled' | 'target_not_found' | 'invalid_recipient_email' | 'issue_failed' };
+  | {
+      error:
+        | 'client_portal_disabled'
+        | 'quotes_payments_disabled'
+        | 'permit_esign_disabled'
+        | 'target_not_found'
+        | 'invalid_recipient_email'
+        | 'issue_failed';
+    };
 
 // Staff-facing: mints a bearer token pointing at one estimate or invoice,
 // superseding any existing active token for the same (recipient, target)
@@ -1627,8 +1647,8 @@ export async function issueTargetToken(params: IssueTargetTokenParams): Promise<
   if (!isClientPortalEnabled()) {
     return { error: 'client_portal_disabled' };
   }
-  if (!isQuotesPaymentsEnabled()) {
-    return { error: 'quotes_payments_disabled' };
+  if (!isTargetKindEnabled(params.targetKind)) {
+    return { error: params.targetKind === 'permit_signature' ? 'permit_esign_disabled' : 'quotes_payments_disabled' };
   }
 
   const main = createServiceClient();

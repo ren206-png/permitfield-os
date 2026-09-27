@@ -5,6 +5,40 @@ import { ESIGN_CONSENT_TEXT, type SignatureMethod } from '@/lib/esign/signature'
 
 const CANVAS_WIDTH = 480;
 const CANVAS_HEIGHT = 140;
+const CROP_PADDING = 4;
+
+// The signature image is cropped to the drawn strokes (plus a little
+// padding), so it can be scaled to fit a form's small signature line
+// without the empty canvas around it shrinking the ink.
+function cropToInk(canvas: HTMLCanvasElement): string {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas.toDataURL('image/png');
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return canvas.toDataURL('image/png');
+  const left = Math.max(0, minX - CROP_PADDING);
+  const top = Math.max(0, minY - CROP_PADDING);
+  const cropWidth = Math.min(width, maxX + CROP_PADDING + 1) - left;
+  const cropHeight = Math.min(height, maxY + CROP_PADDING + 1) - top;
+  const cropped = document.createElement('canvas');
+  cropped.width = cropWidth;
+  cropped.height = cropHeight;
+  cropped.getContext('2d')?.drawImage(canvas, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return cropped.toDataURL('image/png');
+}
 
 // Renders the consent checkbox and a typed-or-drawn signature inside the
 // caller's <form>. Inputs are controlled so a server-side validation error
@@ -62,7 +96,7 @@ export function SignatureField({ typedName }: { typedName: string }) {
   function end(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawing.current) return;
     drawing.current = false;
-    setDataUrl(event.currentTarget.toDataURL('image/png'));
+    setDataUrl(cropToInk(event.currentTarget));
   }
 
   function clear() {

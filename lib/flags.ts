@@ -428,3 +428,11 @@ export function isPublicApiEnabled(): boolean {
 export function isCitySubmissionEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_CITY_SUBMISSION');
 }
+
+// E-signature, Stage B (20260806000073_permit_form_esignatures.sql): signing
+// links for the city permit form itself, offered only where the authority
+// has confirmed it accepts electronic signatures. Needs the client-portal
+// link system (PERMITFIELD_FF_CLIENT_PORTAL) too. Default OFF.
+export function isPermitEsignEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_PERMIT_ESIGN');
+}

@@ -3,13 +3,14 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
-import { isCitySubmissionEnabled, isDrawingReviewEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isDrawingReviewEnabled, isPermitEsignEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
 import { FindingsList } from './findings-list';
 import { ReviewActions } from './review-actions';
 import { SubmissionPanel } from './submission-panel';
+import { SignaturePanel } from './signature-panel';
 import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
@@ -313,6 +314,17 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       </div>
 
       <ReviewActions applicationId={applicationId} status={application.status} hideSubmit={citySubmission} />
+
+      {isPermitEsignEnabled() && (application.status === 'documents_generated' || application.status === 'submitted') && (
+        <SignaturePanel
+          orgId={orgId}
+          applicationId={applicationId}
+          permitTypeId={application.permit_type_id as string}
+          applicationStatus={application.status}
+          defaultSignerName={parsedExtraction?.applicant_name?.value ?? ''}
+          defaultSignerEmail=""
+        />
+      )}
 
       {citySubmission && (application.status === 'documents_generated' || application.status === 'submitted') && (
         <SubmissionPanel
