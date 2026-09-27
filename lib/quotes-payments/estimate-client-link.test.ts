@@ -133,7 +133,8 @@ describe('emailSentEstimateToClient()', () => {
     recipientEmail: 'client@example.com',
     recipientName: 'Jordan',
     sentByOrgUserId: 'user-1',
-    sentByEmail: 'office@acme.example',
+    orgContactEmail: 'office@acme.example',
+    sentByEmail: 'pat@acme.example',
     clientPortalEnabled: true,
     quotesPaymentsEnabled: true,
   };
@@ -163,6 +164,26 @@ describe('emailSentEstimateToClient()', () => {
       tokenId: 'tok-1',
       messageId: 'msg-1',
     });
+  });
+
+  it.each([
+    [{ orgContactEmail: 'office@acme.example' }, 'office@acme.example'],
+    [{ orgContactEmail: null }, 'pat@acme.example'],
+    [{ orgContactEmail: '  ' }, 'pat@acme.example'],
+  ])('replies to the org contact email, falling back to the sender (%o)', async (override, expectedReplyTo) => {
+    const send = fakeSend({ success: true, id: 'msg-1' });
+
+    await emailSentEstimateToClient({ ...input, ...override }, { issue: fakeIssue(ISSUED), send });
+
+    expect(send.mock.calls[0][0].replyTo).toBe(expectedReplyTo);
+  });
+
+  it('leaves Reply-To unset when neither the org nor the sender has an email', async () => {
+    const send = fakeSend({ success: true, id: 'msg-1' });
+
+    await emailSentEstimateToClient({ ...input, orgContactEmail: null, sentByEmail: null }, { issue: fakeIssue(ISSUED), send });
+
+    expect(send.mock.calls[0][0].replyTo).toBeUndefined();
   });
 
   it.each([

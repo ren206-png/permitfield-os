@@ -23,6 +23,10 @@ export interface InvoiceDueReminderEmailInput {
    * locale formatting itself -- the caller owns that). */
   dueDateDisplay: string;
   overdue: boolean;
+  /** The org's contact email (org_tax_profiles.invoice_contact_email), set
+   * as Reply-To -- same as estimate-expiring-reminder.ts. Null leaves
+   * Reply-To unset. */
+  replyToEmail?: string | null;
 }
 
 export function renderInvoiceDueReminderEmail(input: InvoiceDueReminderEmailInput): RenderedEmail {
@@ -36,6 +40,12 @@ export function renderInvoiceDueReminderEmail(input: InvoiceDueReminderEmailInpu
     ? `${invoiceLabel} from ${input.organizationName} was due on ${input.dueDateDisplay} and is now overdue.`
     : `${invoiceLabel} from ${input.organizationName} is due on ${input.dueDateDisplay}.`;
 
+  // "Reply to this email" only when a reply actually reaches the org --
+  // without a Reply-To it would land at the platform's sender address.
+  const closingLine = input.replyToEmail
+    ? `If you have already paid, please disregard this reminder. Questions? Reply to this email or contact ${input.organizationName} directly.`
+    : `If you have already paid, please disregard this reminder. Questions? Contact ${input.organizationName} directly.`;
+
   const text = [
     `Hi ${greetingName},`,
     '',
@@ -43,7 +53,7 @@ export function renderInvoiceDueReminderEmail(input: InvoiceDueReminderEmailInpu
     'You can view and pay it here:',
     input.viewUrl,
     '',
-    `If you have already paid, please disregard this reminder. Questions? Reply to this email or contact ${input.organizationName} directly.`,
+    closingLine,
   ].join('\n');
 
   const html = [
@@ -51,10 +61,16 @@ export function renderInvoiceDueReminderEmail(input: InvoiceDueReminderEmailInpu
     `<p>${escapeHtml(statusLine)}</p>`,
     `<p>You can view and pay it here:</p>`,
     `<p><a href="${input.viewUrl}">${escapeHtml(input.viewUrl)}</a></p>`,
-    `<p>If you have already paid, please disregard this reminder. Questions? Reply to this email or contact ${escapeHtml(input.organizationName)} directly.</p>`,
+    `<p>${escapeHtml(closingLine)}</p>`,
   ].join('\n');
 
-  // Sent as the org, same as the estimate emails. No Reply-To: the cron has
-  // no sending member to route replies to.
-  return { to: input.recipientEmail, subject, text, html, fromName: input.organizationName };
+  // Sent as the org, same as the estimate emails.
+  return {
+    to: input.recipientEmail,
+    subject,
+    text,
+    html,
+    fromName: input.organizationName,
+    ...(input.replyToEmail ? { replyTo: input.replyToEmail } : {}),
+  };
 }

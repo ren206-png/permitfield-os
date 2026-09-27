@@ -38,11 +38,21 @@ describe('renderEstimateExpiringReminderEmail', () => {
     expect(email.html).not.toContain('expires');
   });
 
-  it('sends as the organization, with no Reply-To', () => {
-    const email = renderEstimateExpiringReminderEmail(baseInput);
+  it('sends as the organization and routes replies to its contact email', () => {
+    const email = renderEstimateExpiringReminderEmail({ ...baseInput, replyToEmail: 'office@acme.example' });
 
     expect(email.fromName).toBe('Acme Permits Inc.');
+    expect(email.replyTo).toBe('office@acme.example');
+    expect(email.text).toContain('Questions? Reply to this email or contact Acme Permits Inc. directly.');
+  });
+
+  it('does not tell the client to reply when there is no contact email to reply to', () => {
+    const email = renderEstimateExpiringReminderEmail({ ...baseInput, replyToEmail: null });
+
     expect(email.replyTo).toBeUndefined();
+    expect(email.text).toContain('Questions? Contact Acme Permits Inc. directly.');
+    expect(email.text).not.toContain('Reply to this email');
+    expect(email.html).not.toContain('Reply to this email');
   });
 
   it('falls back to a generic greeting when no recipient name is given', () => {

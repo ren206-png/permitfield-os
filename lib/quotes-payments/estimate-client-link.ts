@@ -122,9 +122,14 @@ export interface EmailSentEstimateInput {
   recipientName: string | null;
   /** The org member who clicked "Send estimate" -- the link's issuer. */
   sentByOrgUserId: string;
-  /** That member's own email, used as Reply-To so the email's "reply to
-   * this email" line reaches the contractor, not the platform's sender
-   * address. Null leaves Reply-To unset. */
+  /** The org's contact email (org_tax_profiles.invoice_contact_email). Used
+   * as Reply-To so the email's "reply to this email" line reaches the
+   * contractor, not the platform's sender address -- same address client
+   * reminders reply to. */
+  orgContactEmail: string | null;
+  /** That member's own email: the Reply-To fallback when the org has no
+   * contact email, same order as lib/submissions/submit.ts. Both null
+   * leaves Reply-To unset. */
   sentByEmail: string | null;
   clientPortalEnabled: boolean;
   quotesPaymentsEnabled: boolean;
@@ -187,7 +192,7 @@ export async function emailSentEstimateToClient(
       recipientName: input.recipientName,
       organizationName: input.organizationName,
       viewUrl: link.viewUrl,
-      replyToEmail: input.sentByEmail,
+      replyToEmail: input.orgContactEmail?.trim() || input.sentByEmail,
     })
   );
   return sent.success

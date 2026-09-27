@@ -95,6 +95,13 @@ export async function sendEstimateAction(
     };
   }
   const client = Array.isArray(estimate?.clients) ? estimate.clients[0] : estimate?.clients;
+  // A read failure here only loses the preferred Reply-To; the sender's own
+  // email is the fallback, same as lib/submissions/submit.ts.
+  const { data: taxProfile } = await supabase
+    .from('org_tax_profiles')
+    .select('invoice_contact_email')
+    .eq('org_id', orgId)
+    .maybeSingle();
 
   const emailed = await emailSentEstimateToClient(
     {
@@ -105,6 +112,7 @@ export async function sendEstimateAction(
       recipientEmail: client?.email ?? null,
       recipientName: client?.name ?? null,
       sentByOrgUserId: userId,
+      orgContactEmail: taxProfile?.invoice_contact_email ?? null,
       sentByEmail: user?.email ?? null,
       clientPortalEnabled: isClientPortalEnabled(),
       quotesPaymentsEnabled: isQuotesPaymentsEnabled(),
