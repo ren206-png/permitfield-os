@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateIpRateLimit } from './client-portal';
+import { evaluateIpRateLimit, lifecycleActorColumns } from './client-portal';
 
 // GATE_5_FINDINGS.md §A.4 follow-up. Pure-function tests, no network/DB --
 // same discipline as lib/ai/cost-caps.test.ts's evaluateCostCap() tests,
@@ -29,5 +29,25 @@ describe('evaluateIpRateLimit()', () => {
 
   it('rejects a negative recentDeniedAttempts rather than silently treating it as zero', () => {
     expect(() => evaluateIpRateLimit(-1, 20)).toThrow(/nonnegative/);
+  });
+});
+
+// issueTargetToken()'s token_lifecycle_events actor columns. Each result must
+// satisfy that table's CHECK constraint,
+// `(triggered_by_org_user_id is not null) <> triggered_by_system` -- exactly
+// one actor, never both, never neither.
+describe('lifecycleActorColumns()', () => {
+  it('attributes a staff-issued token to the org member', () => {
+    expect(lifecycleActorColumns({ issuedByOrgUserId: 'user-1' })).toEqual({
+      triggered_by_org_user_id: 'user-1',
+      triggered_by_system: false,
+    });
+  });
+
+  it('attributes a system-issued token to the system, with no org member', () => {
+    expect(lifecycleActorColumns({ issuedBySystem: true })).toEqual({
+      triggered_by_org_user_id: null,
+      triggered_by_system: true,
+    });
   });
 });
