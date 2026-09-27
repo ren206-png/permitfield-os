@@ -8,9 +8,10 @@ export interface EstimateSentEmailInput {
   recipientEmail: string;
   recipientName?: string | null;
   organizationName: string;
-  /** Customer-facing "view my quote" link -- see send_estimate()'s own
-   * header comment (20260806000052_estimates.sql) for what this points at;
-   * construction of the actual URL is this template's caller's concern,
+  /** Customer-facing "view my quote" link: the public, token-authenticated
+   * `${SITE_URL}/estimate/<rawToken>` route (app/estimate/[token]/page.tsx),
+   * never the staff-only `/estimates/<id>` page. Minting the token is this
+   * template's caller's concern (lib/quotes-payments/estimate-client-link.ts),
    * not this template's. */
   viewUrl: string;
 }

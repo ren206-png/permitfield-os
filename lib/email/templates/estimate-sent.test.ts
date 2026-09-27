@@ -5,7 +5,7 @@ describe('renderEstimateSentEmail', () => {
   const baseInput = {
     recipientEmail: 'client@example.com',
     organizationName: 'Acme Permits Inc.',
-    viewUrl: 'https://www.permitfieldos.com/e/abc123',
+    viewUrl: 'https://www.permitfieldos.com/estimate/abc123_-XYZ',
   };
 
   it('addresses the recipient by name and includes the view link', () => {

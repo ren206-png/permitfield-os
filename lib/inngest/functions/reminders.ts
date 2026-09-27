@@ -1,6 +1,7 @@
 import { inngest } from '@/lib/inngest/client';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { isQuotesPaymentsEnabled, isDeadlineRemindersEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isQuotesPaymentsEnabled, isDeadlineRemindersEnabled } from '@/lib/flags';
+import { issueTargetToken } from '@/lib/bridge/client-portal';
 import { writeAuditLog } from '@/lib/audit/log';
 import { SITE_URL } from '@/lib/seo';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
@@ -19,6 +20,7 @@ import {
   type EstimateStatus,
   type InvoiceStatus,
 } from './reminder-eligibility';
+import { evaluateEstimateClientLinkFlags, issueEstimateClientLink } from '@/lib/quotes-payments/estimate-client-link';
 import type { QPClient } from '@/lib/quotes-payments/types';
 
 // Gate 4 (Quotes & Payments), Phase A -- reminder_jobs poller.
@@ -118,7 +120,10 @@ interface DueReminderJobRow {
 
 type Decision =
   | { outcome: 'skipped'; reason: string }
-  | { outcome: 'sent'; messageId: string | null }
+  // clientLinkTokenId: the client_access_tokens row id (never the raw token)
+  // an estimate reminder's link points at, recorded in the audit log so a
+  // reminder can be traced to the link it issued.
+  | { outcome: 'sent'; messageId: string | null; clientLinkTokenId?: string }
   | { outcome: 'send-failed'; error: string };
 
 /**
@@ -133,6 +138,18 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
   const orgName = await loadOrganizationName(supabase, job.org_id);
 
   if (job.target_kind === 'estimate') {
+    // Checked per-job (not only at the function's top level, which lets a
+    // run through when EITHER quotes-payments or deadline reminders is on)
+    // so an estimate reminder never goes out while its own feature, or the
+    // client-link mechanism its email depends on, is off.
+    const flagSkipReason = evaluateEstimateClientLinkFlags({
+      clientPortalEnabled: isClientPortalEnabled(),
+      quotesPaymentsEnabled: isQuotesPaymentsEnabled(),
+    });
+    if (flagSkipReason) {
+      return { outcome: 'skipped', reason: flagSkipReason };
+    }
+
     const estimate = await loadEstimateSnapshot(supabase, job.org_id, job.target_id);
     if (!estimate) {
       return { outcome: 'skipped', reason: `Estimate ${job.target_id} no longer exists.` };
@@ -147,23 +164,37 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
       return { outcome: 'skipped', reason: 'Client has no email address on file.' };
     }
 
-    // Placeholder view link: no public client-facing estimate-view route
-    // or access-token system exists yet (that is the client-portal
-    // bridge's concern, GATE_2_0_FINDINGS.md, and is out of this task's
-    // scope) -- this constructs a same-origin path by id so the template
-    // renders a real, well-formed URL rather than an empty string, but it
-    // is not wired to an actual authenticated view yet.
-    const viewUrl = `${SITE_URL}/estimates/${job.target_id}`;
+    // Issued last, after every other skip check, so a token is only minted
+    // for an email that is actually about to be sent. See
+    // lib/quotes-payments/estimate-client-link.ts for the supersede and
+    // retry behavior.
+    const link = await issueEstimateClientLink(
+      {
+        siteUrl: SITE_URL,
+        orgId: job.org_id,
+        estimateId: job.target_id,
+        recipientEmail: client.email,
+        recipientName: client.name,
+        issuedBySystem: true,
+      },
+      issueTargetToken
+    );
+    if (!link.ok) {
+      return link.outcome === 'skipped'
+        ? { outcome: 'skipped', reason: link.reason }
+        : { outcome: 'send-failed', error: link.error };
+    }
+
     const email = renderEstimateSentEmail({
       recipientEmail: client.email,
       recipientName: client.name,
       organizationName: orgName,
-      viewUrl,
+      viewUrl: link.viewUrl,
     });
 
     const result = await sendEmail(email);
     return result.success
-      ? { outcome: 'sent', messageId: result.id }
+      ? { outcome: 'sent', messageId: result.id, clientLinkTokenId: link.tokenId }
       : { outcome: 'send-failed', error: result.error };
   }
 
@@ -386,7 +417,13 @@ async function finalizeReminderJob(supabase: QPClient, job: DueReminderJobRow, d
     entityId: job.id,
     afterSummary:
       decision.outcome === 'sent'
-        ? { kind: job.kind, targetKind: job.target_kind, targetId: job.target_id, messageId: decision.messageId }
+        ? {
+            kind: job.kind,
+            targetKind: job.target_kind,
+            targetId: job.target_id,
+            messageId: decision.messageId,
+            ...(decision.clientLinkTokenId ? { clientLinkTokenId: decision.clientLinkTokenId } : {}),
+          }
         : decision.outcome === 'skipped'
           ? { kind: job.kind, targetKind: job.target_kind, targetId: job.target_id, reason: decision.reason }
           : { kind: job.kind, targetKind: job.target_kind, targetId: job.target_id, error: decision.error },

@@ -1594,17 +1594,37 @@ export async function resolveTargetToken(
   };
 }
 
+// Who a target token's lifecycle events are attributed to -- exactly one of
+// the two actor shapes token_lifecycle_events' own CHECK constraint allows
+// (`(triggered_by_org_user_id is not null) <> triggered_by_system`):
+//   - issuedByOrgUserId: the issuing org member's project-1 user id -- same
+//     bare, non-FK pointer discipline as IssueTokenParams.issuedByOrgUserId
+//     above. Every staff-facing Server Action caller uses this.
+//   - issuedBySystem: no human session is involved (e.g. the reminder cron,
+//     lib/inngest/functions/reminders.ts). Recorded as
+//     triggered_by_system = true rather than borrowing some org member's id,
+//     so the lifecycle ledger never claims a person did what a job did.
+export type TargetTokenIssuer =
+  | { issuedByOrgUserId: string; issuedBySystem?: never }
+  | { issuedBySystem: true; issuedByOrgUserId?: never };
+
 export type IssueTargetTokenParams = {
   targetKind: TargetKind;
   targetId: string;
   orgId: string;
   recipientEmail: string;
   recipientName?: string | null;
-  // The issuing org member's project-1 user id -- same bare, non-FK pointer
-  // discipline as IssueTokenParams.issuedByOrgUserId above.
-  issuedByOrgUserId: string;
   ttlDays?: number;
-};
+} & TargetTokenIssuer;
+
+export function lifecycleActorColumns(issuer: TargetTokenIssuer): {
+  triggered_by_org_user_id: string | null;
+  triggered_by_system: boolean;
+} {
+  return issuer.issuedBySystem
+    ? { triggered_by_org_user_id: null, triggered_by_system: true }
+    : { triggered_by_org_user_id: issuer.issuedByOrgUserId, triggered_by_system: false };
+}
 
 export type IssueTargetTokenResult =
   | { rawToken: string; tokenId: string; expiresAt: string }
@@ -1637,7 +1657,14 @@ export type IssueTargetTokenResult =
 // requireOrgContext() and re-check the entitlement before calling this --
 // the same "each caller re-derives its own authorization" discipline this
 // codebase already applies to every other Server Action, not a new
-// exception. This is deliberately NOT gated by requireAdmin(): unlike a
+// exception. The one non-staff caller is the reminder cron
+// (lib/inngest/functions/reminders.ts, via lib/quotes-payments/estimate-client-link.ts), which
+// passes `issuedBySystem: true`: it has no org member to authorize, and
+// instead only issues a link for an estimate its own job row already scopes
+// to `orgId`, after re-checking the estimate is still sent and the client
+// still has an email on file.
+//
+// This is deliberately NOT gated by requireAdmin(): unlike a
 // permit-application client-portal link (a platform-admin action today),
 // generating a quote/invoice link is an ordinary action for any org member
 // who can already manage that quote/invoice -- requiring platform-admin
@@ -1670,6 +1697,7 @@ export async function issueTargetToken(params: IssueTargetTokenParams): Promise<
   // id, never a real permit_applications id, to keep the
   // (recipient_email, application_id) uniqueness index scoped per-target.
   const applicationIdPlaceholder = params.targetId;
+  const actorColumns = lifecycleActorColumns(params);
 
   const MAX_ATTEMPTS = 2;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -1703,7 +1731,7 @@ export async function issueTargetToken(params: IssueTargetTokenParams): Promise<
         token_id: existingActive.id,
         from_status: 'active',
         to_status: 'superseded',
-        triggered_by_org_user_id: params.issuedByOrgUserId,
+        ...actorColumns,
       });
       if (supersedeLifecycleError) {
         console.error(
@@ -1749,7 +1777,7 @@ export async function issueTargetToken(params: IssueTargetTokenParams): Promise<
       token_id: inserted.id,
       from_status: null,
       to_status: 'active',
-      triggered_by_org_user_id: params.issuedByOrgUserId,
+      ...actorColumns,
     });
     if (issueLifecycleError) {
       console.error(
