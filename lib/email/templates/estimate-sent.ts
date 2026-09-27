@@ -14,6 +14,10 @@ export interface EstimateSentEmailInput {
    * template's caller's concern (lib/quotes-payments/estimate-client-link.ts),
    * not this template's. */
   viewUrl: string;
+  /** The sending org member's email, set as Reply-To so "reply to this
+   * email" reaches the contractor -- same convention as
+   * permit-signature-request.ts's requesterEmail. */
+  replyToEmail?: string | null;
 }
 
 export function renderEstimateSentEmail(input: EstimateSentEmailInput): RenderedEmail {
@@ -36,5 +40,12 @@ export function renderEstimateSentEmail(input: EstimateSentEmailInput): Rendered
     `<p>If you have any questions, please reply to this email or contact ${escapeHtml(input.organizationName)} directly.</p>`,
   ].join('\n');
 
-  return { to: input.recipientEmail, subject, text, html };
+  return {
+    to: input.recipientEmail,
+    subject,
+    text,
+    html,
+    fromName: input.organizationName,
+    ...(input.replyToEmail ? { replyTo: input.replyToEmail } : {}),
+  };
 }

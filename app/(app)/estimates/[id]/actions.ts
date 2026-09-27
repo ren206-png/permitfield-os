@@ -9,6 +9,9 @@ import { can } from '@/lib/entitlements';
 import { sendEstimate } from '@/lib/quotes-payments/estimates';
 import { issueTargetToken } from '@/lib/bridge/client-portal';
 import { SITE_URL } from '@/lib/seo';
+import { sendEmail } from '@/lib/email/send';
+import { writeAuditLog } from '@/lib/audit/log';
+import { emailSentEstimateToClient } from '@/lib/quotes-payments/estimate-client-link';
 
 // Gate 4 (Quotes & Payments), Phase A. Same double-gate discipline as
 // app/(app)/estimates/new/actions.ts: flag re-checked first (notFound()),
@@ -20,9 +23,23 @@ import { SITE_URL } from '@/lib/seo';
 // from the RPC, caught below and surfaced as a plain message, same "let
 // RLS/RPC be the real enforcement" posture app/(app)/settings/billing/
 // actions.ts's Checkout/Portal actions already follow.
+//
+// After a successful send, and only if the "email the client" box was
+// checked, the client is emailed a link to the public estimate page
+// (emailSentEstimateToClient() in lib/quotes-payments/estimate-client-link.ts).
+// The email is a follow-on to the send, never part of it: the estimate is
+// already sent by then, so an email that is skipped or fails is reported
+// alongside that success (with the link itself when it was issued, so staff
+// can share it by hand), never as an error that implies the send failed.
 export interface SendEstimateState {
   error?: string;
   reviewMessage?: string;
+  /** Set once the estimate itself was sent. */
+  sentMessage?: string;
+  /** Set when the client was not emailed after a successful send. */
+  emailWarning?: string;
+  /** The issued client link, when the email failed after issuing it. */
+  shareUrl?: string;
 }
 
 export async function sendEstimateAction(
@@ -33,7 +50,7 @@ export async function sendEstimateAction(
     notFound();
   }
 
-  const { orgId, userId, role } = await requireOrgContext();
+  const { orgId, orgName, userId, role } = await requireOrgContext();
   if (!(await can(orgId, 'quotes.manage'))) {
     return { error: 'Your organization’s plan does not include Quotes & Payments.' };
   }
@@ -57,7 +74,86 @@ export async function sendEstimateAction(
   }
 
   revalidatePath(`/estimates/${estimateId}`);
-  return {};
+
+  if (formData.get('emailClient') !== 'on') {
+    return { sentMessage: 'Estimate sent. The client was not emailed.' };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: estimate, error: estimateError } = await supabase
+    .from('estimates')
+    .select('clients ( email, name )')
+    .eq('id', estimateId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (estimateError) {
+    return {
+      sentMessage: 'Estimate sent.',
+      emailWarning: `The client was not emailed: loading their contact details failed (${estimateError.message}).`,
+    };
+  }
+  const client = Array.isArray(estimate?.clients) ? estimate.clients[0] : estimate?.clients;
+
+  const emailed = await emailSentEstimateToClient(
+    {
+      siteUrl: SITE_URL,
+      orgId,
+      estimateId,
+      organizationName: orgName,
+      recipientEmail: client?.email ?? null,
+      recipientName: client?.name ?? null,
+      sentByOrgUserId: userId,
+      sentByEmail: user?.email ?? null,
+      clientPortalEnabled: isClientPortalEnabled(),
+      quotesPaymentsEnabled: isQuotesPaymentsEnabled(),
+    },
+    { issue: issueTargetToken, send: sendEmail }
+  );
+
+  // Durable record of what the client was told, since this action's
+  // return value only lives as long as the page does. Never the raw link.
+  const { error: auditError } = await writeAuditLog(supabase, {
+    orgId,
+    actorUserId: userId,
+    actorRole: role,
+    action:
+      emailed.status === 'emailed'
+        ? 'estimate.client_emailed'
+        : emailed.status === 'not_emailed'
+          ? 'estimate.client_email_skipped'
+          : 'estimate.client_email_failed',
+    entityType: 'estimates',
+    entityId: estimateId,
+    afterSummary:
+      emailed.status === 'emailed'
+        ? { recipientEmail: emailed.recipientEmail, clientLinkTokenId: emailed.tokenId, messageId: emailed.messageId }
+        : emailed.status === 'not_emailed'
+          ? { reason: emailed.reason }
+          : { error: emailed.error, clientLinkTokenId: emailed.tokenId },
+  });
+  if (auditError) {
+    console.error(`Failed to write audit log for estimate client email (estimate ${estimateId}): ${auditError}`);
+  }
+
+  switch (emailed.status) {
+    case 'emailed':
+      return { sentMessage: `Estimate sent and emailed to ${emailed.recipientEmail}.` };
+    case 'not_emailed':
+      return { sentMessage: 'Estimate sent.', emailWarning: `The client was not emailed: ${emailed.reason}` };
+    case 'email_failed':
+      return emailed.viewUrl
+        ? {
+            sentMessage: 'Estimate sent.',
+            emailWarning: `The email to the client didn't send (${emailed.error.replace(/\.$/, '')}). Copy the link below and send it yourself.`,
+            shareUrl: emailed.viewUrl,
+          }
+        : {
+            sentMessage: 'Estimate sent.',
+            emailWarning: `The client was not emailed (${emailed.error.replace(/\.$/, '')}). Use "Copy client link" to share it.`,
+          };
+  }
 }
 
 // Gate 4 (Quotes & Payments), Phase A -- "Copy client link" action for

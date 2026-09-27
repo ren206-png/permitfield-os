@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
-import { isQuotesPaymentsEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
 import { can } from '@/lib/entitlements';
 import { centsToDollarsString, multiplyCentsByFraction, parseDecimalQuantity } from '@/lib/money/cents';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
@@ -50,7 +50,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
   const { data: estimate, error } = await supabase
     .from('estimates')
     .select(
-      'id, status, currency_code, expiry_date, scope_notes, exclusions, terms, current_revision_id, created_at, clients ( name )'
+      'id, status, currency_code, expiry_date, scope_notes, exclusions, terms, current_revision_id, created_at, clients ( name, email )'
     )
     .eq('id', id)
     .eq('org_id', orgId)
@@ -286,7 +286,12 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
       </div>
 
       <div className="mt-6 flex flex-wrap items-start gap-4">
-        {estimate.status === 'draft' && <SendEstimateButton estimateId={estimate.id} />}
+        <SendEstimateButton
+          estimateId={estimate.id}
+          isDraft={estimate.status === 'draft'}
+          clientEmail={client?.email ?? null}
+          canEmailClient={isClientPortalEnabled()}
+        />
         {estimate.status !== 'draft' && (
           <>
             <a

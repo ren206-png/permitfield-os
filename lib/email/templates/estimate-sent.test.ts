@@ -26,6 +26,18 @@ describe('renderEstimateSentEmail', () => {
     expect(email.html).toContain('Hi there,');
   });
 
+  it('sends as the organization and routes replies to the sending member', () => {
+    const email = renderEstimateSentEmail({ ...baseInput, replyToEmail: 'office@acme.example' });
+
+    expect(email.fromName).toBe('Acme Permits Inc.');
+    expect(email.replyTo).toBe('office@acme.example');
+  });
+
+  it('leaves Reply-To unset when no sender email is known', () => {
+    expect(renderEstimateSentEmail({ ...baseInput, replyToEmail: null }).replyTo).toBeUndefined();
+    expect(renderEstimateSentEmail(baseInput).replyTo).toBeUndefined();
+  });
+
   it('escapes HTML-significant characters in the organization name', () => {
     const email = renderEstimateSentEmail({ ...baseInput, organizationName: 'A & B <Contracting>' });
 

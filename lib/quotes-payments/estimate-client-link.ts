@@ -1,16 +1,20 @@
 import type { IssueTargetTokenParams, IssueTargetTokenResult, TargetTokenIssuer } from '@/lib/bridge/client-portal';
+import type { SendEmailResult } from '@/lib/email/send';
+import { renderEstimateSentEmail } from '@/lib/email/templates/estimate-sent';
+import type { RenderedEmail } from '@/lib/email/templates/types';
 
 // The client-facing estimate link every client email carries: a bearer-token
 // link to the public app/estimate/[token]/page.tsx route, minted by the
 // client-portal bridge's issueTargetToken() -- never the staff-only,
-// login-protected `/estimates/<id>` page. Its caller is the reminder cron
-// (lib/inngest/functions/reminders.ts), which issues links as the system.
-// Before this module a reminder linked to that staff page, so a client who
-// clicked it hit a sign-in wall.
+// login-protected `/estimates/<id>` page. Two callers:
+//   - the "Send estimate" Server Action (app/(app)/estimates/[id]/actions.ts),
+//     via emailSentEstimateToClient() below, issuing as the sending member;
+//   - the reminder cron (lib/inngest/functions/reminders.ts), via
+//     issueEstimateClientLink(), issuing as the system.
 //
-// Dependency-injected (`issue` is passed in, not imported) so every branch
-// is testable as a plain function with no Inngest, Supabase, or bridge
-// credentials involved. The bridge import above is type-only and
+// Dependency-injected (`issue`/`send` are passed in, not imported) so every
+// branch is testable as a plain function with no Inngest, Supabase, Resend,
+// or bridge credentials involved. The bridge import above is type-only and
 // erased at build time, so this module never loads the bridge itself.
 
 /**
@@ -107,4 +111,86 @@ export async function issueEstimateClientLink(
   }
 
   return { ok: true, viewUrl: `${input.siteUrl}/estimate/${result.rawToken}`, tokenId: result.tokenId };
+}
+
+export interface EmailSentEstimateInput {
+  siteUrl: string;
+  orgId: string;
+  estimateId: string;
+  organizationName: string;
+  recipientEmail: string | null;
+  recipientName: string | null;
+  /** The org member who clicked "Send estimate" -- the link's issuer. */
+  sentByOrgUserId: string;
+  /** That member's own email, used as Reply-To so the email's "reply to
+   * this email" line reaches the contractor, not the platform's sender
+   * address. Null leaves Reply-To unset. */
+  sentByEmail: string | null;
+  clientPortalEnabled: boolean;
+  quotesPaymentsEnabled: boolean;
+}
+
+export type EmailSentEstimateResult =
+  | { status: 'emailed'; recipientEmail: string; viewUrl: string; tokenId: string; messageId: string | null }
+  /** Nothing was attempted: a precondition (flag, client email) rules it out. */
+  | { status: 'not_emailed'; reason: string }
+  /** An attempt failed. `viewUrl` is set when the link itself was issued
+   * (only the email failed), so staff can still share it by hand. */
+  | { status: 'email_failed'; error: string; viewUrl: string | null; tokenId: string | null };
+
+/**
+ * Emails the client a link to an estimate that was just sent. Called only
+ * after sendEstimate() succeeded, so the estimate is already `sent` with a
+ * revision snapshot for the public route to render. Never throws for an
+ * expected failure -- the estimate is sent either way, and the caller
+ * reports this outcome alongside that success rather than instead of it.
+ */
+export async function emailSentEstimateToClient(
+  input: EmailSentEstimateInput,
+  deps: {
+    issue: (params: IssueTargetTokenParams) => Promise<IssueTargetTokenResult>;
+    send: (email: RenderedEmail) => Promise<SendEmailResult>;
+  }
+): Promise<EmailSentEstimateResult> {
+  const flagReason = evaluateEstimateClientLinkFlags({
+    clientPortalEnabled: input.clientPortalEnabled,
+    quotesPaymentsEnabled: input.quotesPaymentsEnabled,
+  });
+  if (flagReason) {
+    return { status: 'not_emailed', reason: flagReason };
+  }
+  const recipientEmail = input.recipientEmail?.trim();
+  if (!recipientEmail) {
+    return { status: 'not_emailed', reason: 'This client has no email address on file.' };
+  }
+
+  const link = await issueEstimateClientLink(
+    {
+      siteUrl: input.siteUrl,
+      orgId: input.orgId,
+      estimateId: input.estimateId,
+      recipientEmail,
+      recipientName: input.recipientName,
+      issuedByOrgUserId: input.sentByOrgUserId,
+    },
+    deps.issue
+  );
+  if (!link.ok) {
+    return link.outcome === 'skipped'
+      ? { status: 'not_emailed', reason: link.reason }
+      : { status: 'email_failed', error: link.error, viewUrl: null, tokenId: null };
+  }
+
+  const sent = await deps.send(
+    renderEstimateSentEmail({
+      recipientEmail,
+      recipientName: input.recipientName,
+      organizationName: input.organizationName,
+      viewUrl: link.viewUrl,
+      replyToEmail: input.sentByEmail,
+    })
+  );
+  return sent.success
+    ? { status: 'emailed', recipientEmail, viewUrl: link.viewUrl, tokenId: link.tokenId, messageId: sent.id }
+    : { status: 'email_failed', error: sent.error, viewUrl: link.viewUrl, tokenId: link.tokenId };
 }
