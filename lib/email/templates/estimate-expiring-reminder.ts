@@ -52,5 +52,8 @@ export function renderEstimateExpiringReminderEmail(input: EstimateExpiringRemin
     `<p>${escapeHtml(closingLine)}</p>`,
   ].join('\n');
 
-  return { to: input.recipientEmail, subject, text, html };
+  // Sent as the org, like the "estimate sent" email this follows up on, so
+  // both arrive from the same name. No Reply-To: the cron has no sending
+  // member to route replies to.
+  return { to: input.recipientEmail, subject, text, html, fromName: input.organizationName };
 }
