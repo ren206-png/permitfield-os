@@ -65,7 +65,7 @@ export const permitGeneratePdf = inngest.createFunction(
     const context = await step.run('load-context', async () => {
       const { data: application, error: appError } = await supabase
         .from('permit_applications')
-        .select('id, org_id, contractor_id, permit_type_id, status, project_title, estimated_job_value_cents')
+        .select('id, org_id, contractor_id, permit_type_id, status, project_title, project_address, estimated_job_value_cents')
         .eq('id', applicationId)
         .single();
       if (appError || !application) {
@@ -124,6 +124,18 @@ export const permitGeneratePdf = inngest.createFunction(
         );
       }
 
+      // The contractor is the applicant on every mapped form, so its org's
+      // contact email fills applicant.email. Optional: no profile row just
+      // leaves that field blank.
+      const { data: taxProfile, error: taxProfileError } = await supabase
+        .from('org_tax_profiles')
+        .select('invoice_contact_email')
+        .eq('org_id', application.org_id)
+        .maybeSingle();
+      if (taxProfileError) {
+        throw new Error(`Failed to load org_tax_profiles for ${application.org_id}: ${taxProfileError.message}`);
+      }
+
       const { data: filings, error: filingsError } = await supabase
         .from('permit_type_filings')
         .select('id, form_template_path')
@@ -141,6 +153,8 @@ export const permitGeneratePdf = inngest.createFunction(
         parsedData: (latestExtraction?.parsed_data ?? null) as Record<string, unknown> | null,
         estimatedJobValueCents: application.estimated_job_value_cents as number | null,
         projectTitle: application.project_title as string | null,
+        projectAddress: application.project_address as string | null,
+        orgContactEmail: (taxProfile?.invoice_contact_email ?? null) as string | null,
         contractor,
         filings: (filings ?? []) as { id: string; form_template_path: string | null }[],
       };
@@ -185,6 +199,8 @@ export const permitGeneratePdf = inngest.createFunction(
       parsedData: context.parsedData,
       estimatedJobValueCents: context.estimatedJobValueCents,
       projectTitle: context.projectTitle,
+      projectAddress: context.projectAddress,
+      orgContactEmail: context.orgContactEmail,
       contractor: context.contractor,
     });
 
@@ -336,13 +352,15 @@ export const permitGeneratePdf = inngest.createFunction(
       generatedDocumentIds.push(result.generatedDocumentId);
     }
 
-    // Success means at least one filing actually produced a document.
-    // Zero-out is possible (and honest) when every filing for this
-    // permit_type is still missing a template and/or field map -- routed to
-    // document_generation_failed rather than documents_generated, since
-    // "generated" would misrepresent an application that has no filled PDF
-    // at all.
-    const succeeded = generatedDocumentIds.length > 0;
+    // Success means at least one filing actually produced a document --
+    // except when the permit type has no fillable form at all (no filing has
+    // a template, e.g. Calgary, which takes commercial applications only
+    // through its online portal). There is nothing to generate there, so the
+    // step is complete, not failed; routing it to document_generation_failed
+    // would strand the application before submission. When at least one
+    // template exists but nothing was produced, it is still a failure.
+    const nothingToFill = context.filings.every((filing) => !filing.form_template_path);
+    const succeeded = generatedDocumentIds.length > 0 || nothingToFill;
 
     await step.run('mark-final-status', async () => {
       const nextStatus = succeeded ? 'documents_generated' : 'document_generation_failed';

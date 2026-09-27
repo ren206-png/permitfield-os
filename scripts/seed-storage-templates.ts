@@ -11,15 +11,13 @@
 // Surrey/Vancouver were added, not a regression introduced by adding them.
 //
 // Source of truth for the manifest below: the exact `form_template_path`
-// values in supabase/seed.sql's `permit_type_filings` insert, paired with
-// the real government PDF already committed at that path under
-// docs-reference-forms/ (downloaded and pdf-lib-inspected per
-// PHASE_0_FINDINGS.md and JURISDICTION_EXPANSION_SCOPE.md). Uploads all 9,
-// including ESA's and Calgary's -- those two have no `permit_form_fields`
-// rows (no verified AcroForm map, ESA's form is flat/scanned, Calgary's
-// needs manual review first per seed.sql's own comment), but the bucket
-// still needs real bytes at their paths for the download step in
-// generate-pdf.ts not to 404 once/if those filings are ever exercised.
+// values in the reference catalog's `permit_type_filings` rows
+// (supabase/migrations/20260806000068 and ...072), paired with the real
+// government PDF committed at that path under docs-reference-forms/.
+// Uploads all 8. Calgary is deliberately absent: the file once stored for
+// it (docs-reference-forms/calgary-commercial-permit.pdf) turned out to be
+// an unrelated energy-rebate letter of intent, and Calgary has no PDF
+// application form for commercial alterations -- see migration ...072.
 //
 // Idempotent (upsert), safe to re-run. Requires SUPABASE_SERVICE_ROLE_KEY
 // and NEXT_PUBLIC_SUPABASE_URL (see .env.example) -- createServiceClient()
@@ -54,10 +52,6 @@ const TEMPLATE_MANIFEST: TemplateUpload[] = [
   {
     bucketPath: 'esa/icia-low-voltage.pdf',
     localFile: 'esa-icia-low-voltage.pdf',
-  },
-  {
-    bucketPath: 'calgary/commercial-building-project-application.pdf',
-    localFile: 'calgary-commercial-permit.pdf',
   },
   {
     bucketPath: 'surrey/building-permit-application.pdf',

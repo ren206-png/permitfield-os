@@ -17,12 +17,11 @@
 export const PDF_FILL_MIN_CONFIDENCE = 0.75;
 
 // Font size for coordinate-overlay text (lib/pdf/overlay-coordinates.ts).
-// 10pt is a conservative, generally-legible default for a standard-size
-// form field; overlay_x/overlay_y are per-field but overlay forms don't
-// carry a per-field font size in the schema (permit_form_fields has no such
-// column) -- one fixed size for every overlay field is a known simplification,
-// documented as a Phase 4 limitation rather than silently varying by field.
-export const OVERLAY_FONT_SIZE = 10;
+// One size for every overlay field (permit_form_fields has no per-field size
+// column). 7pt matches the first real overlay form, ESA's ICIA-LV (Form
+// 1015LV_A), whose own labels are 7.4-8.2pt on ~9pt rows -- the earlier 10pt
+// placeholder would overlap the line above.
+export const OVERLAY_FONT_SIZE = 7;
 
 // Gate 4 (Quotes & Payments), Phase A addition: layout constants for
 // lib/pdf/estimate-pdf.ts and lib/pdf/invoice-pdf.ts, which -- unlike every
