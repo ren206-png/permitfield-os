@@ -40,7 +40,7 @@ begin
   where n.nspname = 'public'
     and p.proname = any (array[
       'record_change_order_acceptance', 'record_estimate_acceptance', 'record_online_payment',
-      'reverse_online_payment_from_webhook', 'update_org_stripe_connect_account_status'
+      'reverse_online_payment_from_webhook', 'update_org_stripe_connect_account_status', 'record_permit_signature'
     ])
     and has_function_privilege('authenticated', p.oid, 'execute');
   if v_leaks is not null then
@@ -65,7 +65,8 @@ begin
       'override_readiness_check', 'record_payment', 'replace_application_document', 'reverse_payment',
       'review_project_permit_requirement', 'send_change_order_for_acceptance', 'send_estimate',
       'transition_permit_status', 'upsert_org_stripe_connect_account', 'verify_jurisdiction_source',
-      'void_change_order', 'void_credit_note', 'void_invoice'
+      'void_change_order', 'void_credit_note', 'void_invoice',
+      'request_permit_signature', 'cancel_permit_signature_request'
     ])
     and not has_function_privilege('authenticated', p.oid, 'execute');
   if v_missing is not null then
@@ -79,7 +80,7 @@ begin
   where n.nspname = 'public'
     and p.proname = any (array[
       'record_change_order_acceptance', 'record_estimate_acceptance', 'record_online_payment',
-      'reverse_online_payment_from_webhook', 'update_org_stripe_connect_account_status'
+      'reverse_online_payment_from_webhook', 'update_org_stripe_connect_account_status', 'record_permit_signature'
     ])
     and not has_function_privilege('service_role', p.oid, 'execute');
   if v_missing is not null then

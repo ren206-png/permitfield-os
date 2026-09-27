@@ -30,7 +30,9 @@
 -- filing_submissions (20260806000070) was added to this set because it
 -- references generated_documents, so generated_documents can only be
 -- truncated together with it; it is itself append-only with TRUNCATE
--- revoked, so it belongs here anyway.
+-- revoked, so it belongs here anyway. permit_signature_requests and
+-- permit_signatures (20260806000073) joined for the same reason: both
+-- reference generated_documents, and both have TRUNCATE revoked.
 --
 -- Confirmed via grep that no table outside this set of seven has a foreign
 -- key into any of them, so no other tables need to be included.
@@ -56,15 +58,17 @@ begin;
 -- confirm service_role can actually truncate them -- the gap this
 -- migration fixes was live, not hypothetical.
 grant truncate on extractions, audits, audit_findings, generated_documents,
-  audit_logs, application_status_history, document_revisions, filing_submissions to service_role;
+  audit_logs, application_status_history, document_revisions, filing_submissions,
+  permit_signature_requests, permit_signatures to service_role;
 
 set role service_role;
 
 do $$
 begin
   execute 'truncate table extractions, audits, audit_findings, generated_documents, '
-       || 'audit_logs, application_status_history, document_revisions, filing_submissions';
-  raise notice 'PASS (control): service_role TRUNCATE succeeded on all eight append-only tables while the grant is present -- confirms the platform-default gap this migration closes was real and reachable, not merely asserted from reading a grants file.';
+       || 'audit_logs, application_status_history, document_revisions, filing_submissions, '
+       || 'permit_signature_requests, permit_signatures';
+  raise notice 'PASS (control): service_role TRUNCATE succeeded on all ten tables while the grant is present -- confirms the platform-default gap this migration closes was real and reachable, not merely asserted from reading a grants file.';
 exception
   when insufficient_privilege then
     raise exception 'FAIL (control): service_role TRUNCATE was rejected even with the grant present -- the later failure assertion would prove nothing without this control succeeding first. (%)', sqlerrm;
@@ -75,7 +79,8 @@ reset role;
 -- Step 2: revoke again, restoring this migration's actual (already
 -- applied, pre-existing) effect for the assert step below.
 revoke truncate on extractions, audits, audit_findings, generated_documents,
-  audit_logs, application_status_history, document_revisions, filing_submissions from service_role;
+  audit_logs, application_status_history, document_revisions, filing_submissions,
+  permit_signature_requests, permit_signatures from service_role;
 
 -- Step 3 (assert): the identical TRUNCATE now fails with
 -- insufficient_privilege -- proving 20260806000033's revoke actually
@@ -86,11 +91,12 @@ set role service_role;
 do $$
 begin
   execute 'truncate table extractions, audits, audit_findings, generated_documents, '
-       || 'audit_logs, application_status_history, document_revisions, filing_submissions';
+       || 'audit_logs, application_status_history, document_revisions, filing_submissions, '
+       || 'permit_signature_requests, permit_signatures';
   raise exception 'FAIL (assert): service_role TRUNCATE succeeded on the append-only tables after the grant was revoked -- the TRUNCATE gap this migration was meant to close is still open.';
 exception
   when insufficient_privilege then
-    raise notice 'PASS (assert): service_role TRUNCATE on all eight append-only tables correctly rejected (permission denied) once the grant is revoked. (%)', sqlerrm;
+    raise notice 'PASS (assert): service_role TRUNCATE on all ten tables correctly rejected (permission denied) once the grant is revoked. (%)', sqlerrm;
 end $$;
 
 reset role;

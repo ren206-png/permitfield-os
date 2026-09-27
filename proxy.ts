@@ -86,14 +86,14 @@ export async function proxy(request: NextRequest) {
     isJurisdictionPagesEnabled() &&
     (pathname === '/coverage' || pathname.startsWith('/permits/ca/'));
   // Client-facing links emailed to an org's own customers
-  // (app/{estimate,invoice,change-order,credit-note}/[token]). Their
+  // (app/{estimate,invoice,change-order,credit-note,sign}/[token]). Their
   // recipients never have an account, so redirecting them to /login made
   // every quote, invoice, change order and credit note unopenable. Safe to
   // allow unconditionally: each page authorizes solely by resolving its own
   // bearer token (lib/bridge/client-portal.ts's resolveTargetToken) first and
   // returns the same 404 for any bad, expired, revoked, or flag-disabled
   // token -- the proxy was never their authorization boundary.
-  const isPublicClientLinkRoute = /^\/(estimate|invoice|change-order|credit-note)\/[^/]+\/?$/.test(pathname);
+  const isPublicClientLinkRoute = /^\/(estimate|invoice|change-order|credit-note|sign)\/[^/]+\/?$/.test(pathname);
 
   if (
     !user &&
