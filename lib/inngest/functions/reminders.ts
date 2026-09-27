@@ -192,6 +192,7 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
       organizationName: orgName,
       viewUrl: link.viewUrl,
       expiresOnDisplay: upcomingEstimateExpiryDate(estimate.expiryDate, new Date().toISOString().slice(0, 10)),
+      replyToEmail: await loadOrgContactEmail(supabase, job.org_id),
     });
 
     const result = await sendEmail(email);
@@ -340,6 +341,7 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
     invoiceNumber: invoice.invoiceNumber,
     dueDateDisplay: invoice.dueDate ?? 'an earlier date',
     overdue: job.kind === 'invoice_overdue',
+    replyToEmail: await loadOrgContactEmail(supabase, job.org_id),
   });
 
   const result = await sendEmail(email);
@@ -441,6 +443,25 @@ async function loadOrganizationName(supabase: QPClient, orgId: string): Promise<
     throw new Error(`Failed to load organizations row for ${orgId}: ${error.message}`);
   }
   return (data?.name as string | undefined) ?? 'Your contractor';
+}
+
+/**
+ * The org's client-facing contact email -- org_tax_profiles
+ * .invoice_contact_email, the same address the public invoice page shows
+ * and authority submissions reply to (lib/submissions/submit.ts). Used as
+ * Reply-To on client reminders, which have no sending member of their own.
+ * Null when the org has no profile or left the field blank.
+ */
+async function loadOrgContactEmail(supabase: QPClient, orgId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('org_tax_profiles')
+    .select('invoice_contact_email')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to load org_tax_profiles row for ${orgId}: ${error.message}`);
+  }
+  return (data?.invoice_contact_email as string | null | undefined)?.trim() || null;
 }
 
 interface ClientContact {

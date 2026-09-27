@@ -20,6 +20,10 @@ export interface EstimateExpiringReminderEmailInput {
    * switches to "still awaiting your response" wording rather than
    * claiming an expiry. */
   expiresOnDisplay: string | null;
+  /** The org's contact email (org_tax_profiles.invoice_contact_email), set
+   * as Reply-To. The cron has no sending member, so this is the only place
+   * a reply can go; null leaves Reply-To unset. */
+  replyToEmail?: string | null;
 }
 
 export function renderEstimateExpiringReminderEmail(input: EstimateExpiringReminderEmailInput): RenderedEmail {
@@ -32,7 +36,11 @@ export function renderEstimateExpiringReminderEmail(input: EstimateExpiringRemin
     ? `This is a reminder that the estimate ${input.organizationName} sent you expires on ${input.expiresOnDisplay}.`
     : `This is a reminder that the estimate ${input.organizationName} sent you is still awaiting your response.`;
 
-  const closingLine = `If you have already responded, please disregard this reminder. Questions? Reply to this email or contact ${input.organizationName} directly.`;
+  // "Reply to this email" only when a reply actually reaches the org --
+  // without a Reply-To it would land at the platform's sender address.
+  const closingLine = input.replyToEmail
+    ? `If you have already responded, please disregard this reminder. Questions? Reply to this email or contact ${input.organizationName} directly.`
+    : `If you have already responded, please disregard this reminder. Questions? Contact ${input.organizationName} directly.`;
 
   const text = [
     `Hi ${greetingName},`,
@@ -53,7 +61,13 @@ export function renderEstimateExpiringReminderEmail(input: EstimateExpiringRemin
   ].join('\n');
 
   // Sent as the org, like the "estimate sent" email this follows up on, so
-  // both arrive from the same name. No Reply-To: the cron has no sending
-  // member to route replies to.
-  return { to: input.recipientEmail, subject, text, html, fromName: input.organizationName };
+  // both arrive from the same name.
+  return {
+    to: input.recipientEmail,
+    subject,
+    text,
+    html,
+    fromName: input.organizationName,
+    ...(input.replyToEmail ? { replyTo: input.replyToEmail } : {}),
+  };
 }
