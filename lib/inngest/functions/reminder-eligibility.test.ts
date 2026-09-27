@@ -5,6 +5,7 @@ import {
   evaluateContractorLicenseReminderEligibility,
   evaluatePermitExpiryReminderEligibility,
   sumRecordedAllocationCents,
+  upcomingEstimateExpiryDate,
   type EstimateStatus,
 } from './reminder-eligibility';
 
@@ -135,5 +136,23 @@ describe('evaluatePermitExpiryReminderEligibility', () => {
     const result = evaluatePermitExpiryReminderEligibility({ permitExpiresOn: null });
     expect(result.eligible).toBe(false);
     expect(result.reason).toContain('no longer has');
+  });
+});
+
+describe('upcomingEstimateExpiryDate', () => {
+  it('returns a future expiry date', () => {
+    expect(upcomingEstimateExpiryDate('2026-10-15', '2026-09-26')).toBe('2026-10-15');
+  });
+
+  it('still returns the date on the expiry day itself', () => {
+    expect(upcomingEstimateExpiryDate('2026-09-26', '2026-09-26')).toBe('2026-09-26');
+  });
+
+  it('returns null once the expiry date has passed, so the reminder never claims a past expiry', () => {
+    expect(upcomingEstimateExpiryDate('2026-09-25', '2026-09-26')).toBeNull();
+  });
+
+  it('returns null when the estimate has no expiry date', () => {
+    expect(upcomingEstimateExpiryDate(null, '2026-09-26')).toBeNull();
   });
 });

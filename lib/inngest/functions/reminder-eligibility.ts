@@ -42,6 +42,19 @@ export function evaluateEstimateReminderEligibility(status: EstimateStatus): Rem
   return { eligible: false, reason: `Estimate status is "${status}", no longer eligible for an expiring reminder.` };
 }
 
+/**
+ * The expiry date an estimate reminder may mention: `expiryDate` when it is
+ * today or later, else null. Nothing in this codebase moves a past-expiry
+ * estimate out of `sent` (estimates.expiry_date is informational only), so a
+ * still-eligible estimate can carry a date that has already gone by -- the
+ * reminder must not tell the client it "expires on" that date. Both values
+ * are `YYYY-MM-DD` strings, so a plain string comparison orders them.
+ */
+export function upcomingEstimateExpiryDate(expiryDate: string | null, todayIsoDate: string): string | null {
+  if (!expiryDate) return null;
+  return expiryDate >= todayIsoDate ? expiryDate : null;
+}
+
 export interface PaymentAllocationForEligibility {
   amountCents: bigint;
   /** The *payment's* own status (payments.status), not the allocation's
