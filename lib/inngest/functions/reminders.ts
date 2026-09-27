@@ -6,7 +6,7 @@ import { writeAuditLog } from '@/lib/audit/log';
 import { SITE_URL } from '@/lib/seo';
 import { dbValueToCents, dbValueToCentsOrNull } from '@/lib/quotes-payments/db-mapping';
 import { sendEmail } from '@/lib/email/send';
-import { renderEstimateSentEmail } from '@/lib/email/templates/estimate-sent';
+import { renderEstimateExpiringReminderEmail } from '@/lib/email/templates/estimate-expiring-reminder';
 import { renderInvoiceDueReminderEmail } from '@/lib/email/templates/invoice-due-reminder';
 import { renderContractorLicenseExpiringEmail } from '@/lib/email/templates/contractor-license-expiring';
 import { renderPermitExpiringEmail } from '@/lib/email/templates/permit-expiring';
@@ -17,6 +17,7 @@ import {
   evaluateContractorLicenseReminderEligibility,
   evaluatePermitExpiryReminderEligibility,
   sumRecordedAllocationCents,
+  upcomingEstimateExpiryDate,
   type EstimateStatus,
   type InvoiceStatus,
 } from './reminder-eligibility';
@@ -185,11 +186,12 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
         : { outcome: 'send-failed', error: link.error };
     }
 
-    const email = renderEstimateSentEmail({
+    const email = renderEstimateExpiringReminderEmail({
       recipientEmail: client.email,
       recipientName: client.name,
       organizationName: orgName,
       viewUrl: link.viewUrl,
+      expiresOnDisplay: upcomingEstimateExpiryDate(estimate.expiryDate, new Date().toISOString().slice(0, 10)),
     });
 
     const result = await sendEmail(email);
@@ -517,6 +519,7 @@ async function loadPermitSnapshot(
 interface EstimateSnapshot {
   status: EstimateStatus;
   clientId: string;
+  expiryDate: string | null;
 }
 
 async function loadEstimateSnapshot(
@@ -526,7 +529,7 @@ async function loadEstimateSnapshot(
 ): Promise<EstimateSnapshot | null> {
   const { data, error } = await supabase
     .from('estimates')
-    .select('status, client_id')
+    .select('status, client_id, expiry_date')
     .eq('org_id', orgId)
     .eq('id', estimateId)
     .maybeSingle();
@@ -534,7 +537,11 @@ async function loadEstimateSnapshot(
     throw new Error(`Failed to load estimates row ${estimateId}: ${error.message}`);
   }
   if (!data) return null;
-  return { status: data.status as EstimateStatus, clientId: data.client_id as string };
+  return {
+    status: data.status as EstimateStatus,
+    clientId: data.client_id as string,
+    expiryDate: (data.expiry_date as string | null) ?? null,
+  };
 }
 
 interface InvoiceSnapshot {
