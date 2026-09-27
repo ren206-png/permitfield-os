@@ -20,6 +20,7 @@ afterEach(() => {
 const ORG_ID = 'org-1';
 const ACTOR = { actorUserId: 'user-1', actorRole: 'org_owner' as const };
 const EXTERNAL_ACTOR = { externalActorId: 'token-1', externalActorLabel: 'jane@client.example' };
+const SIGNATURE = { signature: { consentText: 'I agree to sign electronically.', method: 'typed' as const, pngBase64: null } };
 
 const TAX_PROFILE_ROW = {
   id: 'profile-1',
@@ -245,6 +246,7 @@ describe('recordChangeOrderAcceptance()', () => {
         typedName: 'Jane Doe',
         claimedAuthority: 'Owner',
         ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
       })
     ).rejects.toBeInstanceOf(QuotesPaymentsDisabledError);
   });
@@ -280,6 +282,7 @@ describe('recordChangeOrderAcceptance()', () => {
       ip: '203.0.113.7',
       userAgent: 'Mozilla/5.0',
       ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
     });
 
     expect(acceptance.id).toBe('acc-1');
@@ -308,6 +311,7 @@ describe('recordChangeOrderAcceptance()', () => {
         typedName: 'Jane Doe',
         claimedAuthority: 'Owner',
         ...EXTERNAL_ACTOR,
+        ...SIGNATURE,
       })
     ).rejects.toThrow(/stale_change_order/);
   });

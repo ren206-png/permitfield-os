@@ -284,9 +284,17 @@ do $$
 declare
   v_count int;
 begin
-  select count(*) into v_count from api_request_log;
+  -- Scoped to rows this test inserted, so pre-existing local data (e.g. a
+  -- developer's own API smoke tests) doesn't skew the counts.
+  select count(*) into v_count from api_request_log
+  where api_key_id = (select id from _test_ids where label = 'key_a2');
   if v_count <> 1 then
-    raise exception 'FAIL: org A owner should see exactly its 1 log row, saw %', v_count;
+    raise exception 'FAIL: org A owner should see exactly its 1 log row for the test key, saw %', v_count;
+  end if;
+
+  select count(*) into v_count from api_request_log where ip = '203.0.113.9';
+  if v_count <> 0 then
+    raise exception 'FAIL: org A owner can see an unresolved-key (org-less) log row';
   end if;
 
   begin

@@ -22,6 +22,7 @@ import { centsToDbValue, dbValueToCents, dbValueToCentsOrNull } from './db-mappi
 import { computeTaxOutcome, serializeLineItemBreakdowns, type QuotesPaymentsReviewReason } from './tax-result';
 import type { LineItemDraftInput, LineItemRecord, QPClient } from './types';
 import { QuotesPaymentsDisabledError, InsufficientEntitlementError } from './estimates';
+import type { SignatureSubmission } from '@/lib/esign/signature';
 
 async function assertChangeOrdersEntitlement(orgId: string): Promise<void> {
   if (!isQuotesPaymentsEnabled()) {
@@ -366,6 +367,7 @@ export interface RecordChangeOrderAcceptanceParams {
   userAgent?: string | null;
   externalActorId: string;
   externalActorLabel: string;
+  signature: SignatureSubmission;
 }
 
 /**
@@ -394,6 +396,9 @@ export async function recordChangeOrderAcceptance(
     p_claimed_authority: params.claimedAuthority,
     p_ip: params.ip ?? null,
     p_user_agent: params.userAgent ?? null,
+    p_esign_consent_text: params.signature.consentText,
+    p_signature_method: params.signature.method,
+    p_signature_png_base64: params.signature.pngBase64,
   });
 
   if (rpcError) {
@@ -416,6 +421,7 @@ export async function recordChangeOrderAcceptance(
       acceptanceId: acceptance.id,
       typedName: acceptance.typedName,
       claimedAuthority: acceptance.claimedAuthority,
+      signatureMethod: params.signature.method,
     },
   });
   if (auditError) {

@@ -186,7 +186,7 @@ declare
   v_status change_order_status;
 begin
   select id into v_id from _test_ids where label = 'co_a1';
-  select * into v_acc from record_change_order_acceptance(v_id, 'hash-abc', '{"line_items":[]}'::jsonb, 'Jane Doe', 'Property Owner', '203.0.113.5'::inet, 'test-agent/1.0');
+  select * into v_acc from record_change_order_acceptance(v_id, 'hash-abc', '{"line_items":[]}'::jsonb, 'Jane Doe', 'Property Owner', '203.0.113.5'::inet, 'test-agent/1.0', 'I agree to sign electronically.', 'typed', null);
 
   if v_acc.change_order_id <> v_id or v_acc.typed_name <> 'Jane Doe' then
     raise exception 'FAIL: record_change_order_acceptance() did not persist expected fields (change_order_id=%, typed_name=%)', v_acc.change_order_id, v_acc.typed_name;
