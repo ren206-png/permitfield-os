@@ -88,7 +88,10 @@ export function isApplicationsEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_APPLICATIONS');
 }
 
-// Lifecycle & Compliance Expansion, Phase 1.5. Gates nothing at runtime yet --
+// Lifecycle & Compliance Expansion, Phase 1.5. Now gates the application
+// page's "Permit progress" panel (app/(app)/applications/[id]/
+// readiness-panel.tsx) and its Server Actions: permit status changes, the
+// readiness checklist, and the override. Historical note below --
 // same "declared ahead of its consumer" pattern as every flag above: this
 // gate ships supabase/migrations/20260806000025_readiness_checklist.sql
 // (the readiness_checklist_items table, compute_readiness_score()/

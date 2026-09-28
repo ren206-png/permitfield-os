@@ -3,7 +3,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
-import { isCitySubmissionEnabled, isDrawingReviewEnabled, isPermitEsignEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isDrawingReviewEnabled, isPermitEsignEnabled, isReadinessEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
@@ -11,6 +11,8 @@ import { FindingsList } from './findings-list';
 import { ReviewActions } from './review-actions';
 import { SubmissionPanel } from './submission-panel';
 import { SignaturePanel } from './signature-panel';
+import { ReadinessPanel } from './readiness-panel';
+import type { PermitStatus } from '@/lib/permit-status/transitions';
 import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
@@ -48,13 +50,14 @@ interface DrawingFindingViewModel {
 // routes in this same family (confirm-review, documents).
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: applicationId } = await params;
-  const { orgId } = await requireOrgContext();
+  const { orgId, role } = await requireOrgContext();
   const supabase = await createClient();
 
   const { data: application, error: applicationError } = await supabase
     .from('permit_applications')
     .select(
       `id, project_title, project_address, status, estimated_job_value_cents, currency_code, created_at, permit_expires_on, permit_type_id,
+       permit_status, readiness_override_at, readiness_override_reason,
        contractors ( company_name ),
        permit_types ( title, jurisdictions ( municipality, province_code, coverage_level ) )`
     )
@@ -314,6 +317,20 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       </div>
 
       <ReviewActions applicationId={applicationId} status={application.status} hideSubmit={citySubmission} />
+
+      {isReadinessEnabled() && (
+        <ReadinessPanel
+          orgId={orgId}
+          applicationId={applicationId}
+          role={role}
+          permitStatus={(application.permit_status as PermitStatus | null) ?? null}
+          override={
+            application.readiness_override_at
+              ? { at: application.readiness_override_at as string, reason: (application.readiness_override_reason as string) ?? '' }
+              : null
+          }
+        />
+      )}
 
       {isPermitEsignEnabled() && (application.status === 'documents_generated' || application.status === 'submitted') && (
         <SignaturePanel
