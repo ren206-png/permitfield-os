@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { isMarketingV2Enabled, isJurisdictionPagesEnabled } from '@/lib/flags';
+import { needsMfaChallenge } from '@/lib/auth/mfa';
+import { safeNextPath } from '@/lib/auth/next-path';
 
 // Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` (same
 // runtime behavior, new file/export name -- see
@@ -99,8 +101,21 @@ export async function proxy(request: NextRequest) {
   // token -- the proxy was never their authorization boundary.
   const isPublicClientLinkRoute = /^\/(estimate|invoice|change-order|credit-note|sign|invite)\/[^/]+\/?$/.test(pathname);
 
+  const isMfaRoute = pathname === '/login/mfa';
+
+  // Session API routes (see config.matcher below) keep doing their own auth
+  // and return JSON; the proxy only refreshes the session and refuses a
+  // session that still owes its two-factor code.
+  if (pathname.startsWith('/api/')) {
+    if (user && needsMfaChallenge((await supabase.auth.mfa.getAuthenticatorAssuranceLevel()).data)) {
+      return NextResponse.json({ error: 'Two-factor verification required.' }, { status: 401 });
+    }
+    return response;
+  }
+
   if (
     !user &&
+    !isMfaRoute &&
     !isAuthRoute &&
     !isAuthCallbackRoute &&
     !isPublicMarketingRoute &&
@@ -113,8 +128,20 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && isAuthRoute) {
-    const redirectUrl = new URL('/applications', request.url);
+    const redirectUrl = new URL(safeNextPath(request.nextUrl.searchParams.get('next')) ?? '/applications', request.url);
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // Signed in, but with an authenticator app set up and no code entered yet
+  // this session: every signed-in page and Server Action waits behind the
+  // code screen. Public pages (client links, marketing) are unaffected.
+  const isPublicRoute =
+    isAuthCallbackRoute || isPublicMarketingRoute || isPublicSeoRoute || isPublicJurisdictionRoute || isPublicClientLinkRoute;
+  if (user && !isMfaRoute && !isPublicRoute) {
+    const { data: levels } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (needsMfaChallenge(levels)) {
+      return NextResponse.redirect(new URL('/login/mfa', request.url));
+    }
   }
 
   return response;
@@ -127,5 +154,9 @@ export const config = {
     // (see app/api/documents/route.ts, confirm-review/route.ts) and must
     // return JSON errors, not an HTML redirect, on missing auth.
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    // Session-authenticated API routes, for the two-factor check above.
+    // Everything else under /api (Inngest, webhooks, the bearer-key public
+    // API, token-authorized public PDFs) never carries a user session.
+    '/api/(applications|documents|estimates|invoices|payments)/:path*',
   ],
 };
