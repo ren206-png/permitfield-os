@@ -9,6 +9,8 @@ import { can } from '@/lib/entitlements';
 import { sendEstimate } from '@/lib/quotes-payments/estimates';
 import { issueTargetToken } from '@/lib/bridge/client-portal';
 import { SITE_URL } from '@/lib/seo';
+import { planEstimateReminders } from '@/lib/reminders/quote-reminder-schedule';
+import { replacePendingReminders } from '@/lib/reminders/replace-pending-reminders';
 import { sendEmail } from '@/lib/email/send';
 import { writeAuditLog } from '@/lib/audit/log';
 import { emailSentEstimateToClient } from '@/lib/quotes-payments/estimate-client-link';
@@ -72,6 +74,22 @@ export async function sendEstimateAction(
   if (result.status === 'review_required') {
     return { reviewMessage: result.message };
   }
+
+  // Each send (a new revision) replaces any pending expiry reminder with one
+  // for this revision's expiry date. Best-effort -- see replacePendingReminders().
+  const { data: sentEstimate } = await supabase
+    .from('estimates')
+    .select('expiry_date')
+    .eq('id', estimateId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  await replacePendingReminders(supabase, {
+    orgId,
+    targetKind: 'estimate',
+    targetId: estimateId,
+    planned: planEstimateReminders((sentEstimate?.expiry_date as string | null) ?? null, new Date()),
+    cancelReason: 'Estimate re-sent.',
+  });
 
   revalidatePath(`/estimates/${estimateId}`);
 

@@ -12,6 +12,8 @@ import { createDraftCreditNote, issueCreditNote, voidCreditNote } from '@/lib/qu
 import { parseCurrencyToCents } from '@/lib/money/cents';
 import { issueTargetToken } from '@/lib/bridge/client-portal';
 import { SITE_URL } from '@/lib/seo';
+import { planInvoiceReminders } from '@/lib/reminders/quote-reminder-schedule';
+import { replacePendingReminders } from '@/lib/reminders/replace-pending-reminders';
 
 // Gate 4 (Quotes & Payments), Phase A. Same double-gate discipline as
 // app/(app)/estimates/[id]/actions.ts's sendEstimateAction: flag re-checked
@@ -58,6 +60,22 @@ export async function issueInvoiceAction(
     return { reviewMessage: result.message };
   }
 
+  // Due-soon and overdue reminders to the client, off the issued due date.
+  // Best-effort -- see replacePendingReminders().
+  const { data: issuedInvoice } = await supabase
+    .from('invoices')
+    .select('due_date')
+    .eq('id', invoiceId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  await replacePendingReminders(supabase, {
+    orgId,
+    targetKind: 'invoice',
+    targetId: invoiceId,
+    planned: planInvoiceReminders((issuedInvoice?.due_date as string | null) ?? null, new Date()),
+    cancelReason: 'Invoice re-issued.',
+  });
+
   revalidatePath(`/invoices/${invoiceId}`);
   return {};
 }
@@ -89,6 +107,15 @@ export async function voidInvoiceAction(_prevState: VoidInvoiceState, formData: 
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Failed to void the invoice.' };
   }
+
+  // The poller would skip them anyway; cancelling now keeps the page honest.
+  await replacePendingReminders(supabase, {
+    orgId,
+    targetKind: 'invoice',
+    targetId: invoiceId,
+    planned: [],
+    cancelReason: 'Invoice voided.',
+  });
 
   revalidatePath(`/invoices/${invoiceId}`);
   return {};
