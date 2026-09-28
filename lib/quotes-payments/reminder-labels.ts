@@ -7,14 +7,9 @@
 // place avoids the two call sites silently drifting apart if a kind is
 // ever renamed.
 //
-// Note for whoever picks up reminder-job creation next: as of this pass,
-// nothing in the codebase ever INSERTs a reminder_jobs row (confirmed by
-// lib/inngest/functions/reminders.ts's own header comment, "no
-// job-creation call site exists yet") -- the poller and this UI can both
-// read the table, but it will show "No reminders scheduled" in every org
-// until a creation call site (e.g. on send_estimate()/issue_invoice()) is
-// added separately. This file and the detail-page UI it feeds are read-side
-// only; they don't paper over that gap.
+// Jobs are created when an estimate is sent and when an invoice is issued
+// (lib/reminders/quote-reminder-schedule.ts, via the send/issue Server
+// Actions), so these labels now describe real scheduled reminders.
 export type ReminderJobKind = 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue';
 
 export const REMINDER_KIND_LABELS: Record<ReminderJobKind, string> = {

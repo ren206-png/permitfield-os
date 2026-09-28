@@ -126,10 +126,8 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
   // (supabase/migrations/20260806000057_reminder_jobs.sql) are both
   // already `authenticated`-readable via is_org_member(org_id) RLS -- no
   // schema change needed for this read, only a UI that hadn't existed
-  // anywhere in the app until this pass. See reminder-labels.ts's header
-  // comment for the important caveat: nothing currently ever inserts a
-  // reminder_jobs row, so this will render "No reminders scheduled" for
-  // every estimate today until a creation call site is added separately.
+  // anywhere in the app until this pass. Jobs are scheduled when the
+  // estimate is sent (lib/reminders/quote-reminder-schedule.ts).
   const { data: reminderJobRows, error: reminderJobsError } = await supabase
     .from('reminder_jobs')
     .select('id, kind, status, send_after, cancel_reason')

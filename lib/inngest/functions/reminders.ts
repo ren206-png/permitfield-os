@@ -22,12 +22,13 @@ import {
   type InvoiceStatus,
 } from './reminder-eligibility';
 import { evaluateEstimateClientLinkFlags, issueEstimateClientLink } from '@/lib/quotes-payments/estimate-client-link';
+import { evaluateInvoiceClientLinkFlags, issueInvoiceClientLink } from '@/lib/quotes-payments/invoice-client-link';
 import type { QPClient } from '@/lib/quotes-payments/types';
 
 // Gate 4 (Quotes & Payments), Phase A -- reminder_jobs poller.
 // GATE_4_FINDINGS.md §5's resolved decision: an Inngest cron trigger
 // (rather than per-job step.sleepUntil() delays scheduled at job-creation
-// time -- no job-creation call site exists yet in this pass either, per
+// time -- (historical) no job-creation call site existed in that pass, per
 // this task's own scope) that scans for due jobs and, for each one,
 // re-derives eligibility live from the current estimate/invoice state
 // (lib/inngest/functions/reminder-eligibility.ts) rather than trusting
@@ -122,8 +123,8 @@ interface DueReminderJobRow {
 type Decision =
   | { outcome: 'skipped'; reason: string }
   // clientLinkTokenId: the client_access_tokens row id (never the raw token)
-  // an estimate reminder's link points at, recorded in the audit log so a
-  // reminder can be traced to the link it issued.
+  // an estimate or invoice reminder's link points at, recorded in the audit
+  // log so a reminder can be traced to the link it issued.
   | { outcome: 'sent'; messageId: string | null; clientLinkTokenId?: string }
   | { outcome: 'send-failed'; error: string };
 
@@ -314,6 +315,14 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
     return { outcome: 'send-failed', error: permitErrors || 'All recipient sends failed.' };
   }
 
+  const invoiceFlagSkipReason = evaluateInvoiceClientLinkFlags({
+    clientPortalEnabled: isClientPortalEnabled(),
+    quotesPaymentsEnabled: isQuotesPaymentsEnabled(),
+  });
+  if (invoiceFlagSkipReason) {
+    return { outcome: 'skipped', reason: invoiceFlagSkipReason };
+  }
+
   const invoice = await loadInvoiceSnapshot(supabase, job.org_id, job.target_id);
   if (!invoice) {
     return { outcome: 'skipped', reason: `Invoice ${job.target_id} no longer exists.` };
@@ -332,12 +341,20 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
     return { outcome: 'skipped', reason: 'Client has no email address on file.' };
   }
 
-  const viewUrl = `${SITE_URL}/invoices/${job.target_id}`;
+  // Issued last, after every skip check, same as the estimate branch.
+  const link = await issueInvoiceClientLink(
+    { siteUrl: SITE_URL, orgId: job.org_id, invoiceId: job.target_id, recipientEmail: client.email, recipientName: client.name },
+    issueTargetToken
+  );
+  if (!link.ok) {
+    return link.outcome === 'skipped' ? { outcome: 'skipped', reason: link.reason } : { outcome: 'send-failed', error: link.error };
+  }
+
   const email = renderInvoiceDueReminderEmail({
     recipientEmail: client.email,
     recipientName: client.name,
     organizationName: orgName,
-    viewUrl,
+    viewUrl: link.viewUrl,
     invoiceNumber: invoice.invoiceNumber,
     dueDateDisplay: invoice.dueDate ?? 'an earlier date',
     overdue: job.kind === 'invoice_overdue',
@@ -346,7 +363,7 @@ async function decideAndSend(supabase: QPClient, job: DueReminderJobRow): Promis
 
   const result = await sendEmail(email);
   return result.success
-    ? { outcome: 'sent', messageId: result.id }
+    ? { outcome: 'sent', messageId: result.id, clientLinkTokenId: link.tokenId }
     : { outcome: 'send-failed', error: result.error };
 }
 
