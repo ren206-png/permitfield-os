@@ -52,6 +52,9 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname === '/login';
+  // Where Google/Microsoft sign-in and email confirmation land with their
+  // one-time code; the visitor has no session until this route sets one.
+  const isAuthCallbackRoute = pathname === '/auth/callback';
   // Marketing Homepage v2 (IMPLEMENTATION_PLAN.md SS2): the one path this
   // proxy lets an unauthenticated request reach besides /login itself, and
   // only while the flag is on. When isMarketingV2Enabled() is false this
@@ -99,6 +102,7 @@ export async function proxy(request: NextRequest) {
   if (
     !user &&
     !isAuthRoute &&
+    !isAuthCallbackRoute &&
     !isPublicMarketingRoute &&
     !isPublicSeoRoute &&
     !isPublicJurisdictionRoute &&

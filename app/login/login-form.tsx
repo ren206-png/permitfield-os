@@ -3,11 +3,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { OAUTH_PROVIDER_LABELS, type OAuthProvider } from '@/lib/auth/oauth-providers';
 
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
 
-export function LoginForm({ next = null }: { next?: string | null }) {
+// The /auth/callback URL a sign-in that leaves the site returns to, carrying
+// the invitation (if any) through. Supabase only honours it when it is in the
+// project's allowed redirect URLs; otherwise it falls back to the Site URL.
+function callbackUrl(next: string | null): string {
+  const url = new URL('/auth/callback', window.location.origin);
+  if (next) url.searchParams.set('next', next);
+  return url.toString();
+}
+
+export function LoginForm({ next = null, providers = [] }: { next?: string | null; providers?: OAuthProvider[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [email, setEmail] = useState('');
@@ -61,7 +71,7 @@ export function LoginForm({ next = null }: { next?: string | null }) {
     const { data, error: authError } =
       mode === 'sign-in'
         ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: callbackUrl(next) } });
 
     if (authError) {
       setError(authError.message);
@@ -94,6 +104,22 @@ export function LoginForm({ next = null }: { next?: string | null }) {
     // signed-out state for one frame.
     router.refresh();
     router.push(next ?? '/applications');
+  }
+
+  async function handleOAuth(provider: OAuthProvider) {
+    setError(null);
+    setInfo(null);
+    setPending(true);
+    const { error: oauthError } = await createClient().auth.signInWithOAuth({
+      provider,
+      // Microsoft (Entra ID) only returns the email address when asked.
+      options: { redirectTo: callbackUrl(next), ...(provider === 'azure' ? { scopes: 'email' } : {}) },
+    });
+    // On success the browser is already leaving for the provider.
+    if (oauthError) {
+      setError(oauthError.message);
+      setPending(false);
+    }
   }
 
   async function handleResend() {
@@ -216,6 +242,23 @@ export function LoginForm({ next = null }: { next?: string | null }) {
           {pending ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
         </button>
       </form>
+
+      {providers.length > 0 && (
+        <div className="mt-6 flex flex-col gap-2">
+          <p className="text-center text-xs text-zinc-500">or</p>
+          {providers.map((provider) => (
+            <button
+              key={provider}
+              type="button"
+              onClick={() => void handleOAuth(provider)}
+              disabled={pending}
+              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Continue with {OAUTH_PROVIDER_LABELS[provider]}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
