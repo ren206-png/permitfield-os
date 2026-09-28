@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
 
-export function LoginForm() {
+export function LoginForm({ next = null }: { next?: string | null }) {
   const router = useRouter();
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [email, setEmail] = useState('');
@@ -93,7 +93,7 @@ export function LoginForm() {
     // router.push() navigates, so /applications doesn't render a stale
     // signed-out state for one frame.
     router.refresh();
-    router.push('/applications');
+    router.push(next ?? '/applications');
   }
 
   async function handleResend() {

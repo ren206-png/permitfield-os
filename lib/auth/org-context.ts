@@ -1,5 +1,12 @@
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Role } from '@/lib/authz';
 import { createClient } from '@/lib/supabase/server';
+
+/** Which organization a member of several is working in. Only a hint: it is
+ * honoured only when the user really is a member of that org (re-checked on
+ * every request below), otherwise the oldest membership is used. */
+export const ACTIVE_ORG_COOKIE = 'permitfield_active_org';
 
 // Every (app) route needs "who is signed in, and which org are they acting
 // as" before it can run a single RLS-scoped query. This is deliberately not
@@ -10,17 +17,18 @@ import { createClient } from '@/lib/supabase/server';
 // stale: an owner removed from an org mid-session loses access on their very
 // next navigation, not whenever a stale cookie happens to expire.
 //
-// Multi-org membership is fully supported by the schema (org_members has no
-// uniqueness constraint on user_id alone), but this phase's UI doesn't yet
-// have an org switcher -- a member of more than one org is deterministically
-// pinned to their oldest membership (first `created_at`). That's a UI scoping
-// choice, not a data-model limitation; adding a switcher later needs no
-// migration.
+// Multi-org membership is supported (org_members has no uniqueness
+// constraint on user_id alone): a member of several orgs works in the one
+// named by ACTIVE_ORG_COOKIE (set when they accept an invitation or switch
+// on the Team page) when they still belong to it, else their oldest
+// membership (first `created_at`).
 export interface OrgContext {
   userId: string;
   orgId: string;
   orgName: string;
-  role: 'owner' | 'member';
+  // Any org_role value -- this used to be typed as 'owner' | 'member', which
+  // hid the eight roles added in 20260806000018 from every caller.
+  role: Role;
 }
 
 export async function requireOrgContext(): Promise<OrgContext> {
@@ -37,14 +45,14 @@ export async function requireOrgContext(): Promise<OrgContext> {
     .from('org_members')
     .select('org_id, role, organizations(id, name)')
     .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(1);
+    .order('created_at', { ascending: true });
 
   if (error) {
     throw new Error(`Failed to load org membership: ${error.message}`);
   }
 
-  const membership = memberships?.[0];
+  const preferredOrgId = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+  const membership = memberships?.find((m) => m.org_id === preferredOrgId) ?? memberships?.[0];
   // Supabase's nested-select return shape is ambiguous for a to-one FK
   // relationship (it can type as an array) -- same normalization every other
   // nested select in this codebase does (see applications/page.tsx).
@@ -62,7 +70,7 @@ export async function requireOrgContext(): Promise<OrgContext> {
     userId: user.id,
     orgId: membership.org_id,
     orgName: organization.name,
-    role: membership.role,
+    role: membership.role as Role,
   };
 }
 

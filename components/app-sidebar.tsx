@@ -97,6 +97,8 @@ export function AppSidebar({
     ...(showNotificationsLink
       ? [{ href: '/notifications', label: 'Notifications', badge: unreadNotificationCount }]
       : []),
+    // Every member sees the roster; owners manage it there.
+    { href: '/settings/team', label: 'Team' },
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
     ...(showApiKeysLink ? [{ href: '/settings/api-keys', label: 'API keys' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),

@@ -11,13 +11,20 @@ import { LoginForm } from './login-form';
 // with the "never enter credentials into a field you don't own" instinct
 // this whole product is built to encourage in contractors dealing with
 // permit portals).
-export default async function LoginPage() {
+// Where to go after signing in. Only a team invitation link is honoured --
+// an arbitrary `next` would be an open redirect.
+const ALLOWED_NEXT = /^\/invite\/[A-Za-z0-9_-]{43}$/;
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next: requestedNext } = await searchParams;
+  const next = requestedNext && ALLOWED_NEXT.test(requestedNext) ? requestedNext : null;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect('/applications');
+    redirect(next ?? '/applications');
   }
 
   return (
@@ -30,7 +37,7 @@ export default async function LoginPage() {
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
         <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <LoginForm />
+          <LoginForm next={next} />
         </div>
         <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
       </div>
