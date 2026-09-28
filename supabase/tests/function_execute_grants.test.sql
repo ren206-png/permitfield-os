@@ -66,7 +66,9 @@ begin
       'review_project_permit_requirement', 'send_change_order_for_acceptance', 'send_estimate',
       'transition_permit_status', 'upsert_org_stripe_connect_account', 'verify_jurisdiction_source',
       'void_change_order', 'void_credit_note', 'void_invoice',
-      'request_permit_signature', 'cancel_permit_signature_request'
+      'request_permit_signature', 'cancel_permit_signature_request',
+      'list_org_members', 'invite_org_member', 'revoke_org_invitation', 'accept_org_invitation',
+      'update_org_member_role', 'remove_org_member'
     ])
     and not has_function_privilege('authenticated', p.oid, 'execute');
   if v_missing is not null then
