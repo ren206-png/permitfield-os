@@ -99,6 +99,7 @@ export function AppSidebar({
       : []),
     // Every member sees the roster; owners manage it there.
     { href: '/settings/team', label: 'Team' },
+    { href: '/settings/security', label: 'Security' },
     ...(showBillingLink ? [{ href: '/settings/billing', label: 'Billing' }] : []),
     ...(showApiKeysLink ? [{ href: '/settings/api-keys', label: 'API keys' }] : []),
     ...(showAdminLink ? [{ href: '/admin', label: 'Admin' }] : []),

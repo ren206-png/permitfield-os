@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PRODUCT_NAME, LEGAL_DISCLAIMER } from '@/lib/brand';
+import { safeNextPath } from '@/lib/auth/next-path';
+import { fetchEnabledOAuthProviders } from '@/lib/auth/oauth-providers';
 import { LoginForm } from './login-form';
 
 // Server Component shell only -- the actual sign-in/sign-up interaction runs
@@ -11,13 +13,11 @@ import { LoginForm } from './login-form';
 // with the "never enter credentials into a field you don't own" instinct
 // this whole product is built to encourage in contractors dealing with
 // permit portals).
-// Where to go after signing in. Only a team invitation link is honoured --
-// an arbitrary `next` would be an open redirect.
-const ALLOWED_NEXT = /^\/invite\/[A-Za-z0-9_-]{43}$/;
-
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next: requestedNext } = await searchParams;
-  const next = requestedNext && ALLOWED_NEXT.test(requestedNext) ? requestedNext : null;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
+  const { next: requestedNext, error: callbackError } = await searchParams;
+  // Where to go after signing in -- only a team invitation link (safeNextPath).
+  const next = safeNextPath(requestedNext);
+  const providers = await fetchEnabledOAuthProviders();
 
   const supabase = await createClient();
   const {
@@ -37,7 +37,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
         <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <LoginForm next={next} />
+          {callbackError === 'callback' && (
+            <p role="alert" className="mb-4 text-sm text-red-600">
+              That sign-in link didn&apos;t work -- it may have expired or already been used. Sign in below.
+            </p>
+          )}
+          <LoginForm next={next} providers={providers} />
         </div>
         <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
       </div>
