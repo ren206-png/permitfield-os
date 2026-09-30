@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { GENERATED_BUCKET } from '@/lib/storage/documents';
+import { isReadinessEnabled } from '@/lib/flags';
+import { submissionBlockedByReadiness } from '@/lib/submissions/readiness-gate';
 import { resolveSubmissionRecipient } from '@/lib/submissions/recipient';
 import { EmailSubmitButton, RecordSubmissionForm } from './submission-controls';
 
@@ -59,11 +61,13 @@ export async function SubmissionPanel({
   applicationId,
   permitTypeId,
   projectAddress,
+  permitStatus,
 }: {
   orgId: string;
   applicationId: string;
   permitTypeId: string;
   projectAddress: string;
+  permitStatus: string | null;
 }) {
   const supabase = await createClient();
 
@@ -90,7 +94,10 @@ export async function SubmissionPanel({
     throw new Error(`Failed to load filings: ${filingsError.message}`);
   }
 
-  const { data: canSubmit } = await supabase.rpc('can_submit_filings', { check_org_id: orgId });
+  const { data: canSubmitRole } = await supabase.rpc('can_submit_filings', { check_org_id: orgId });
+  // Same gate the submit actions enforce (lib/submissions/submit.ts).
+  const readinessBlock = submissionBlockedByReadiness(permitStatus, isReadinessEnabled());
+  const canSubmit = Boolean(canSubmitRole) && !readinessBlock;
 
   const latestByFiling = new Map<string, string>();
   for (const doc of generated ?? []) {
@@ -112,8 +119,10 @@ export async function SubmissionPanel({
       <p className="mt-1 text-xs text-zinc-500">
         Each authority below needs its own filing. Emails go from PermitField on your behalf; replies come straight back to you.
       </p>
-      {!canSubmit && (
+      {!canSubmitRole ? (
         <p className="mt-2 text-xs text-amber-700">Only owners and permit managers can submit. You can see the status here.</p>
+      ) : (
+        readinessBlock && <p className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-800">{readinessBlock}</p>
       )}
 
       <ul className="mt-4 flex flex-col gap-4">

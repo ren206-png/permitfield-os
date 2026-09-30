@@ -13,6 +13,7 @@ import { SubmissionPanel } from './submission-panel';
 import { SignaturePanel } from './signature-panel';
 import { ReadinessPanel } from './readiness-panel';
 import type { PermitStatus } from '@/lib/permit-status/transitions';
+import { fieldLabel, generatedDocumentLabel } from '@/lib/pdf/document-labels';
 import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
@@ -258,6 +259,18 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     signedUrl: signedUrlByDocumentPath.get(doc.storage_path) ?? null,
   }));
 
+  // Filing -> authority name, to label generated forms readably.
+  const { data: filingAuthorities } = await supabase
+    .from('permit_type_filings')
+    .select('id, authorities ( name )')
+    .eq('permit_type_id', application.permit_type_id);
+  const filingAuthorityNames = new Map(
+    (filingAuthorities ?? []).map((f) => {
+      const authority = Array.isArray(f.authorities) ? f.authorities[0] : f.authorities;
+      return [f.id as string, (authority?.name as string | undefined) ?? 'Authority'];
+    })
+  );
+
   const generatedDocsWithUrls = (generatedDocs ?? []).map((doc) => ({
     ...doc,
     signedUrl: signedUrlByGeneratedPath.get(doc.storage_path) ?? null,
@@ -349,6 +362,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           applicationId={applicationId}
           permitTypeId={application.permit_type_id as string}
           projectAddress={application.project_address}
+          permitStatus={(application.permit_status as string | null) ?? null}
         />
       )}
 
@@ -462,15 +476,18 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         {generatedDocsWithUrls.length > 0 ? (
           <ul className="mt-2 divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white">
             {generatedDocsWithUrls.map((doc) => {
-              const missingRequired = Array.isArray(doc.incomplete_required_fields) ? doc.incomplete_required_fields.length : 0;
+              const missingRequired = Array.isArray(doc.incomplete_required_fields) ? (doc.incomplete_required_fields as string[]) : [];
               return (
                 <li key={doc.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                   <div>
-                    <p className="font-medium text-zinc-900">{doc.original_filename}</p>
+                    <p className="font-medium text-zinc-900">{generatedDocumentLabel(doc.original_filename, filingAuthorityNames)}</p>
                     <p className="text-xs text-zinc-500">
-                      {doc.fill_method}
-                      {missingRequired > 0 && (
-                        <span className="text-amber-700"> · {missingRequired} required field(s) left blank -- review before filing</span>
+                      {doc.fill_method === 'acroform' ? 'Form fields' : 'Printed on the form'} · {new Date(doc.created_at).toLocaleString()}
+                      {missingRequired.length > 0 && (
+                        <span className="text-amber-700">
+                          {' '}
+                          · left blank: {missingRequired.map(fieldLabel).join(', ')} -- fill in before filing
+                        </span>
                       )}
                     </p>
                   </div>
