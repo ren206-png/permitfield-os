@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PRODUCT_NAME, LEGAL_DISCLAIMER } from '@/lib/brand';
@@ -45,6 +46,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <LoginForm next={next} providers={providers} />
         </div>
         <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
+        <p className="mt-2 text-center text-xs text-zinc-500">
+          <Link href="/privacy" className="underline underline-offset-2">Privacy</Link> ·{' '}
+          <Link href="/terms" className="underline underline-offset-2">Terms</Link>
+        </p>
       </div>
     </div>
   );

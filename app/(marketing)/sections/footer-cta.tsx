@@ -29,6 +29,14 @@ export function FooterCta() {
           Sign in
         </Link>
         <span className="mx-2">·</span>
+        <Link href="/privacy" className="hover:text-zinc-600 dark:hover:text-zinc-300">
+          Privacy
+        </Link>
+        <span className="mx-2">·</span>
+        <Link href="/terms" className="hover:text-zinc-600 dark:hover:text-zinc-300">
+          Terms
+        </Link>
+        <span className="mx-2">·</span>
         <span>
           © {new Date().getFullYear()} {PRODUCT_NAME}
         </span>

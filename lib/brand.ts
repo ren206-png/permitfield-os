@@ -13,3 +13,7 @@ export const LEGAL_DISCLAIMER =
 
 // Stamped on generated PDFs until the SS0.3 human-review gate is acknowledged.
 export const DRAFT_WATERMARK_TEXT = 'PERMITFIELD DRAFT — CONTRACTOR REVIEW REQUIRED';
+
+// Where privacy and legal questions go, shown on /privacy and /terms.
+export const LEGAL_CONTACT_EMAIL = 'privacy@permitfieldos.com';
+export const LEGAL_LAST_UPDATED = 'September 29, 2026';
