@@ -79,6 +79,9 @@ export async function proxy(request: NextRequest) {
   // affected -- this is scoped to exactly these two well-known,
   // content-self-gated filenames.
   const isPublicSeoRoute = pathname === '/robots.txt' || pathname === '/sitemap.xml';
+  // Privacy policy and terms: public, and linked from the Google/Microsoft
+  // sign-in consent screens.
+  const isPublicLegalRoute = pathname === '/privacy' || pathname === '/terms';
   // LP workstream, Phase 3 (jurisdiction SEO pages, PERMITFIELD_FF_JURISDICTION_PAGES).
   // Same allowlist pattern as isPublicMarketingRoute above: only reachable
   // unauthenticated while the flag is on, and app/coverage/page.tsx +
@@ -120,6 +123,7 @@ export async function proxy(request: NextRequest) {
     !isAuthCallbackRoute &&
     !isPublicMarketingRoute &&
     !isPublicSeoRoute &&
+    !isPublicLegalRoute &&
     !isPublicJurisdictionRoute &&
     !isPublicClientLinkRoute
   ) {
@@ -136,7 +140,12 @@ export async function proxy(request: NextRequest) {
   // this session: every signed-in page and Server Action waits behind the
   // code screen. Public pages (client links, marketing) are unaffected.
   const isPublicRoute =
-    isAuthCallbackRoute || isPublicMarketingRoute || isPublicSeoRoute || isPublicJurisdictionRoute || isPublicClientLinkRoute;
+    isAuthCallbackRoute ||
+    isPublicMarketingRoute ||
+    isPublicSeoRoute ||
+    isPublicLegalRoute ||
+    isPublicJurisdictionRoute ||
+    isPublicClientLinkRoute;
   if (user && !isMfaRoute && !isPublicRoute) {
     const { data: levels } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (needsMfaChallenge(levels)) {
