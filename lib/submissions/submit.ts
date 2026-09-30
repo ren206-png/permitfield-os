@@ -1,10 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isCitySubmissionEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isReadinessEnabled } from '@/lib/flags';
 import { writeAuditLog } from '@/lib/audit/log';
 import { sendEmail } from '@/lib/email/send';
 import { GENERATED_BUCKET, UPLOADS_BUCKET } from '@/lib/storage/documents';
 import type { Role } from '@/lib/authz';
 import { buildSubmissionEmail } from './email';
+import { submissionBlockedByReadiness } from './readiness-gate';
 import { resolveSubmissionRecipient } from './recipient';
 
 // Server-side orchestration for filing one permit_type_filing with its
@@ -70,6 +71,8 @@ async function loadFiling(supabase: Client, orgId: string, applicationId: string
   if (!SUBMITTABLE_STATUSES.has(application.status)) {
     return { error: 'Generate the filled documents before submitting this application.' };
   }
+  const readinessBlock = submissionBlockedByReadiness(application.permit_status, isReadinessEnabled());
+  if (readinessBlock) return { error: readinessBlock };
 
   const { data: filing, error: filingError } = await supabase
     .from('permit_type_filings')
@@ -273,6 +276,17 @@ export async function recordFilingSubmission(
   const loaded = await loadFiling(supabase, ctx.orgId, applicationId, filingId);
   if ('error' in loaded) return { ok: false, error: loaded.error };
 
+  // Which filled form went in: the latest one for the filing (the signed copy,
+  // once signed), same choice the email path makes.
+  const { data: latestForm } = await supabase
+    .from('generated_documents')
+    .select('id')
+    .eq('application_id', applicationId)
+    .eq('permit_type_filing_id', filingId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const { error: insertError } = await supabase.from('filing_submissions').insert({
     org_id: ctx.orgId,
     application_id: applicationId,
@@ -281,6 +295,7 @@ export async function recordFilingSubmission(
     method,
     status: 'recorded',
     external_reference: reference,
+    generated_document_id: latestForm?.id ?? null,
     submitted_by: ctx.userId,
   });
   if (insertError) return { ok: false, error: `Could not record the submission: ${insertError.message}` };

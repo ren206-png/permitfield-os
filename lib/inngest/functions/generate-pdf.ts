@@ -125,8 +125,10 @@ export const permitGeneratePdf = inngest.createFunction(
       }
 
       // The contractor is the applicant on every mapped form, so its org's
-      // contact email fills applicant.email. Optional: no profile row just
-      // leaves that field blank.
+      // contact email fills applicant.email. Orgs that haven't set up a tax
+      // profile (it belongs to Quotes & Payments) fall back to the org
+      // owner's sign-in email -- found missing by the end-to-end test, where
+      // Vancouver's required "permit account email" was otherwise blank.
       const { data: taxProfile, error: taxProfileError } = await supabase
         .from('org_tax_profiles')
         .select('invoice_contact_email')
@@ -134,6 +136,21 @@ export const permitGeneratePdf = inngest.createFunction(
         .maybeSingle();
       if (taxProfileError) {
         throw new Error(`Failed to load org_tax_profiles for ${application.org_id}: ${taxProfileError.message}`);
+      }
+      let orgContactEmail = (taxProfile?.invoice_contact_email ?? null) as string | null;
+      if (!orgContactEmail) {
+        const { data: owner } = await supabase
+          .from('org_members')
+          .select('user_id')
+          .eq('org_id', application.org_id)
+          .eq('role', 'owner')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (owner) {
+          const { data: ownerUser } = await supabase.auth.admin.getUserById(owner.user_id);
+          orgContactEmail = ownerUser?.user?.email ?? null;
+        }
       }
 
       const { data: filings, error: filingsError } = await supabase
@@ -154,7 +171,7 @@ export const permitGeneratePdf = inngest.createFunction(
         estimatedJobValueCents: application.estimated_job_value_cents as number | null,
         projectTitle: application.project_title as string | null,
         projectAddress: application.project_address as string | null,
-        orgContactEmail: (taxProfile?.invoice_contact_email ?? null) as string | null,
+        orgContactEmail,
         contractor,
         filings: (filings ?? []) as { id: string; form_template_path: string | null }[],
       };
