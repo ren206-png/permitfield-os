@@ -8,6 +8,7 @@ describe('generatedDocumentLabel()', () => {
   it('names the form by its authority, and marks signed copies', () => {
     expect(generatedDocumentLabel(`${filing}-filled.pdf`, names)).toBe('City of Vancouver form');
     expect(generatedDocumentLabel(`${filing}-signed.pdf`, names)).toBe('City of Vancouver form (signed)');
+    expect(generatedDocumentLabel(`${filing}-signed-upload.pdf`, names)).toBe('City of Vancouver form (signed copy, uploaded)');
   });
 
   it('falls back gracefully', () => {

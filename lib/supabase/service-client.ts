@@ -63,6 +63,15 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // lib/public-api/resources.ts is then filtered `.eq('org_id', orgId)` with
 // that server-derived value. New v1 endpoints must go through
 // handleApiRequest() and keep that filter on every query.
+//
+// Exception 4 (uploading a hand-signed permit form,
+// app/(app)/applications/[id]/signature-actions.ts): the generated-documents
+// bucket has no session write policy (only the service role writes filled
+// forms). The action checks can_submit_filings() with the caller's own
+// session first, writes the file only under that org's own
+// <orgId>/<applicationId>/ path, and then records it through
+// record_uploaded_signed_form() -- again as the caller -- which re-checks the
+// role and the path. The service client does nothing but the storage write.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

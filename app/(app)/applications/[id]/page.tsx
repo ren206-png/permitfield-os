@@ -482,7 +482,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   <div>
                     <p className="font-medium text-zinc-900">{generatedDocumentLabel(doc.original_filename, filingAuthorityNames)}</p>
                     <p className="text-xs text-zinc-500">
-                      {doc.fill_method === 'acroform' ? 'Form fields' : 'Printed on the form'} · {new Date(doc.created_at).toLocaleString()}
+                      {doc.fill_method === 'acroform' ? 'Form fields' : doc.fill_method === 'uploaded' ? 'Uploaded' : 'Printed on the form'} · {new Date(doc.created_at).toLocaleString()}
                       {missingRequired.length > 0 && (
                         <span className="text-amber-700">
                           {' '}

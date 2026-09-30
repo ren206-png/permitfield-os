@@ -81,7 +81,7 @@ export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedIte
         title: `Get the ${filing.authorityName} form signed`,
         description: filing.esignatureAccepted
           ? 'Send it for electronic signature from the Signatures panel.'
-          : 'Print it and have the applicant sign by hand.',
+          : 'Print it, have the applicant sign by hand, and upload the signed copy in the Signatures panel.',
       });
     }
   }
