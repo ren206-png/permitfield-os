@@ -51,21 +51,36 @@ export function permitStatusErrorMessage(message: string): string {
   return 'That change could not be saved. Try again.';
 }
 
+/** One item from the city's own submission checklist (permit_requirements). */
+export interface CityRequirement {
+  title: string;
+  description: string | null;
+  /** The checklist's own condition; null when the city always requires it. */
+  appliesWhen: string | null;
+  sourceUrl: string | null;
+}
+
 export interface SuggestedItemInput {
   filings: { authorityName: string; hasFilledForm: boolean; esignatureAccepted: boolean; hasSignatureSlot: boolean }[];
+  cityRequirements?: CityRequirement[];
   existingTitles: string[];
 }
 
 export interface SuggestedItem {
   title: string;
   description: string;
+  isRequired: boolean;
+  /** Where the item comes from (the city checklist's URL), when it has a source. */
+  sourceRequirement: string | null;
 }
 
 /**
  * A starter checklist from what the application already has: one check per
- * filled form, a signature step where the form is signed, and the supporting
- * documents. Titles already on the checklist are skipped, so it can be run
- * again safely.
+ * filled form, a signature step where the form is signed, then the city's own
+ * submission checklist -- or, for a city without one on file, a generic
+ * supporting-documents item. Conditional city items are optional, since only
+ * the contractor knows whether their scope triggers them. Titles already on
+ * the checklist are skipped, so it can be run again safely.
  */
 export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedItem[] {
   const items: SuggestedItem[] = [];
@@ -74,6 +89,8 @@ export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedIte
       items.push({
         title: `Check the filled ${filing.authorityName} form`,
         description: 'Read every filled field against the drawings and contract before it goes out.',
+        isRequired: true,
+        sourceRequirement: null,
       });
     }
     if (filing.hasSignatureSlot) {
@@ -82,13 +99,33 @@ export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedIte
         description: filing.esignatureAccepted
           ? 'Send it for electronic signature from the Signatures panel.'
           : 'Print it, have the applicant sign by hand, and upload the signed copy in the Signatures panel.',
+        isRequired: true,
+        sourceRequirement: null,
       });
     }
   }
-  items.push({
-    title: 'Attach drawings and supporting documents',
-    description: 'Everything the authority asks for, as PDFs.',
+  const cityRequirements = input.cityRequirements ?? [];
+  if (cityRequirements.length === 0) {
+    items.push({
+      title: 'Attach drawings and supporting documents',
+      description: 'Everything the authority asks for, as PDFs.',
+      isRequired: true,
+      sourceRequirement: null,
+    });
+  }
+  for (const requirement of cityRequirements) {
+    items.push({
+      title: requirement.title,
+      description: [requirement.appliesWhen, requirement.description].filter(Boolean).join(' '),
+      isRequired: requirement.appliesWhen === null,
+      sourceRequirement: requirement.sourceUrl,
+    });
+  }
+  const seen = new Set(input.existingTitles.map((t) => t.trim().toLowerCase()));
+  return items.filter((item) => {
+    const key = item.title.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
-  const existing = new Set(input.existingTitles.map((t) => t.trim().toLowerCase()));
-  return items.filter((item) => !existing.has(item.title.toLowerCase()));
 }

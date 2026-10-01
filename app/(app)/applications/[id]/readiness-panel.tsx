@@ -24,6 +24,7 @@ interface ChecklistItem {
   due_date: string | null;
   status: 'pending' | 'complete' | 'rejected';
   rejection_reason: string | null;
+  source_requirement: string | null;
 }
 
 interface HistoryRow {
@@ -43,6 +44,18 @@ const ITEM_STATUS_STYLE: Record<ChecklistItem['status'], string> = {
   rejected: 'bg-red-50 text-red-700',
 };
 
+function isSourceUrl(value: string | null): value is string {
+  return value !== null && value.startsWith('https://');
+}
+
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 export async function ReadinessPanel({
   orgId,
   applicationId,
@@ -60,7 +73,7 @@ export async function ReadinessPanel({
   const [{ data: items, error: itemsError }, { data: score }, { data: history }] = await Promise.all([
     supabase
       .from('readiness_checklist_items')
-      .select('id, title, description, is_required, responsible_party, due_date, status, rejection_reason')
+      .select('id, title, description, is_required, responsible_party, due_date, status, rejection_reason, source_requirement')
       .eq('org_id', orgId)
       .eq('application_id', applicationId)
       .order('created_at', { ascending: true }),
@@ -82,6 +95,7 @@ export async function ReadinessPanel({
   const scoreValue = score === null || score === undefined ? null : Number(score);
   const options = nextPermitStatusOptions(permitStatus, role).map((value) => ({ value, label: PERMIT_STATUS_LABELS[value] }));
   const today = new Date().toISOString().slice(0, 10);
+  const hasCityItems = checklist.some((item) => isSourceUrl(item.source_requirement));
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -130,6 +144,12 @@ export async function ReadinessPanel({
         <p className="mt-1 text-xs text-zinc-500">
           Required items must be complete before the status can move to Ready to submit.
         </p>
+        {hasCityItems && (
+          <p className="mt-1 text-xs text-zinc-500">
+            Items with a source link are copied from the authority&apos;s published requirements and haven&apos;t been reviewed by
+            PermitField yet. Optional ones apply only if your scope triggers them. The authority can still ask for more.
+          </p>
+        )}
 
         {checklist.length === 0 ? (
           <p className="mt-3 text-xs text-zinc-600">No checklist items yet. Add your own, or start from the suggested items.</p>
@@ -146,6 +166,16 @@ export async function ReadinessPanel({
                     {!item.is_required && <span className="ml-1 text-[11px] text-zinc-500">optional</span>}
                   </p>
                   {item.description && <p className="text-xs text-zinc-600">{item.description}</p>}
+                  {isSourceUrl(item.source_requirement) && (
+                    <a
+                      href={item.source_requirement}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-zinc-500 underline hover:text-zinc-700"
+                    >
+                      Source: {sourceHost(item.source_requirement)}
+                    </a>
+                  )}
                   <p className="text-xs text-zinc-500">
                     {[
                       item.responsible_party,
