@@ -7,7 +7,11 @@ import { formatSignatureDate, provinceTimeZone, stampSignature, type SignatureSl
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const FORMS = path.join(ROOT, 'docs-reference-forms');
 // Every migration that seeds signature slots.
-const MIGRATION = ['20260806000073_permit_form_esignatures.sql', '20260806000077_ottawa_commercial_tenant_improvement.sql']
+const MIGRATION = [
+  '20260806000073_permit_form_esignatures.sql',
+  '20260806000077_ottawa_commercial_tenant_improvement.sql',
+  '20260806000078_hamilton_commercial_tenant_improvement.sql',
+]
   .map((f) => fs.readFileSync(path.join(ROOT, 'supabase/migrations', f), 'utf8'))
   .join('\n');
 
@@ -23,6 +27,7 @@ const FILING_FORMS: Record<string, string> = {
   '00000000-0000-0000-0004-000000000008': 'port-coquitlam-ti-application.pdf',
   '00000000-0000-0000-0004-000000000009': 'maple-ridge-tenant-landlord-improvement-application.pdf',
   '00000000-0000-0000-0004-00000000000a': 'ontario-permit-to-construct-or-demolish-2026.pdf',
+  '00000000-0000-0000-0004-00000000000b': 'ontario-permit-to-construct-or-demolish-2026.pdf',
 };
 
 const VANCOUVER_SLOT: SignatureSlot = {
