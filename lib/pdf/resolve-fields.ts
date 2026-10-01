@@ -113,6 +113,14 @@ export function parseCivicAddress(address: string | null): CivicAddressParts {
   return { civicNumber, street, city };
 }
 
+const POSTAL_CODE_PATTERN = /\b([ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z])\s?(\d[ABCEGHJ-NPRSTV-Z]\d)\b/i;
+
+/** A Canadian postal code anywhere in the address, normalized to "A1A 1A1", or null. */
+export function parsePostalCode(address: string | null): string | null {
+  const match = address ? POSTAL_CODE_PATTERN.exec(address) : null;
+  return match ? `${match[1]} ${match[2]}`.toUpperCase() : null;
+}
+
 function fromAddressPart(ctx: FieldResolutionContext, part: keyof CivicAddressParts): ResolvedField {
   const value = parseCivicAddress(ctx.application.projectAddress)[part];
   return value ? { value, confidence: 1 } : NO_VALUE;
@@ -161,9 +169,22 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   'application.addressCivicNumber': (ctx) => fromAddressPart(ctx, 'civicNumber'),
   'application.addressStreet': (ctx) => fromAddressPart(ctx, 'street'),
   'application.addressCity': (ctx) => fromAddressPart(ctx, 'city'),
+  // "building number + street name" as one line (Ontario's provincial form).
+  'application.addressStreetLine': (ctx) => {
+    const { civicNumber, street } = parseCivicAddress(ctx.application.projectAddress);
+    return civicNumber && street ? { value: `${civicNumber} ${street}`, confidence: 1 } : NO_VALUE;
+  },
+  'application.addressPostalCode': (ctx) => {
+    const postalCode = parsePostalCode(ctx.application.projectAddress);
+    return postalCode ? { value: postalCode, confidence: 1 } : NO_VALUE;
+  },
   'application.squareFootage': (ctx) => fromExtractedField(ctx.extraction?.square_footage),
   'application.electricalAmps': (ctx) => fromExtractedField(ctx.extraction?.electrical_amps),
   'application.scopeOfWorkSummary': (ctx) => fromExtractedField(ctx.extraction?.scope_of_work_summary),
+  // Blanks a field the template ships pre-filled (Ontario's 2026 provincial
+  // form has stray "ADE" in two Owner fields). An empty string, not null:
+  // null means "leave as is"; this deliberately overwrites.
+  'form.clear': () => ({ value: '', confidence: 1 }),
   'contractor.companyName': (ctx) =>
     ctx.contractor?.companyName ? { value: ctx.contractor.companyName, confidence: 1 } : NO_VALUE,
   'contractor.primaryLicenseNumber': (ctx) =>
