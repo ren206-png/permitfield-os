@@ -6,7 +6,10 @@ import { formatSignatureDate, provinceTimeZone, stampSignature, type SignatureSl
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const FORMS = path.join(ROOT, 'docs-reference-forms');
-const MIGRATION = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20260806000073_permit_form_esignatures.sql'), 'utf8');
+// Every migration that seeds signature slots.
+const MIGRATION = ['20260806000073_permit_form_esignatures.sql', '20260806000077_ottawa_commercial_tenant_improvement.sql']
+  .map((f) => fs.readFileSync(path.join(ROOT, 'supabase/migrations', f), 'utf8'))
+  .join('\n');
 
 // Template path in the catalog -> committed reference PDF (same pairing as
 // scripts/seed-storage-templates.ts).
@@ -19,6 +22,7 @@ const FILING_FORMS: Record<string, string> = {
   '00000000-0000-0000-0004-000000000007': 'coquitlam-permit-application-form.pdf',
   '00000000-0000-0000-0004-000000000008': 'port-coquitlam-ti-application.pdf',
   '00000000-0000-0000-0004-000000000009': 'maple-ridge-tenant-landlord-improvement-application.pdf',
+  '00000000-0000-0000-0004-00000000000a': 'ontario-permit-to-construct-or-demolish-2026.pdf',
 };
 
 const VANCOUVER_SLOT: SignatureSlot = {
@@ -105,11 +109,11 @@ describe('stampSignature()', () => {
   });
 });
 
-describe('signature slots in migration 073', () => {
+describe('seeded signature slots', () => {
   const DATE_FORMATS = ['yyyy-mm-dd', 'mm/dd/yyyy', 'dd-mm-yyyy'];
   // Each seeded slot row: its filing, page, and every quoted value after the
   // coordinates -- the signature/name/date field names plus the date format.
-  const rows = [...MIGRATION.matchAll(/\('(00000000-0000-0000-0004-0000000000\d\d)', 'applicant', (\d+),[^\n]*\n\s+(.+?)\),?\n/g)].map((m) => ({
+  const rows = [...MIGRATION.matchAll(/\('(00000000-0000-0000-0004-0000000000[0-9a-f]{2})', 'applicant', (\d+),[^\n]*\n\s+(.+?)\),?\n/g)].map((m) => ({
     filing: m[1],
     page: Number(m[2]),
     fieldNames: [...m[3].matchAll(/'([^']+)'/g)].map((f) => f[1]).filter((v) => !DATE_FORMATS.includes(v)),

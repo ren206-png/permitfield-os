@@ -32,6 +32,16 @@ insert into auth.users (
    now(), now(), now(), '{"provider":"email"}'::jsonb, '{}'::jsonb, false, false)
 on conflict (id) do nothing;
 
+-- GoTrue scans these token columns as strings and fails ("Database error
+-- loading user") on NULL, which broke auth.admin.getUserById() and sign-in
+-- for the seed users locally. Users GoTrue creates itself always have ''.
+update auth.users set
+  confirmation_token = coalesce(confirmation_token, ''), recovery_token = coalesce(recovery_token, ''),
+  email_change_token_new = coalesce(email_change_token_new, ''), email_change = coalesce(email_change, ''),
+  email_change_token_current = coalesce(email_change_token_current, ''), phone_change = coalesce(phone_change, ''),
+  phone_change_token = coalesce(phone_change_token, ''), reauthentication_token = coalesce(reauthentication_token, '')
+where id in ('10000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-00000000000b');
+
 insert into organizations (id, name) values
   ('20000000-0000-0000-0000-00000000000a', 'Org A - Test Mechanical Ltd.'),
   ('20000000-0000-0000-0000-00000000000b', 'Org B - Test Electrical Inc.');

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   FIELD_RESOLVER_KEYS,
   parseCivicAddress,
+  parsePostalCode,
   resolveFieldForFilling,
   resolveFieldValue,
   type FieldResolutionContext,
@@ -78,5 +79,36 @@ describe('resolvers added for the BC and ESA field maps', () => {
 
   it('leaves email blank when the org has no contact email', () => {
     expect(resolveFieldValue('applicant.email', { ...ctx, orgContactEmail: null }).value).toBeNull();
+  });
+});
+
+describe('parsePostalCode()', () => {
+  it('finds and normalizes a Canadian postal code', () => {
+    expect(parsePostalCode('110 Laurier Ave W, Ottawa, ON k1p1j1')).toBe('K1P 1J1');
+    expect(parsePostalCode('6911 No. 3 Road, Richmond, BC V6Y 2C1')).toBe('V6Y 2C1');
+    expect(parsePostalCode('100 Main St, Toronto, ON')).toBeNull();
+    expect(parsePostalCode(null)).toBeNull();
+  });
+});
+
+describe('Ontario provincial form resolvers', () => {
+  const ctx = {
+    extraction: null,
+    estimatedJobValueCents: null,
+    application: { projectTitle: null, projectAddress: '110 Laurier Ave W, Ottawa, ON K1P 1J1' },
+    orgContactEmail: null,
+    contractor: null,
+  } as unknown as FieldResolutionContext;
+
+  it('fills the street line and postal code from the project address', () => {
+    expect(resolveFieldValue('application.addressStreetLine', ctx).value).toBe('110 Laurier Ave W');
+    expect(resolveFieldValue('application.addressPostalCode', ctx).value).toBe('K1P 1J1');
+    expect(resolveFieldValue('application.addressCity', ctx).value).toBe('Ottawa');
+  });
+});
+
+describe('form.clear', () => {
+  it('overwrites a pre-filled template field with an empty value (not "leave as is")', () => {
+    expect(resolveFieldValue('form.clear', {} as FieldResolutionContext)).toEqual({ value: '', confidence: 1 });
   });
 });
