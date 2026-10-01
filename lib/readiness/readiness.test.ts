@@ -60,4 +60,48 @@ describe('suggestedChecklistItems()', () => {
     const titles = suggestedChecklistItems({ filings, existingTitles: ['attach drawings and supporting documents', 'Get the ESA form signed'] }).map((i) => i.title);
     expect(titles).toEqual(['Check the filled City of Vancouver form', 'Get the City of Vancouver form signed']);
   });
+
+  describe('with the city checklist on file', () => {
+    const source = 'https://vancouver.ca/files/cov/renovation-commercial-building-checklist.pdf';
+    const cityRequirements = [
+      { title: 'Building Permit Data Sheet', description: "Vancouver's data sheet (Excel).", appliesWhen: null, sourceUrl: source },
+      {
+        title: 'K1 Restaurant or Kitchen Exhaust Systems form',
+        description: null,
+        appliesWhen: 'Required if a commercial kitchen is added or renovated.',
+        sourceUrl: source,
+      },
+    ];
+
+    it("lists the city's items instead of the generic documents item, in the city's order", () => {
+      const titles = suggestedChecklistItems({ filings, cityRequirements, existingTitles: [] }).map((i) => i.title);
+      expect(titles).toEqual([
+        'Check the filled City of Vancouver form',
+        'Get the City of Vancouver form signed',
+        'Get the ESA form signed',
+        'Building Permit Data Sheet',
+        'K1 Restaurant or Kitchen Exhaust Systems form',
+      ]);
+    });
+
+    it('makes always-required items required and conditional ones optional, with the condition first', () => {
+      const [dataSheet, kitchen] = suggestedChecklistItems({ filings: [], cityRequirements, existingTitles: [] });
+      expect(dataSheet).toEqual({ title: 'Building Permit Data Sheet', description: "Vancouver's data sheet (Excel).", isRequired: true, sourceRequirement: source });
+      expect(kitchen).toEqual({
+        title: 'K1 Restaurant or Kitchen Exhaust Systems form',
+        description: 'Required if a commercial kitchen is added or renovated.',
+        isRequired: false,
+        sourceRequirement: source,
+      });
+    });
+
+    it('skips city items already on the checklist, and repeats within the city list', () => {
+      const titles = suggestedChecklistItems({
+        filings: [],
+        cityRequirements: [...cityRequirements, cityRequirements[0]],
+        existingTitles: ['k1 restaurant or kitchen exhaust systems form '],
+      }).map((i) => i.title);
+      expect(titles).toEqual(['Building Permit Data Sheet']);
+    });
+  });
 });
