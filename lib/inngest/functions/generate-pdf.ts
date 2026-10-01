@@ -1,4 +1,6 @@
 import { inngest, type PermitEventPayloads } from '@/lib/inngest/client';
+import { isReadinessEnabled } from '@/lib/flags';
+import { addSuggestedChecklistItems } from '@/lib/readiness/add-suggested-items';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { fillAcroForm, type AcroFormFillInstruction } from '@/lib/pdf/fill-acroform';
 import { fillOverlay, type OverlayFillInstruction } from '@/lib/pdf/overlay-coordinates';
@@ -165,6 +167,7 @@ export const permitGeneratePdf = inngest.createFunction(
 
       return {
         orgId: application.org_id as string,
+        permitTypeId: application.permit_type_id as string,
         status: application.status as string,
         coverageLevel: jurisdiction.coverage_level as string,
         parsedData: (latestExtraction?.parsed_data ?? null) as Record<string, unknown> | null,
@@ -387,6 +390,35 @@ export const permitGeneratePdf = inngest.createFunction(
         .eq('id', applicationId);
       if (error) throw new Error(`Failed to set status=${nextStatus}: ${error.message}`);
     });
+
+    // Forms generated: the permit has left intake. Walk its status up to
+    // Internal review (each legal step recorded as a system change); Ready
+    // to submit stays a person's call, gated by the readiness checklist.
+    if (succeeded) {
+      await step.run('advance-permit-status', async () => {
+        const { error } = await supabase.rpc('advance_permit_status_after_generation', { p_application_id: applicationId });
+        // Best-effort: the forms exist either way; the status can still be moved by hand.
+        if (error) console.error(`advance_permit_status_after_generation failed for ${applicationId}: ${error.message}`);
+      });
+      // Start the readiness checklist if nobody has: an empty checklist
+      // counts as complete, which would let Ready to submit through unchecked.
+      if (isReadinessEnabled()) {
+        await step.run('seed-readiness-checklist', async () => {
+          const { count } = await supabase
+            .from('readiness_checklist_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('application_id', applicationId);
+          if ((count ?? 0) > 0) return { added: 0 };
+          const result = await addSuggestedChecklistItems(supabase, {
+            orgId: context.orgId,
+            applicationId,
+            permitTypeId: context.permitTypeId,
+          });
+          if ('error' in result) console.error(`Seeding the readiness checklist failed for ${applicationId}: ${result.error}`);
+          return result;
+        });
+      }
+    }
 
     await step.sendEvent('emit-pdf-generated-event', {
       // Deterministic id -- see emit-pdf-generated-skipped above for the

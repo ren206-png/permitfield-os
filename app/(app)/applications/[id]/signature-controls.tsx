@@ -1,7 +1,16 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { cancelSignatureAction, requestSignatureAction, type SignatureActionState } from './signature-actions';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { GENERATED_BUCKET } from '@/lib/storage/documents';
+import {
+  cancelSignatureAction,
+  prepareSignedFormUploadAction,
+  recordSignedFormUploadAction,
+  requestSignatureAction,
+  type SignatureActionState,
+} from './signature-actions';
 
 const initialState: SignatureActionState = {};
 
@@ -106,5 +115,67 @@ export function CancelSignatureButton({ applicationId, requestId }: { applicatio
       </button>
       {state.error && <span className="ml-2 text-xs text-red-600">{state.error}</span>}
     </form>
+  );
+}
+
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Uploads straight to storage through a one-time signed URL (large scans
+// never pass through a server function), then asks the server to check and
+// record it. See signature-actions.ts.
+export function UploadSignedFormForm({ applicationId, filingId }: { applicationId: string; filingId: string }) {
+  const router = useRouter();
+  const [file, setFile] = useState<File | null>(null);
+  const [state, setState] = useState<SignatureActionState>({});
+  const [pending, setPending] = useState(false);
+
+  async function upload() {
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setState({ error: 'That file is too large (25 MB maximum).' });
+      return;
+    }
+    setPending(true);
+    setState({});
+    try {
+      const prepared = await prepareSignedFormUploadAction({ applicationId, filingId, sha256: await sha256Hex(file), size: file.size });
+      if ('error' in prepared) {
+        setState({ error: prepared.error });
+        return;
+      }
+      const { error } = await createClient()
+        .storage.from(GENERATED_BUCKET)
+        .uploadToSignedUrl(prepared.path, prepared.token, file, { contentType: 'application/pdf' });
+      if (error) {
+        setState({ error: `Upload failed: ${error.message}` });
+        return;
+      }
+      setState(await recordSignedFormUploadAction({ applicationId, filingId, path: prepared.path }));
+      setFile(null);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        className="min-w-0 flex-1 text-xs text-zinc-700 file:mr-2 file:rounded file:border file:border-zinc-300 file:bg-white file:px-2 file:py-1 file:text-xs"
+        aria-label="Signed form PDF"
+      />
+      <button type="button" disabled={pending || !file} onClick={() => void upload()} className={buttonClass}>
+        {pending ? 'Uploading…' : 'Upload signed copy'}
+      </button>
+      <Result state={state} />
+    </div>
   );
 }

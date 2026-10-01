@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { CancelSignatureButton, RequestSignatureForm } from './signature-controls';
+import { CancelSignatureButton, RequestSignatureForm, UploadSignedFormForm } from './signature-controls';
 
 // "Signatures" panel (PERMITFIELD_FF_PERMIT_ESIGN). One row per filing whose
 // form has a signature line. Signing is offered only where the authority has
@@ -47,7 +47,7 @@ export async function SignaturePanel({
   defaultSignerEmail: string;
 }) {
   const supabase = await createClient();
-  const [{ data: filings, error: filingsError }, { data: requests }, { data: canRequest }] = await Promise.all([
+  const [{ data: filings, error: filingsError }, { data: requests }, { data: canRequest }, { data: uploads }] = await Promise.all([
     supabase
       .from('permit_type_filings')
       .select('id, authorities ( name, esignature_accepted, esignature_source_url ), permit_form_signature_slots ( signer_role )')
@@ -60,7 +60,17 @@ export async function SignaturePanel({
       .neq('status', 'cancelled')
       .order('created_at', { ascending: false }),
     supabase.rpc('can_submit_filings', { check_org_id: orgId }),
+    supabase
+      .from('generated_documents')
+      .select('permit_type_filing_id, created_at')
+      .eq('application_id', applicationId)
+      .eq('fill_method', 'uploaded')
+      .order('created_at', { ascending: false }),
   ]);
+  const uploadedAt = new Map<string, string>();
+  for (const upload of uploads ?? []) {
+    if (!uploadedAt.has(upload.permit_type_filing_id)) uploadedAt.set(upload.permit_type_filing_id, upload.created_at);
+  }
   if (filingsError) {
     throw new Error(`Failed to load filings: ${filingsError.message}`);
   }
@@ -85,7 +95,8 @@ export async function SignaturePanel({
               <p className="text-sm font-medium text-zinc-900">{authority.name}</p>
               {!authority.esignature_accepted ? (
                 <p className="mt-1 text-xs text-zinc-600">
-                  {authority.name} hasn&apos;t confirmed it accepts electronic signatures on this form, so print it and sign by hand.
+                  {authority.name} hasn&apos;t confirmed it accepts electronic signatures on this form, so print it, sign by hand, and
+                  upload the signed copy below -- that is what gets submitted.
                 </p>
               ) : (
                 (filing.permit_form_signature_slots ?? []).map(({ signer_role: role }) => {
@@ -122,6 +133,20 @@ export async function SignaturePanel({
                     </div>
                   );
                 })
+              )}
+              {uploadedAt.has(filing.id) && (
+                <p className="mt-2 text-xs text-emerald-700">
+                  Signed copy uploaded {new Date(uploadedAt.get(filing.id)!).toLocaleString()} -- it is the form that gets submitted.
+                </p>
+              )}
+              {canRequest && open && (
+                <div className="mt-2">
+                  <p className="mb-1 text-xs text-zinc-600">
+                    {authority.esignature_accepted ? 'Signed on paper instead? ' : ''}
+                    {uploadedAt.has(filing.id) ? 'Upload a replacement signed copy:' : 'Upload the signed copy (PDF):'}
+                  </p>
+                  <UploadSignedFormForm applicationId={applicationId} filingId={filing.id} />
+                </div>
               )}
               {authority.esignature_accepted && authority.esignature_source_url && (
                 <p className="mt-2 text-[11px] text-zinc-400">

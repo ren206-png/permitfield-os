@@ -22,7 +22,7 @@ export function fieldLabel(mapsTo: string): string {
   return FIELD_LABELS[mapsTo] ?? mapsTo.split('.').pop()!.replace(/([A-Z])/g, ' $1').toLowerCase();
 }
 
-const FILENAME_PATTERN = /^([0-9a-f-]{36})-(filled|signed)\.pdf$/;
+const FILENAME_PATTERN = /^([0-9a-f-]{36})-(filled|signed|signed-upload)\.pdf$/;
 
 /** "City of Vancouver form (signed)" from `<filing id>-signed.pdf`, given filing id → authority name. */
 export function generatedDocumentLabel(filename: string, authorityByFiling: Map<string, string>): string {
@@ -30,5 +30,7 @@ export function generatedDocumentLabel(filename: string, authorityByFiling: Map<
   if (!match) return filename;
   const authority = authorityByFiling.get(match[1]);
   const base = authority ? `${authority} form` : 'Filled form';
-  return match[2] === 'signed' ? `${base} (signed)` : base;
+  if (match[2] === 'signed') return `${base} (signed)`;
+  if (match[2] === 'signed-upload') return `${base} (signed copy, uploaded)`;
+  return base;
 }

@@ -6,7 +6,8 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { can } from '@/lib/entitlements';
 import { isReadinessEnabled } from '@/lib/flags';
 import { ALL_PERMIT_STATUSES, type PermitStatus } from '@/lib/permit-status/transitions';
-import { MIN_OVERRIDE_REASON_LENGTH, permitStatusErrorMessage, suggestedChecklistItems } from '@/lib/readiness/readiness';
+import { addSuggestedChecklistItems } from '@/lib/readiness/add-suggested-items';
+import { MIN_OVERRIDE_REASON_LENGTH, permitStatusErrorMessage } from '@/lib/readiness/readiness';
 import { createClient } from '@/lib/supabase/server';
 
 // "Permit progress" panel actions (PERMITFIELD_FF_READINESS). Checklist rows
@@ -77,36 +78,14 @@ export async function addSuggestedItemsAction(_prev: ReadinessActionState, formD
     .maybeSingle();
   if (!application) return { error: 'Application not found.' };
 
-  const [{ data: filings }, { data: generated }, { data: existing }] = await Promise.all([
-    ctx.supabase
-      .from('permit_type_filings')
-      .select('id, authorities ( name, esignature_accepted ), permit_form_signature_slots ( signer_role )')
-      .eq('permit_type_id', application.permit_type_id)
-      .order('sequence', { ascending: true }),
-    ctx.supabase.from('generated_documents').select('permit_type_filing_id').eq('application_id', applicationId),
-    ctx.supabase.from('readiness_checklist_items').select('title').eq('application_id', applicationId).eq('org_id', ctx.orgId),
-  ]);
-
-  const generatedFilings = new Set((generated ?? []).map((g) => g.permit_type_filing_id));
-  const items = suggestedChecklistItems({
-    filings: (filings ?? []).map((f) => {
-      const authority = Array.isArray(f.authorities) ? f.authorities[0] : f.authorities;
-      return {
-        authorityName: authority?.name ?? 'authority',
-        hasFilledForm: generatedFilings.has(f.id),
-        esignatureAccepted: Boolean(authority?.esignature_accepted),
-        hasSignatureSlot: (f.permit_form_signature_slots ?? []).length > 0,
-      };
-    }),
-    existingTitles: (existing ?? []).map((row) => row.title),
+  const result = await addSuggestedChecklistItems(ctx.supabase, {
+    orgId: ctx.orgId,
+    applicationId,
+    permitTypeId: application.permit_type_id,
   });
-  if (items.length === 0) return { message: 'The suggested items are already on the checklist.' };
-
-  const { error } = await ctx.supabase
-    .from('readiness_checklist_items')
-    .insert(items.map((item) => ({ org_id: ctx.orgId, application_id: applicationId, title: item.title, description: item.description })));
-  if (error) return { error: `Could not add the suggested items: ${error.message}` };
-  return done(applicationId, { message: `Added ${items.length} item${items.length === 1 ? '' : 's'}.` });
+  if ('error' in result) return { error: `Could not add the suggested items: ${result.error}` };
+  if (result.added === 0) return { message: 'The suggested items are already on the checklist.' };
+  return done(applicationId, { message: `Added ${result.added} item${result.added === 1 ? '' : 's'}.` });
 }
 
 export async function setChecklistItemStatusAction(_prev: ReadinessActionState, formData: FormData): Promise<ReadinessActionState> {
