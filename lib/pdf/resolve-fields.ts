@@ -179,6 +179,12 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
     return postalCode ? { value: postalCode, confidence: 1 } : NO_VALUE;
   },
   'application.squareFootage': (ctx) => fromExtractedField(ctx.extraction?.square_footage),
+  // Same value with its unit, for blanks followed by a m²/ft² choice
+  // (the extraction is square metres -- lib/ai/schemas/extraction.ts).
+  'application.squareMetresWithUnit': (ctx) => {
+    const area = fromExtractedField(ctx.extraction?.square_footage);
+    return area.value === null ? area : { value: `${area.value} m\u00b2`, confidence: area.confidence };
+  },
   'application.electricalAmps': (ctx) => fromExtractedField(ctx.extraction?.electrical_amps),
   'application.scopeOfWorkSummary': (ctx) => fromExtractedField(ctx.extraction?.scope_of_work_summary),
   // Blanks a field the template ships pre-filled (Ontario's 2026 provincial

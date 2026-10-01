@@ -252,7 +252,7 @@ export const permitGeneratePdf = inngest.createFunction(
       const uploaded = await step.run(`fill-and-upload-filing-${filing.id}`, async () => {
         const { data: fieldRows, error: fieldsError } = await supabase
           .from('permit_form_fields')
-          .select('pdf_field_name, maps_to, is_required, overlay_page, overlay_x, overlay_y')
+          .select('pdf_field_name, maps_to, is_required, overlay_page, overlay_x, overlay_y, overlay_max_width, overlay_max_lines, overlay_font_size')
           .eq('permit_type_filing_id', filing.id);
         if (fieldsError) {
           throw new Error(`Failed to load permit_form_fields for filing ${filing.id}: ${fieldsError.message}`);
@@ -317,6 +317,9 @@ export const permitGeneratePdf = inngest.createFunction(
               x: Number(f.overlay_x),
               y: Number(f.overlay_y),
               value: resolved.value,
+              maxWidth: f.overlay_max_width === null ? null : Number(f.overlay_max_width),
+              maxLines: f.overlay_max_lines as number | null,
+              fontSize: f.overlay_font_size === null ? null : Number(f.overlay_font_size),
             };
           });
           filledBytes = (await fillOverlay(templateBytes, instructions)).filledBytes;
