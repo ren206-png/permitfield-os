@@ -14,7 +14,7 @@
 // values in the reference catalog's `permit_type_filings` rows
 // (supabase/migrations/20260806000068 and ...072), paired with the real
 // government PDF committed at that path under docs-reference-forms/.
-// Uploads all 9. Calgary is deliberately absent: the file once stored for
+// Uploads all 10. Calgary is deliberately absent: the file once stored for
 // it (docs-reference-forms/calgary-commercial-permit.pdf) turned out to be
 // an unrelated energy-rebate letter of intent, and Calgary has no PDF
 // application form for commercial alterations -- see migration ...072.
@@ -81,6 +81,11 @@ const TEMPLATE_MANIFEST: TemplateUpload[] = [
   {
     bucketPath: 'ontario/permit-to-construct-or-demolish-2026.pdf',
     localFile: 'ontario-permit-to-construct-or-demolish-2026.pdf',
+  },
+  // Edmonton's Short-Form commercial application (migration ...079).
+  {
+    bucketPath: 'edmonton/commercial-interior-alterations-short-form.pdf',
+    localFile: 'edmonton-commercial-interior-alterations-short-form.pdf',
   },
 ];
 

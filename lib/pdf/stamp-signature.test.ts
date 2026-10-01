@@ -11,6 +11,7 @@ const MIGRATION = [
   '20260806000073_permit_form_esignatures.sql',
   '20260806000077_ottawa_commercial_tenant_improvement.sql',
   '20260806000078_hamilton_commercial_tenant_improvement.sql',
+  '20260806000079_edmonton_commercial_tenant_improvement.sql',
 ]
   .map((f) => fs.readFileSync(path.join(ROOT, 'supabase/migrations', f), 'utf8'))
   .join('\n');
@@ -28,6 +29,7 @@ const FILING_FORMS: Record<string, string> = {
   '00000000-0000-0000-0004-000000000009': 'maple-ridge-tenant-landlord-improvement-application.pdf',
   '00000000-0000-0000-0004-00000000000a': 'ontario-permit-to-construct-or-demolish-2026.pdf',
   '00000000-0000-0000-0004-00000000000b': 'ontario-permit-to-construct-or-demolish-2026.pdf',
+  '00000000-0000-0000-0004-00000000000c': 'edmonton-commercial-interior-alterations-short-form.pdf',
 };
 
 const VANCOUVER_SLOT: SignatureSlot = {
