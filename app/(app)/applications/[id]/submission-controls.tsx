@@ -33,6 +33,7 @@ export function EmailSubmitButton({
   toEmail,
   projectAddress,
   testMode = false,
+  askPaymentMethod = false,
 }: {
   applicationId: string;
   filingId: string;
@@ -40,6 +41,8 @@ export function EmailSubmitButton({
   toEmail: string;
   projectAddress: string;
   testMode?: boolean;
+  /** The authority wants the method of payment stated in the email. */
+  askPaymentMethod?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(emailFilingAction, initialState);
   return (
@@ -56,6 +59,18 @@ export function EmailSubmitButton({
     >
       <input type="hidden" name="applicationId" value={applicationId} />
       <input type="hidden" name="filingId" value={filingId} />
+      {askPaymentMethod && (
+        <label className="mb-2 flex flex-col gap-1 text-xs text-zinc-700">
+          How you&apos;ll pay the application fee ({authorityName} asks for this in the email)
+          <input
+            name="paymentMethod"
+            required
+            maxLength={200}
+            className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900"
+            placeholder="e.g. Credit card by phone when the City calls"
+          />
+        </label>
+      )}
       <button type="submit" disabled={pending} className={buttonClass}>
         {pending ? 'Sending…' : `Email to ${authorityName}`}
       </button>

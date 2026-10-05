@@ -4,7 +4,8 @@ import { writeAuditLog } from '@/lib/audit/log';
 import { sendEmail } from '@/lib/email/send';
 import { GENERATED_BUCKET, UPLOADS_BUCKET } from '@/lib/storage/documents';
 import type { Role } from '@/lib/authz';
-import { buildSubmissionEmail } from './email';
+import { MAX_EMAIL_ATTACHMENT_BYTES, planEmailAttachments, type EmailAttachment } from './attachments';
+import { applicationFormFilename, buildSubmissionEmail } from './email';
 import { submissionBlockedByReadiness } from './readiness-gate';
 import { resolveSubmissionRecipient } from './recipient';
 
@@ -17,10 +18,7 @@ import { resolveSubmissionRecipient } from './recipient';
 // Signed download links for drawings/documents embedded in the email.
 export const DOCUMENT_LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-// Resend's documented per-email attachment cap is 40 MB; the filled form is
-// the only attachment and is far below this, but refuse rather than let the
-// provider reject it after the fact.
-const MAX_ATTACHMENT_BYTES = 35 * 1024 * 1024;
+const MAX_PAYMENT_METHOD_LENGTH = 200;
 
 type Client = SupabaseClient;
 
@@ -49,6 +47,8 @@ interface LoadedFiling {
     name: string;
     filing_mechanism: string | null;
     submission_email: string | null;
+    submission_attachments_only: boolean;
+    submission_payment_method_required: boolean;
   };
 }
 
@@ -76,7 +76,7 @@ async function loadFiling(supabase: Client, orgId: string, applicationId: string
 
   const { data: filing, error: filingError } = await supabase
     .from('permit_type_filings')
-    .select('id, permit_type_id, permit_types ( title ), authorities ( id, name, filing_mechanism, submission_email )')
+    .select('id, permit_type_id, permit_types ( title ), authorities ( id, name, filing_mechanism, submission_email, submission_attachments_only, submission_payment_method_required )')
     .eq('id', filingId)
     .eq('permit_type_id', application.permit_type_id)
     .maybeSingle();
@@ -131,7 +131,8 @@ export async function submitFilingByEmail(
   supabase: Client,
   ctx: SubmitterContext,
   applicationId: string,
-  filingId: string
+  filingId: string,
+  options: { paymentMethod?: string | null } = {}
 ): Promise<SubmitResult> {
   if (!isCitySubmissionEnabled()) return { ok: false, error: 'Submitting to authorities is currently off.' };
   if (!(await canSubmit(supabase, ctx.orgId))) {
@@ -142,6 +143,13 @@ export async function submitFilingByEmail(
   if ('error' in loaded) return { ok: false, error: loaded.error };
   if (loaded.authority.filing_mechanism !== 'pdf_email') {
     return { ok: false, error: `${loaded.authority.name} does not accept submissions by email.` };
+  }
+  const paymentMethod = options.paymentMethod?.trim() || null;
+  if (loaded.authority.submission_payment_method_required && !paymentMethod) {
+    return { ok: false, error: `${loaded.authority.name} asks for the method of payment in the email. Say how you'll pay the fee.` };
+  }
+  if (paymentMethod && paymentMethod.length > MAX_PAYMENT_METHOD_LENGTH) {
+    return { ok: false, error: `Keep the method of payment under ${MAX_PAYMENT_METHOD_LENGTH} characters.` };
   }
 
   const recipient = resolveSubmissionRecipient({
@@ -165,7 +173,7 @@ export async function submitFilingByEmail(
   const { data: pdfBlob, error: downloadError } = await supabase.storage.from(GENERATED_BUCKET).download(generated.storage_path);
   if (downloadError || !pdfBlob) return { ok: false, error: 'Could not read the filled form from storage.' };
   const pdfBytes = Buffer.from(await pdfBlob.arrayBuffer());
-  if (pdfBytes.byteLength > MAX_ATTACHMENT_BYTES) return { ok: false, error: 'The filled form is too large to email.' };
+  if (pdfBytes.byteLength > MAX_EMAIL_ATTACHMENT_BYTES) return { ok: false, error: 'The filled form is too large to email.' };
 
   const { data: docs, error: docsError } = await supabase
     .from('application_documents')
@@ -176,8 +184,28 @@ export async function submitFilingByEmail(
   if (docsError) return { ok: false, error: `Could not load the application documents: ${docsError.message}` };
   const shareable = (docs ?? []).filter((doc) => doc.status !== 'rejected');
 
+  const formFilename = applicationFormFilename(loaded.application.project_address);
+
   let documentLinks: { name: string; url: string }[] = [];
-  if (shareable.length > 0) {
+  let attachments: EmailAttachment[] = [{ filename: formFilename, content: pdfBytes, contentType: 'application/pdf' }];
+  let attachedDocumentNames: string[] = [];
+  if (loaded.authority.submission_attachments_only) {
+    // The authority refuses links: download every document and attach it.
+    const documents: { name: string; bytes: Buffer }[] = [];
+    let downloaded = pdfBytes.byteLength;
+    for (const doc of shareable) {
+      const { data: blob, error } = await supabase.storage.from(UPLOADS_BUCKET).download(doc.storage_path);
+      if (error || !blob) return { ok: false, error: `Could not read ${doc.original_filename} from storage.` };
+      const bytes = Buffer.from(await blob.arrayBuffer());
+      documents.push({ name: doc.original_filename, bytes });
+      downloaded += bytes.byteLength;
+      if (downloaded > MAX_EMAIL_ATTACHMENT_BYTES) break; // planEmailAttachments reports the total
+    }
+    const plan = planEmailAttachments({ authorityName: loaded.authority.name, form: { filename: formFilename, bytes: pdfBytes }, documents });
+    if (!plan.ok) return { ok: false, error: plan.error };
+    attachments = plan.attachments;
+    attachedDocumentNames = plan.documentNames;
+  } else if (shareable.length > 0) {
     const { data: signed, error: signError } = await supabase.storage
       .from(UPLOADS_BUCKET)
       .createSignedUrls(
@@ -206,6 +234,8 @@ export async function submitFilingByEmail(
     contactEmail,
     documentLinks,
     linksExpireAt,
+    attachedDocumentNames,
+    paymentMethod,
   });
 
   const sent = await sendEmail({
@@ -216,7 +246,7 @@ export async function submitFilingByEmail(
     fromName: `${ctx.orgName} via PermitField`,
     replyTo: contactEmail,
     cc: contactEmail,
-    attachments: [{ filename: content.attachmentFilename, content: pdfBytes, contentType: 'application/pdf' }],
+    attachments,
   });
 
   const { error: insertError } = await supabase.from('filing_submissions').insert({

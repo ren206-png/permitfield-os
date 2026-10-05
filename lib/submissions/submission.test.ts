@@ -53,6 +53,23 @@ describe('buildSubmissionEmail()', () => {
     expect(buildSubmissionEmail(base).subject).toBe('123 Main St, Richmond, BC, Commercial Tenant Improvement');
   });
 
+  it('lists attached documents instead of links, and states the method of payment when given', () => {
+    const email = buildSubmissionEmail({
+      ...base,
+      documentLinks: [],
+      attachedDocumentNames: ['Site plan.pdf', 'Owner authorization.pdf'],
+      paymentMethod: 'Credit card\r\nby phone',
+    });
+    expect(email.text).toContain('Project address: 123 Main St, Richmond, BC');
+    expect(email.text).toContain('Type of application: Commercial Tenant Improvement');
+    expect(email.text).toContain('Method of payment: Credit card by phone');
+    expect(email.text).toContain('Also attached:\n- Site plan.pdf\n- Owner authorization.pdf');
+    expect(email.text).not.toContain('download links');
+    expect(email.html).toContain('<li>Owner authorization.pdf</li>');
+    expect(email.html).toContain('Method of payment: Credit card by phone');
+    expect(buildSubmissionEmail(base).text).not.toContain('Method of payment');
+  });
+
   it('names the attachment after the property address', () => {
     expect(buildSubmissionEmail(base).attachmentFilename).toBe('123 Main St, Richmond, BC Application Form.pdf');
   });
