@@ -31,7 +31,8 @@ export async function emailFilingAction(_prev: SubmissionActionState, formData: 
   const target = ids(formData);
   if (!target) return { error: 'Invalid submission.' };
   const { supabase, ctx } = await context();
-  const result = await submitFilingByEmail(supabase, ctx, target.applicationId, target.filingId);
+  const paymentMethod = String(formData.get('paymentMethod') ?? '');
+  const result = await submitFilingByEmail(supabase, ctx, target.applicationId, target.filingId, { paymentMethod });
   revalidatePath(`/applications/${target.applicationId}`);
   return result.ok ? { message: result.message } : { error: result.error };
 }

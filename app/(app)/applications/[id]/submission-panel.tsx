@@ -17,6 +17,8 @@ interface Authority {
   filing_mechanism: 'portal' | 'pdf_email' | 'in_person' | 'api' | null;
   portal_url: string | null;
   submission_email: string | null;
+  submission_attachments_only: boolean;
+  submission_payment_method_required: boolean;
   submission_email_source_url: string | null;
   submission_email_verified_on: string | null;
   submission_instructions: string | null;
@@ -75,7 +77,7 @@ export async function SubmissionPanel({
     supabase
       .from('permit_type_filings')
       .select(
-        'id, sequence, is_conditional_on, authorities ( id, name, filing_mechanism, portal_url, submission_email, submission_email_source_url, submission_email_verified_on, submission_instructions, office_address )'
+        'id, sequence, is_conditional_on, authorities ( id, name, filing_mechanism, portal_url, submission_email, submission_attachments_only, submission_payment_method_required, submission_email_source_url, submission_email_verified_on, submission_instructions, office_address )'
       )
       .eq('permit_type_id', permitTypeId)
       .order('sequence', { ascending: true }),
@@ -167,7 +169,9 @@ export async function SubmissionPanel({
                 {canEmail && canSubmit ? (
                   <>
                     <p className="mb-2 text-xs text-zinc-600">
-                      Emails the filled form, with download links for your documents, to{' '}
+                      {authority.submission_attachments_only
+                        ? 'Emails the filled form with each of your documents attached as its own PDF (this authority does not accept links), to'
+                        : 'Emails the filled form, with download links for your documents, to'}{' '}
                       <span className="font-medium">{authority.submission_email}</span> (address verified from{' '}
                       <a href={authority.submission_email_source_url ?? '#'} className="underline underline-offset-2" target="_blank" rel="noreferrer">
                         the authority&apos;s own site
@@ -189,6 +193,7 @@ export async function SubmissionPanel({
                           toEmail={recipient.to}
                           projectAddress={projectAddress}
                           testMode={recipient.overridden}
+                          askPaymentMethod={authority.submission_payment_method_required}
                         />
                       </>
                     ) : (
