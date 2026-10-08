@@ -22,7 +22,7 @@ export async function addSuggestedChecklistItems(
       supabase.from('generated_documents').select('permit_type_filing_id').eq('application_id', input.applicationId),
       supabase
         .from('permit_requirements')
-        .select('title, description, applies_when, jurisdiction_sources ( url )')
+        .select('id, title, description, applies_when, jurisdiction_sources ( url )')
         .eq('permit_type_id', input.permitTypeId)
         .is('archived_at', null)
         .order('display_order', { ascending: true, nullsFirst: false }),
@@ -44,7 +44,7 @@ export async function addSuggestedChecklistItems(
     }),
     cityRequirements: (requirements ?? []).map((r) => {
       const source = Array.isArray(r.jurisdiction_sources) ? r.jurisdiction_sources[0] : r.jurisdiction_sources;
-      return { title: r.title, description: r.description, appliesWhen: r.applies_when, sourceUrl: source?.url ?? null };
+      return { id: r.id, title: r.title, description: r.description, appliesWhen: r.applies_when, sourceUrl: source?.url ?? null };
     }),
     existingTitles: (existing ?? []).map((row) => row.title),
   });
@@ -62,6 +62,7 @@ export async function addSuggestedChecklistItems(
       description: item.description,
       is_required: item.isRequired,
       source_requirement: item.sourceRequirement,
+      catalog_requirement_id: item.catalogRequirementId ?? null,
     }))
   );
   return error ? { error: error.message } : { added: items.length };
