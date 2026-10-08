@@ -14,6 +14,8 @@ export const LEGAL_DISCLAIMER =
 // Stamped on generated PDFs until the SS0.3 human-review gate is acknowledged.
 export const DRAFT_WATERMARK_TEXT = 'PERMITFIELD DRAFT — CONTRACTOR REVIEW REQUIRED';
 
-// Where privacy and legal questions go, shown on /privacy and /terms.
+// Who operates the service and the facts /privacy and /terms rely on.
+export const LEGAL_ENTITY_NAME = 'Renco Technologies Inc';
+export const LEGAL_GOVERNING_PROVINCE = 'Alberta';
 export const LEGAL_CONTACT_EMAIL = 'privacy@permitfieldos.com';
-export const LEGAL_LAST_UPDATED = 'September 29, 2026';
+export const LEGAL_LAST_UPDATED = 'October 8, 2026';
