@@ -12,6 +12,7 @@ const MIGRATION = [
   '20260806000077_ottawa_commercial_tenant_improvement.sql',
   '20260806000078_hamilton_commercial_tenant_improvement.sql',
   '20260806000079_edmonton_commercial_tenant_improvement.sql',
+  '20260806000083_toronto_commercial_tenant_improvement.sql',
 ]
   .map((f) => fs.readFileSync(path.join(ROOT, 'supabase/migrations', f), 'utf8'))
   .join('\n');
@@ -19,7 +20,7 @@ const MIGRATION = [
 // Template path in the catalog -> committed reference PDF (same pairing as
 // scripts/seed-storage-templates.ts).
 const FILING_FORMS: Record<string, string> = {
-  '00000000-0000-0000-0004-000000000001': 'toronto-permit-application.pdf',
+  '00000000-0000-0000-0004-000000000001': 'ontario-permit-to-construct-or-demolish-2026.pdf',
   '00000000-0000-0000-0004-000000000002': 'esa-icia-low-voltage.pdf',
   '00000000-0000-0000-0004-000000000004': 'surrey-building-permit-application.pdf',
   '00000000-0000-0000-0004-000000000005': 'vancouver-dev-build-app-form.pdf',
@@ -30,6 +31,7 @@ const FILING_FORMS: Record<string, string> = {
   '00000000-0000-0000-0004-00000000000a': 'ontario-permit-to-construct-or-demolish-2026.pdf',
   '00000000-0000-0000-0004-00000000000b': 'ontario-permit-to-construct-or-demolish-2026.pdf',
   '00000000-0000-0000-0004-00000000000c': 'edmonton-commercial-interior-alterations-short-form.pdf',
+  '00000000-0000-0000-0004-00000000000d': 'ontario-permit-to-construct-or-demolish-2026.pdf',
 };
 
 const VANCOUVER_SLOT: SignatureSlot = {

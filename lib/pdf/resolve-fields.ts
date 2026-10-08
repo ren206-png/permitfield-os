@@ -78,28 +78,38 @@ export interface CivicAddressParts {
   civicNumber: string | null;
   street: string | null;
   city: string | null;
+  unit: string | null;
 }
 
+// "Unit 210", "Suite 4B", "Ste. 300", "Apt 12", "#5" as its own segment.
+const UNIT_SEGMENT = /^(?:unit|suite|ste\.?|apt\.?|apartment|#)\s*#?\s*([A-Za-z0-9-]+)$/i;
+
 // Splits a free-text project address ("123 Main St, Richmond, BC V6Y 2C1",
-// "5-100 King St W, Toronto, ON") into the civic number, street and city
-// that split-box forms (ESA's Site Information) ask for. Deterministic, and
+// "5-100 King St W, Toronto, ON", "Unit 210, 100 King St W, Toronto, ON")
+// into the civic number, street, city and unit that split-box forms (ESA's
+// Site Information, Ontario's provincial form) ask for. Deterministic, and
 // deliberately conservative: any part it can't identify with confidence is
 // null, so the field is left blank rather than filled with a wrong value.
 export function parseCivicAddress(address: string | null): CivicAddressParts {
-  const empty = { civicNumber: null, street: null, city: null };
+  const empty = { civicNumber: null, street: null, city: null, unit: null };
   if (!address) return empty;
-  const segments = address
+  const allSegments = address
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
+  // Unit segments ("Unit 210") can sit before or after the street; take the
+  // first as the unit and leave all of them out of the street and city.
+  const unitSegment = allSegments.map((seg) => UNIT_SEGMENT.exec(seg)).find(Boolean);
+  const segments = allSegments.filter((seg) => !UNIT_SEGMENT.test(seg));
   if (segments.length === 0) return empty;
 
   const first = segments[0];
-  const unitFirst = /^[A-Za-z]?\d+[A-Za-z]?\s*-\s*(\d+[A-Za-z]?)\s+(.+)$/.exec(first);
+  const unitFirst = /^([A-Za-z]?\d+[A-Za-z]?)\s*-\s*(\d+[A-Za-z]?)\s+(.+)$/.exec(first);
   const plain = /^(\d+[A-Za-z]?)\s+(.+)$/.exec(first);
+  const civicNumber = unitFirst ? unitFirst[2] : plain ? plain[1] : null;
+  const street = unitFirst ? unitFirst[3].trim() : plain ? plain[2].trim() : null;
+  const unit = unitSegment ? unitSegment[1] : unitFirst ? unitFirst[1] : null;
   const match = unitFirst ?? plain;
-  const civicNumber = match ? match[1] : null;
-  const street = match ? match[2].trim() : null;
 
   let city: string | null = null;
   const provinceIndex = segments.findIndex((seg, i) => i > 0 && PROVINCE_CODES.has(seg.split(/\s+/)[0].toUpperCase()));
@@ -110,7 +120,7 @@ export function parseCivicAddress(address: string | null): CivicAddressParts {
   }
   if (city && /^(unit|suite|apt)\b/i.test(city)) city = null;
 
-  return { civicNumber, street, city };
+  return { civicNumber, street, city, unit };
 }
 
 const POSTAL_CODE_PATTERN = /\b([ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z])\s?(\d[ABCEGHJ-NPRSTV-Z]\d)\b/i;
@@ -152,14 +162,13 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   'applicant.email': (ctx) => (ctx.orgContactEmail ? { value: ctx.orgContactEmail, confidence: 1 } : NO_VALUE),
   'application.estimatedJobValueDollars': (ctx) => {
     if (ctx.estimatedJobValueCents === null) return NO_VALUE;
-    // The dollar VALUE is deterministic once cents is known (BigInt string
-    // math, lib/money/cents.ts), but the underlying number still came from
-    // an AI-extracted, printed-on-the-document string
-    // (estimated_job_value_raw) -- so this field's confidence tracks that
-    // extraction's confidence, not a flat 1. A confidently-computed
-    // conversion of an uncertain input is still an uncertain output.
-    const confidence = ctx.extraction?.estimated_job_value_raw?.confidence ?? 0;
-    return { value: centsToDollarsString(BigInt(ctx.estimatedJobValueCents)), confidence };
+    // permit_applications.estimated_job_value_cents is only ever the amount
+    // the contractor typed on the new-application form (extraction keeps its
+    // own parsed value in the extractions row and never writes it back), so
+    // it is filled with full confidence. Taking the extraction's confidence
+    // here left the contractor's own figure blank whenever the documents
+    // didn't state a value.
+    return { value: centsToDollarsString(BigInt(ctx.estimatedJobValueCents)), confidence: 1 };
   },
   'application.projectTitle': (ctx) =>
     ctx.application.projectTitle ? { value: ctx.application.projectTitle, confidence: 1 } : NO_VALUE,
@@ -174,6 +183,7 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
     const { civicNumber, street } = parseCivicAddress(ctx.application.projectAddress);
     return civicNumber && street ? { value: `${civicNumber} ${street}`, confidence: 1 } : NO_VALUE;
   },
+  'application.addressUnit': (ctx) => fromAddressPart(ctx, 'unit'),
   'application.addressPostalCode': (ctx) => {
     const postalCode = parsePostalCode(ctx.application.projectAddress);
     return postalCode ? { value: postalCode, confidence: 1 } : NO_VALUE;

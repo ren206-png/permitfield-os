@@ -29,19 +29,22 @@ describe('maps_to coverage', () => {
 
 describe('parseCivicAddress()', () => {
   it.each([
-    ['123 Test St, Toronto, ON', { civicNumber: '123', street: 'Test St', city: 'Toronto' }],
-    ['6911 No. 3 Road, Richmond, BC V6Y 2C1', { civicNumber: '6911', street: 'No. 3 Road', city: 'Richmond' }],
-    ['12A King St W, Toronto, ON M5H 1A1', { civicNumber: '12A', street: 'King St W', city: 'Toronto' }],
-    ['5-100 Queen St, Ottawa, ON', { civicNumber: '100', street: 'Queen St', city: 'Ottawa' }],
-    ['400 Sheldon Dr, Unit 1, Cambridge, ON', { civicNumber: '400', street: 'Sheldon Dr', city: 'Cambridge' }],
-    ['100 Main Street, Surrey', { civicNumber: '100', street: 'Main Street', city: 'Surrey' }],
+    ['123 Test St, Toronto, ON', { civicNumber: '123', street: 'Test St', city: 'Toronto', unit: null }],
+    ['6911 No. 3 Road, Richmond, BC V6Y 2C1', { civicNumber: '6911', street: 'No. 3 Road', city: 'Richmond', unit: null }],
+    ['12A King St W, Toronto, ON M5H 1A1', { civicNumber: '12A', street: 'King St W', city: 'Toronto', unit: null }],
+    ['5-100 Queen St, Ottawa, ON', { civicNumber: '100', street: 'Queen St', city: 'Ottawa', unit: '5' }],
+    ['400 Sheldon Dr, Unit 1, Cambridge, ON', { civicNumber: '400', street: 'Sheldon Dr', city: 'Cambridge', unit: '1' }],
+    ['100 Main Street, Surrey', { civicNumber: '100', street: 'Main Street', city: 'Surrey', unit: null }],
+    ['Unit 210, 100 King St W, Toronto, ON M5X 1A9', { civicNumber: '100', street: 'King St W', city: 'Toronto', unit: '210' }],
+    ['Suite 4B, 55 Bay St, Toronto, ON', { civicNumber: '55', street: 'Bay St', city: 'Toronto', unit: '4B' }],
+    ['#7, 10355 152 St, Surrey, BC', { civicNumber: '10355', street: '152 St', city: 'Surrey', unit: '7' }],
   ])('splits %s', (address, expected) => {
     expect(parseCivicAddress(address)).toEqual(expected);
   });
 
   it('leaves parts blank rather than guessing', () => {
-    expect(parseCivicAddress(null)).toEqual({ civicNumber: null, street: null, city: null });
-    expect(parseCivicAddress('Lot 7, Rural Route 2')).toEqual({ civicNumber: null, street: null, city: null });
+    expect(parseCivicAddress(null)).toEqual({ civicNumber: null, street: null, city: null, unit: null });
+    expect(parseCivicAddress('Lot 7, Rural Route 2')).toEqual({ civicNumber: null, street: null, city: null, unit: null });
     expect(parseCivicAddress('123 Main St, Unit 4, ON').city).toBeNull();
   });
 });
@@ -58,6 +61,22 @@ describe('resolvers added for the BC and ESA field maps', () => {
     orgContactEmail: 'office@acme.example',
     contractor: null,
   } as unknown as FieldResolutionContext;
+
+  it("fills the contractor's own job value with full confidence, with or without an extraction", () => {
+    expect(resolveFieldValue('application.estimatedJobValueDollars', { ...ctx, estimatedJobValueCents: 4800000 })).toEqual({
+      value: '48,000.00',
+      confidence: 1,
+    });
+    expect(resolveFieldValue('application.estimatedJobValueDollars', { ...ctx, extraction: null, estimatedJobValueCents: 4800000 }).confidence).toBe(1);
+    expect(resolveFieldValue('application.estimatedJobValueDollars', ctx).value).toBeNull();
+  });
+
+  it('resolves the unit from a leading unit segment', () => {
+    const withUnit = { ...ctx, application: { ...ctx.application, projectAddress: 'Unit 210, 100 King St W, Toronto, ON M5X 1A9' } };
+    expect(resolveFieldValue('application.addressUnit', withUnit).value).toBe('210');
+    expect(resolveFieldValue('application.addressStreetLine', withUnit).value).toBe('100 King St W');
+    expect(resolveFieldValue('application.addressUnit', ctx).value).toBeNull();
+  });
 
   it('resolves applicant name/email and the project address and description', () => {
     expect(resolveFieldValue('applicant.fullName', ctx).value).toBe('Jordan Rivera');
