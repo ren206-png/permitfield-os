@@ -14,17 +14,17 @@ begin
   select string_agg(j.municipality || ' / ' || pt.title, ', ') into v_missing
   from permit_types pt
   join jurisdictions j on j.id = pt.jurisdiction_id
-  where pt.id between '00000000-0000-0000-0003-000000000001' and '00000000-0000-0000-0003-00000000000b'
+  where pt.id between '00000000-0000-0000-0003-000000000001' and '00000000-0000-0000-0003-00000000000c'
     and not exists (select 1 from permit_requirements pr where pr.permit_type_id = pt.id and pr.archived_at is null);
   if v_missing is not null then
     raise exception 'FAIL: permit types without city requirements: %', v_missing;
   end if;
-  raise notice 'PASS: all 11 permit types have city requirements.';
+  raise notice 'PASS: all 12 permit types have city requirements.';
 
   select count(*) into v_bad
   from permit_requirements pr
   left join jurisdiction_sources s on s.id = pr.source_id
-  where pr.permit_type_id between '00000000-0000-0000-0003-000000000001' and '00000000-0000-0000-0003-00000000000b'
+  where pr.permit_type_id between '00000000-0000-0000-0003-000000000001' and '00000000-0000-0000-0003-00000000000c'
     and (s.id is null or s.url not like 'https://%' or s.jurisdiction_id <> pr.jurisdiction_id
          or pr.verification_status <> 'pending_review' or pr.display_order is null);
   if v_bad > 0 then
