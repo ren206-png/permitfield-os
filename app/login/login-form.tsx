@@ -11,6 +11,8 @@ const inputClass =
 // The /auth/callback URL a sign-in that leaves the site returns to, carrying
 // the invitation (if any) through. Supabase only honours it when it is in the
 // project's allowed redirect URLs; otherwise it falls back to the Site URL.
+const MIN_PASSWORD_LENGTH = 10;
+
 function callbackUrl(next: string | null): string {
   const url = new URL('/auth/callback', window.location.origin);
   if (next) url.searchParams.set('next', next);
@@ -199,7 +201,9 @@ export function LoginForm({ next = null, providers = [] }: { next?: string | nul
             id="password"
             type="password"
             required
-            minLength={6}
+            // New passwords need 10+ characters (Supabase Auth enforces the
+            // same); existing shorter passwords can still sign in.
+            minLength={mode === 'sign-up' ? MIN_PASSWORD_LENGTH : undefined}
             autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
