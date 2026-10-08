@@ -1,6 +1,7 @@
 import { PERMIT_STATUS_LABELS } from '@/lib/dashboard/labels';
 import type { PermitStatus } from '@/lib/permit-status/transitions';
 import { MIN_OVERRIDE_REASON_LENGTH, nextPermitStatusOptions } from '@/lib/readiness/readiness';
+import { reviewStatus } from '@/lib/requirements/review';
 import { createClient } from '@/lib/supabase/server';
 import {
   AddChecklistItemForm,
@@ -25,6 +26,21 @@ interface ChecklistItem {
   status: 'pending' | 'complete' | 'rejected';
   rejection_reason: string | null;
   source_requirement: string | null;
+  // The city requirement this item was copied from, with its review state.
+  permit_requirements: CatalogReview | CatalogReview[] | null;
+}
+
+interface CatalogReview {
+  verification_status: string;
+  verified_at: string | null;
+  archived_at: string | null;
+}
+
+// Verified (and not due for a re-check) by a named reviewer on the admin
+// Requirements review page.
+function isReviewed(item: ChecklistItem): boolean {
+  const review = Array.isArray(item.permit_requirements) ? item.permit_requirements[0] : item.permit_requirements;
+  return review ? reviewStatus({ ...review, archived_at: null }) === 'verified' : false;
 }
 
 interface HistoryRow {
@@ -73,7 +89,9 @@ export async function ReadinessPanel({
   const [{ data: items, error: itemsError }, { data: score }, { data: history }] = await Promise.all([
     supabase
       .from('readiness_checklist_items')
-      .select('id, title, description, is_required, responsible_party, due_date, status, rejection_reason, source_requirement')
+      .select(
+        'id, title, description, is_required, responsible_party, due_date, status, rejection_reason, source_requirement, permit_requirements ( verification_status, verified_at, archived_at )'
+      )
       .eq('org_id', orgId)
       .eq('application_id', applicationId)
       .order('created_at', { ascending: true }),
@@ -95,7 +113,7 @@ export async function ReadinessPanel({
   const scoreValue = score === null || score === undefined ? null : Number(score);
   const options = nextPermitStatusOptions(permitStatus, role).map((value) => ({ value, label: PERMIT_STATUS_LABELS[value] }));
   const today = new Date().toISOString().slice(0, 10);
-  const hasCityItems = checklist.some((item) => isSourceUrl(item.source_requirement));
+  const hasUnreviewedCityItems = checklist.some((item) => isSourceUrl(item.source_requirement) && !isReviewed(item));
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -144,10 +162,11 @@ export async function ReadinessPanel({
         <p className="mt-1 text-xs text-zinc-500">
           Required items must be complete before the status can move to Ready to submit.
         </p>
-        {hasCityItems && (
+        {hasUnreviewedCityItems && (
           <p className="mt-1 text-xs text-zinc-500">
-            Items with a source link are copied from the authority&apos;s published requirements and haven&apos;t been reviewed by
-            PermitField yet. Optional ones apply only if your scope triggers them. The authority can still ask for more.
+            Items with a source link are copied from the authority&apos;s published requirements. Those marked &ldquo;not yet
+            reviewed&rdquo; haven&apos;t been checked by PermitField yet. Optional ones apply only if your scope triggers them. The
+            authority can still ask for more.
           </p>
         )}
 
@@ -175,6 +194,11 @@ export async function ReadinessPanel({
                     >
                       Source: {sourceHost(item.source_requirement)}
                     </a>
+                  )}
+                  {isSourceUrl(item.source_requirement) && (
+                    <span className={`ml-2 text-[11px] ${isReviewed(item) ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                      {isReviewed(item) ? 'Verified by PermitField' : 'Not yet reviewed'}
+                    </span>
                   )}
                   <p className="text-xs text-zinc-500">
                     {[

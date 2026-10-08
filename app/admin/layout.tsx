@@ -24,6 +24,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Link href="/admin/client-portal" className="text-sm text-zinc-300 hover:text-white">
               Client portal tokens
             </Link>
+            <Link href="/admin/requirements" className="text-sm text-zinc-300 hover:text-white">
+              Requirements review
+            </Link>
             <Link href="/applications" className="text-sm text-zinc-300 hover:text-white">
               Back to app
             </Link>

@@ -86,12 +86,19 @@ describe('suggestedChecklistItems()', () => {
 
     it('makes always-required items required and conditional ones optional, with the condition first', () => {
       const [dataSheet, kitchen] = suggestedChecklistItems({ filings: [], cityRequirements, existingTitles: [] });
-      expect(dataSheet).toEqual({ title: 'Building Permit Data Sheet', description: "Vancouver's data sheet (Excel).", isRequired: true, sourceRequirement: source });
+      expect(dataSheet).toEqual({
+        title: 'Building Permit Data Sheet',
+        description: "Vancouver's data sheet (Excel).",
+        isRequired: true,
+        sourceRequirement: source,
+        catalogRequirementId: null,
+      });
       expect(kitchen).toEqual({
         title: 'K1 Restaurant or Kitchen Exhaust Systems form',
         description: 'Required if a commercial kitchen is added or renovated.',
         isRequired: false,
         sourceRequirement: source,
+        catalogRequirementId: null,
       });
     });
 

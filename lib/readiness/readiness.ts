@@ -53,6 +53,8 @@ export function permitStatusErrorMessage(message: string): string {
 
 /** One item from the city's own submission checklist (permit_requirements). */
 export interface CityRequirement {
+  /** permit_requirements.id, kept on the checklist item so its review status can be shown. */
+  id?: string;
   title: string;
   description: string | null;
   /** The checklist's own condition; null when the city always requires it. */
@@ -72,6 +74,8 @@ export interface SuggestedItem {
   isRequired: boolean;
   /** Where the item comes from (the city checklist's URL), when it has a source. */
   sourceRequirement: string | null;
+  /** The catalog requirement it was copied from, for city items. */
+  catalogRequirementId?: string | null;
 }
 
 /**
@@ -119,6 +123,7 @@ export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedIte
       description: [requirement.appliesWhen, requirement.description].filter(Boolean).join(' '),
       isRequired: requirement.appliesWhen === null,
       sourceRequirement: requirement.sourceUrl,
+      catalogRequirementId: requirement.id ?? null,
     });
   }
   const seen = new Set(input.existingTitles.map((t) => t.trim().toLowerCase()));
