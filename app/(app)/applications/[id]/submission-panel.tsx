@@ -3,6 +3,9 @@ import { GENERATED_BUCKET } from '@/lib/storage/documents';
 import { isReadinessEnabled } from '@/lib/flags';
 import { submissionBlockedByReadiness } from '@/lib/submissions/readiness-gate';
 import { resolveSubmissionRecipient } from '@/lib/submissions/recipient';
+import { portalAnswers, portalAnswersText } from '@/lib/pdf/portal-answers';
+import { loadFieldResolutionContext } from '@/lib/submissions/portal-context';
+import { PortalAnswers } from './portal-answers';
 import { EmailSubmitButton, RecordSubmissionForm } from './submission-controls';
 
 // "Submit to authority" panel (PERMITFIELD_FF_CITY_SUBMISSION). One card per
@@ -28,6 +31,7 @@ interface Authority {
 interface Filing {
   id: string;
   sequence: number;
+  form_template_path: string | null;
   is_conditional_on: { trigger?: string } | null;
   authorities: Authority | Authority[] | null;
 }
@@ -77,7 +81,7 @@ export async function SubmissionPanel({
     supabase
       .from('permit_type_filings')
       .select(
-        'id, sequence, is_conditional_on, authorities ( id, name, filing_mechanism, portal_url, submission_email, submission_attachments_only, submission_payment_method_required, submission_email_source_url, submission_email_verified_on, submission_instructions, office_address )'
+        'id, sequence, is_conditional_on, form_template_path, authorities ( id, name, filing_mechanism, portal_url, submission_email, submission_attachments_only, submission_payment_method_required, submission_email_source_url, submission_email_verified_on, submission_instructions, office_address )'
       )
       .eq('permit_type_id', permitTypeId)
       .order('sequence', { ascending: true }),
@@ -114,6 +118,22 @@ export async function SubmissionPanel({
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
 
   const rows = (filings ?? []) as Filing[];
+
+  // Answers for portal filings' online applications (Calgary has no PDF form,
+  // so this sheet is what the contractor copies from).
+  const hasPortalFiling = rows.some((filing) => {
+    const authority = Array.isArray(filing.authorities) ? filing.authorities[0] : filing.authorities;
+    return authority?.filing_mechanism === 'portal';
+  });
+  let answers: ReturnType<typeof portalAnswers> | null = null;
+  if (hasPortalFiling) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const context = await loadFieldResolutionContext(supabase, { orgId, applicationId, userEmail: user?.email ?? null });
+    answers = context ? portalAnswers(context) : null;
+  }
+  const answersText = answers ? portalAnswersText(answers) : '';
 
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -156,8 +176,10 @@ export async function SubmissionPanel({
                   <a href={formUrl} className="font-medium text-zinc-900 underline underline-offset-2">
                     Download filled form
                   </a>
-                ) : (
+                ) : filing.form_template_path ? (
                   'No filled form has been generated for this filing.'
+                ) : (
+                  'This authority has no PDF application form; the application is made online.'
                 )}
               </p>
 
@@ -205,13 +227,20 @@ export async function SubmissionPanel({
                     <p className="mb-2 text-xs text-zinc-600">
                       {recordMethod === 'in_person'
                         ? `File in person${authority.office_address ? ` at ${authority.office_address}` : ''}. Bring the filled form and your documents.`
-                        : 'Upload the filled form and your documents through the authority’s online portal.'}{' '}
+                        : filing.form_template_path
+                          ? 'Upload the filled form and your documents through the authority’s online portal.'
+                          : 'Fill in the authority’s online application with the answers below, and upload your documents there.'}{' '}
                       {authority.portal_url && (
                         <a href={authority.portal_url} className="font-medium underline underline-offset-2" target="_blank" rel="noreferrer">
                           {recordMethod === 'in_person' ? 'Authority details' : 'Open portal'}
                         </a>
                       )}
                     </p>
+                    {recordMethod === 'portal' && answers && (
+                      <div className="mb-3">
+                        <PortalAnswers answers={answers} allText={answersText} authorityName={authority.name} />
+                      </div>
+                    )}
                     {canSubmit && <RecordSubmissionForm applicationId={applicationId} filingId={filing.id} method={recordMethod} />}
                   </>
                 ) : null}

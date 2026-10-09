@@ -63,6 +63,21 @@ export function splitApplicantName(fullName: string): { firstName: string | null
   return { firstName, lastName };
 }
 
+// A business name rather than a person's: a legal-form suffix or a common
+// trade-company word, or the contractor's own company name. The extraction's
+// "applicant" is often the company; splitting "Renco Technologies Inc" into
+// first name "Renco Technologies" and last name "Inc" (found in the first
+// production Toronto run) puts nonsense on a government form, so person-name
+// boxes are left blank for these -- the company has its own box.
+const ORGANIZATION_WORDS =
+  /\b(inc|incorporated|ltd|limited|corp|corporation|co|company|llp|lp|ulc|plc|group|construction|contracting|contractors?|interiors|design|designs|services|enterprises|holdings|developments|builders|electric|electrical|mechanical|plumbing|engineering|architects?|architecture)\b\.?/i;
+
+export function looksLikeOrganization(name: string, contractorCompanyName?: string | null): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (contractorCompanyName && normalize(name) === normalize(contractorCompanyName)) return true;
+  return ORGANIZATION_WORDS.test(name);
+}
+
 function fromExtractedField(
   field: { value: string | number | null; confidence: number } | undefined
 ): ResolvedField {
@@ -147,6 +162,7 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   'applicant.firstName': (ctx) => {
     const name = ctx.extraction?.applicant_name;
     if (!name || name.value === null) return NO_VALUE;
+    if (looksLikeOrganization(name.value, ctx.contractor?.companyName)) return NO_VALUE;
     const { firstName } = splitApplicantName(name.value);
     if (firstName === null) return NO_VALUE;
     return { value: firstName, confidence: name.confidence };
@@ -154,6 +170,7 @@ const FIELD_RESOLVERS: Record<string, Resolver> = {
   'applicant.lastName': (ctx) => {
     const name = ctx.extraction?.applicant_name;
     if (!name || name.value === null) return NO_VALUE;
+    if (looksLikeOrganization(name.value, ctx.contractor?.companyName)) return NO_VALUE;
     const { lastName } = splitApplicantName(name.value);
     return { value: lastName, confidence: name.confidence };
   },

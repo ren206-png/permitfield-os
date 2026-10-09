@@ -49,6 +49,31 @@ describe('parseCivicAddress()', () => {
   });
 });
 
+describe('applicant first/last name', () => {
+  const ctx = (applicantName: string, companyName: string | null = null) =>
+    ({
+      extraction: { applicant_name: { value: applicantName, confidence: 0.95, source_document_id: null, source_page: null } },
+      estimatedJobValueCents: null,
+      application: { projectTitle: null, projectAddress: null },
+      orgContactEmail: null,
+      contractor: companyName ? { companyName, primaryLicenseNumber: null, licenseProvinceCode: null } : null,
+    }) as unknown as FieldResolutionContext;
+
+  it('splits a person\'s name', () => {
+    expect(resolveFieldValue('applicant.firstName', ctx('Jordan Rivera')).value).toBe('Jordan');
+    expect(resolveFieldValue('applicant.lastName', ctx('Jordan Rivera')).value).toBe('Rivera');
+  });
+
+  it('leaves both blank for a company name, so "Inc" never becomes a last name', () => {
+    for (const company of ['Renco Technologies Inc', 'Acme Electric Ltd.', 'Northside Contracting', 'BuildCo Corp']) {
+      expect(resolveFieldValue('applicant.firstName', ctx(company)).value, company).toBeNull();
+      expect(resolveFieldValue('applicant.lastName', ctx(company)).value, company).toBeNull();
+    }
+    expect(resolveFieldValue('applicant.lastName', ctx('Renco Technologies', 'Renco Technologies')).value).toBeNull();
+    expect(resolveFieldValue('applicant.fullName', ctx('Renco Technologies Inc')).value).toBe('Renco Technologies Inc');
+  });
+});
+
 describe('resolvers added for the BC and ESA field maps', () => {
   const extraction = {
     applicant_name: { value: 'Jordan Rivera', confidence: 0.95, source_document_id: null, source_page: null },
