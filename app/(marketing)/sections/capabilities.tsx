@@ -16,10 +16,11 @@ const CAPABILITIES = [
     ledgerRef: '§2',
   },
   {
-    title: 'Form auto-fill where supported',
+    title: "The city's own form, filled in",
     body:
-      'For the Toronto Electrical Service Upgrade form today, with more ' +
-      'forms being added over time.',
+      "Commercial tenant improvement forms in every city we cover except " +
+      'Calgary, plus Toronto electrical service upgrades. Calgary files ' +
+      'online only, so you get every answer ready to paste.',
     ledgerRef: '§3',
   },
   {

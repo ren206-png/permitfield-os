@@ -19,9 +19,18 @@ function callbackUrl(next: string | null): string {
   return url.toString();
 }
 
-export function LoginForm({ next = null, providers = [] }: { next?: string | null; providers?: OAuthProvider[] }) {
+export function LoginForm({
+  next = null,
+  providers = [],
+  initialMode = 'sign-in',
+}: {
+  next?: string | null;
+  providers?: OAuthProvider[];
+  // The homepage's "Create your account" buttons open on the sign-up tab.
+  initialMode?: 'sign-in' | 'sign-up';
+}) {
   const router = useRouter();
-  const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
+  const [mode, setMode] = useState<'sign-in' | 'sign-up'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);

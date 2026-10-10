@@ -55,7 +55,7 @@ export function Hero() {
         </p>
         <div className="mt-8 flex items-center justify-center gap-4">
           <Link
-            href="/login"
+            href="/login?mode=sign-up"
             className="rounded-md bg-orange-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-orange-200 transition hover:bg-orange-500 hover:shadow-lg hover:shadow-orange-300 dark:shadow-none"
           >
             Create your account

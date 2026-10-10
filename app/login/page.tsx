@@ -14,9 +14,10 @@ import { LoginForm } from './login-form';
 // with the "never enter credentials into a field you don't own" instinct
 // this whole product is built to encourage in contractors dealing with
 // permit portals).
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
-  const { next: requestedNext, error: callbackError } = await searchParams;
-  // Where to go after signing in -- only a team invitation link (safeNextPath).
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; mode?: string }> }) {
+  const { next: requestedNext, error: callbackError, mode } = await searchParams;
+  // Where to go after signing in -- a team invitation link or a page inside
+  // the app (safeNextPath).
   const next = safeNextPath(requestedNext);
   const providers = await fetchEnabledOAuthProviders();
 
@@ -43,7 +44,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               That sign-in link didn&apos;t work -- it may have expired or already been used. Sign in below.
             </p>
           )}
-          <LoginForm next={next} providers={providers} />
+          <LoginForm next={next} providers={providers} initialMode={mode === 'sign-up' ? 'sign-up' : 'sign-in'} />
         </div>
         <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
         <p className="mt-2 text-center text-xs text-zinc-500">

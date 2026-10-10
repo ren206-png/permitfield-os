@@ -14,7 +14,7 @@ export function FooterCta() {
             Ready to organize your next permit application?
           </h2>
           <Link
-            href="/login"
+            href="/login?mode=sign-up"
             className="mt-6 inline-block rounded-md bg-white px-5 py-2.5 text-sm font-medium text-orange-700 shadow-md transition hover:bg-orange-50"
           >
             Create your account
