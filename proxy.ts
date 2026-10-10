@@ -78,7 +78,14 @@ export async function proxy(request: NextRequest) {
   // this phase adds uncrawlable, defeating their purpose. No other route is
   // affected -- this is scoped to exactly these two well-known,
   // content-self-gated filenames.
-  const isPublicSeoRoute = pathname === '/robots.txt' || pathname === '/sitemap.xml';
+  // The link-preview images (app/opengraph-image.tsx, app/twitter-image.tsx)
+  // are static marketing cards; behind the login redirect, every shared link
+  // showed no image.
+  const isPublicSeoRoute =
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml' ||
+    pathname === '/opengraph-image' ||
+    pathname === '/twitter-image';
   // Privacy policy and terms: public, and linked from the Google/Microsoft
   // sign-in consent screens.
   const isPublicLegalRoute = pathname === '/privacy' || pathname === '/terms';
@@ -128,6 +135,10 @@ export async function proxy(request: NextRequest) {
     !isPublicClientLinkRoute
   ) {
     const redirectUrl = new URL('/login', request.url);
+    // Back to the page they opened once they've signed in (an emailed
+    // application link, a bookmark) -- only for paths safeNextPath allows.
+    const next = safeNextPath(pathname);
+    if (next) redirectUrl.searchParams.set('next', next);
     return NextResponse.redirect(redirectUrl);
   }
 

@@ -40,6 +40,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
+  for (const path of ['/privacy', '/terms']) {
+    entries.push({ url: `${SITE_URL}${path}`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.2 });
+  }
+
   if (isJurisdictionPagesEnabled()) {
     entries.push({
       url: `${SITE_URL}/coverage`,

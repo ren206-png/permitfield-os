@@ -54,14 +54,14 @@ export function MarketingHomepage() {
       <StructuredData />
       <Analytics />
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <span className="flex items-center gap-2 whitespace-nowrap text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-orange-600 text-sm font-bold text-white shadow-sm shadow-orange-200 dark:shadow-none">
               P
             </span>
             {PRODUCT_NAME}
           </span>
-          <nav className="flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400 sm:gap-6">
+          <nav className="flex items-center gap-3 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-400 sm:gap-6">
             <a href="#how-it-works" className="hidden hover:text-orange-600 dark:hover:text-orange-400 sm:inline">
               How it works
             </a>
@@ -72,10 +72,12 @@ export function MarketingHomepage() {
               Sign in
             </Link>
             <Link
-              href="/login"
+              href="/login?mode=sign-up"
               className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
             >
-              Create your account
+              {/* Phones: the full label wrapped onto two lines beside the logo. */}
+              <span className="sm:hidden">Sign up</span>
+              <span className="hidden sm:inline">Create your account</span>
             </Link>
             <ThemeToggle />
           </nav>

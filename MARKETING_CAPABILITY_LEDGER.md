@@ -111,7 +111,7 @@ that a reasonable reader would take as a present-tense claim:
 
 1. Permit application intake and status tracking, end to end (§1)
 2. AI-assisted extraction of application data from uploaded documents, with human review (§2)
-3. Automatic form-filling for supported forms today (Toronto Electrical Service Upgrade, and Commercial Tenant Improvement in Surrey, Vancouver, Richmond, Coquitlam, Port Coquitlam, and Maple Ridge), expandable over time (§3, stated honestly as current + narrow)
+3. Automatic form-filling for supported forms today (Toronto Electrical Service Upgrade, and Commercial Tenant Improvement in every covered city except Calgary, which has no PDF form -- its portal answers are given ready to paste) (§3; updated 2026-10-09)
 4. Organization-scoped data isolation via row-level security (§10)
 5. Automated background processing for extraction, compliance audit, and PDF generation (§13)
 6. Secure, organized document storage per application (§14)
