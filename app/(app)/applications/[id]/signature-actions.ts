@@ -70,6 +70,7 @@ export async function cancelSignatureAction(_prev: SignatureActionState, formDat
 // The uploaded PDF becomes the filing's latest document, so it is what gets
 // downloaded and submitted. See lib/supabase/service-client.ts, Exception 4.
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SIGNED_UPLOAD_NAME = /^[0-9a-f]{64}-[0-9a-f-]{36}-signed-upload\.pdf$/;
 
 type SignedUploadAuth =
   | { error: string }
@@ -109,7 +110,12 @@ export async function recordSignedFormUploadAction(input: {
   const auth = await authorizeSignedUpload(input.applicationId, input.filingId);
   if ('error' in auth) return { error: auth.error };
   const filename = `${input.filingId}-signed-upload.pdf`;
-  if (!input.path.startsWith(`${auth.orgId}/${input.applicationId}/`) || !input.path.endsWith(`-${filename}`)) {
+  // Exactly the path prepareSignedFormUploadAction() handed out. A prefix
+  // check alone let '../' segments through, which the storage URL then
+  // resolves outside this application's folder.
+  const prefix = `${auth.orgId}/${input.applicationId}/`;
+  const name = input.path.slice(prefix.length);
+  if (!input.path.startsWith(prefix) || !SIGNED_UPLOAD_NAME.test(name) || !name.endsWith(`-${filename}`)) {
     return { error: 'Invalid upload.' };
   }
 

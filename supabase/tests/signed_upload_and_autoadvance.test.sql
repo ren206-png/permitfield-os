@@ -59,6 +59,16 @@ begin
     when others then
       if sqlerrm not like 'invalid_path%' then raise; end if;
   end;
+  -- Right prefix, then '../' back out into another org's folder.
+  begin
+    perform record_uploaded_signed_form('40000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0004-000000000001',
+      '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/../../20000000-0000-0000-0000-00000000000b/x/bb-00000000-0000-0000-0004-000000000001-signed-upload.pdf',
+      '00000000-0000-0000-0004-000000000001-signed-upload.pdf');
+    raise exception 'FAIL: accepted a path with ../ segments';
+  exception
+    when others then
+      if sqlerrm not like 'invalid_path%' then raise; end if;
+  end;
   begin
     perform record_uploaded_signed_form('40000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0004-000000000001',
       '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/bb-evil.pdf', 'evil.pdf');

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { OAUTH_PROVIDER_LABELS, type OAuthProvider } from '@/lib/auth/oauth-providers';
+import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
 
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
@@ -43,6 +44,10 @@ export function LoginForm({
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [resendPending, setResendPending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  // Cloudflare Turnstile token (single-use); see ./turnstile.tsx.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+  const captchaMissing = TURNSTILE_SITE_KEY !== '' && !captchaToken;
 
   // Ticks the resend cooldown down to 0 once a resend has been sent, so the
   // button can't be mashed into re-triggering Supabase's own rate limit
@@ -79,10 +84,13 @@ export function LoginForm({
     // to resolve). Checking `data.session` below distinguishes "signed up,
     // already live" (local/confirmation-off) from "signed up, check your
     // email" (production/confirmation-on) instead of assuming the former.
+    const captcha = captchaToken ? { captchaToken } : {};
     const { data, error: authError } =
       mode === 'sign-in'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: callbackUrl(next) } });
+        ? await supabase.auth.signInWithPassword({ email, password, options: captcha })
+        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: callbackUrl(next), ...captcha } });
+    // The token is spent whether or not the call succeeded.
+    setCaptchaResetKey((key) => key + 1);
 
     if (authError) {
       setError(authError.message);
@@ -151,7 +159,9 @@ export function LoginForm({
     const { error: resendError } = await supabase.auth.resend({
       type: 'signup',
       email: unconfirmedEmail,
+      options: captchaToken ? { captchaToken } : {},
     });
+    setCaptchaResetKey((key) => key + 1);
 
     setResendPending(false);
 
@@ -220,6 +230,8 @@ export function LoginForm({
           />
         </div>
 
+        <Turnstile onToken={setCaptchaToken} resetKey={captchaResetKey} />
+
         {error && (
           <p role="alert" className="text-sm text-red-600">
             {error}
@@ -236,7 +248,7 @@ export function LoginForm({
           <button
             type="button"
             onClick={handleResend}
-            disabled={resendPending || resendCooldown > 0}
+            disabled={resendPending || resendCooldown > 0 || captchaMissing}
             className="text-left text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 hover:text-zinc-900 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:no-underline"
           >
             {resendPending
@@ -249,7 +261,7 @@ export function LoginForm({
 
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || captchaMissing}
           className="mt-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
