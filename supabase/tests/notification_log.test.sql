@@ -56,7 +56,7 @@ set local role service_role;
 insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
 values
   ('79000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-   'org-a/notify-fixture-drawing.pdf', 'notify-fixture-drawing.pdf', 'application/pdf', 2048, repeat('f', 64), 'blueprint')
+   '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/notify-fixture-drawing.pdf', 'notify-fixture-drawing.pdf', 'application/pdf', 2048, repeat('f', 64), 'blueprint')
 on conflict (id) do nothing;
 
 -- === 1. service_role can INSERT rows, including both event_kind shapes ===

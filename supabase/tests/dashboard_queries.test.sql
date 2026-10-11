@@ -149,10 +149,10 @@ values
 -- (application_documents_archived_pair, 20260806000024 L101-102).
 insert into application_documents (application_id, storage_path, original_filename, mime_type, byte_size, sha256, status, archived_at, archived_by)
 values
-  ('40000000-0000-0000-0000-0000000000c1', 'dashboard-test/c1-pending.pdf', 'c1-pending.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-pending'::bytea), 'hex'), 'pending', null, null),
-  ('40000000-0000-0000-0000-0000000000c1', 'dashboard-test/c1-approved.pdf', 'c1-approved.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-approved'::bytea), 'hex'), 'approved', null, null),
-  ('40000000-0000-0000-0000-0000000000c1', 'dashboard-test/c1-rejected.pdf', 'c1-rejected.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-rejected'::bytea), 'hex'), 'rejected', null, null),
-  ('40000000-0000-0000-0000-0000000000c1', 'dashboard-test/c1-archived.pdf', 'c1-archived.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-archived'::bytea), 'hex'), 'pending', now(), '10000000-0000-0000-0000-00000000000a');
+  ('40000000-0000-0000-0000-0000000000c1', '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-0000000000c1/c1-pending.pdf', 'c1-pending.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-pending'::bytea), 'hex'), 'pending', null, null),
+  ('40000000-0000-0000-0000-0000000000c1', '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-0000000000c1/c1-approved.pdf', 'c1-approved.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-approved'::bytea), 'hex'), 'approved', null, null),
+  ('40000000-0000-0000-0000-0000000000c1', '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-0000000000c1/c1-rejected.pdf', 'c1-rejected.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-rejected'::bytea), 'hex'), 'rejected', null, null),
+  ('40000000-0000-0000-0000-0000000000c1', '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-0000000000c1/c1-archived.pdf', 'c1-archived.pdf', 'application/pdf', 1024, encode(sha256('dashboard-test-doc-archived'::bytea), 'hex'), 'pending', now(), '10000000-0000-0000-0000-00000000000a');
 
 -- --- Org B: 1 project (draft) -- exists solely to prove Org A's counts
 -- don't include it, and vice versa. ---

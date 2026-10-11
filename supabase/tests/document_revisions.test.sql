@@ -104,7 +104,7 @@ declare
 begin
   insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
   values ('70000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-          'orgA/fixture-v1.pdf', 'fixture-v1.pdf', 'application/pdf', 1000, repeat('a', 64), 'other');
+          '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/fixture-v1.pdf', 'fixture-v1.pdf', 'application/pdf', 1000, repeat('a', 64), 'other');
 
   select count(*), min(revision_number) into rev_count, rev_number
   from document_revisions where application_document_id = '70000000-0000-0000-0000-00000000000a';
@@ -121,7 +121,7 @@ do $$
 begin
   insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
   values ('70000000-0000-0000-0000-00000000000b', '40000000-0000-0000-0000-00000000000b',
-          'orgB/fixture-v1.pdf', 'fixture-v1.pdf', 'application/pdf', 1000, repeat('e', 64), 'other');
+          '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/fixture-v1.pdf', 'fixture-v1.pdf', 'application/pdf', 1000, repeat('e', 64), 'other');
   raise notice 'PASS: Org B fixture document (DOC_B) created';
 end $$;
 
@@ -219,11 +219,11 @@ declare
 begin
   select * into result from replace_application_document(
     '70000000-0000-0000-0000-00000000000a',
-    'orgA/fixture-v2.pdf', 'fixture-v2.pdf', 'application/pdf', 2000, repeat('b', 64),
+    '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/fixture-v2.pdf', 'fixture-v2.pdf', 'application/pdf', 2000, repeat('b', 64),
     '\x255044462d312e34'::bytea -- "%PDF-1.4"
   );
 
-  if result.storage_path <> 'orgA/fixture-v2.pdf' or result.sha256 <> repeat('b', 64) or result.byte_size <> 2000 then
+  if result.storage_path <> '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/fixture-v2.pdf' or result.sha256 <> repeat('b', 64) or result.byte_size <> 2000 then
     raise exception 'FAIL: replace_application_document() did not denormalize the new revision onto application_documents (got path=%, sha256=%, size=%)', result.storage_path, result.sha256, result.byte_size;
   end if;
 
@@ -248,7 +248,7 @@ begin
   begin
     perform replace_application_document(
       '70000000-0000-0000-0000-00000000000a',
-      'orgB/hijack.pdf', 'hijack.pdf', 'application/pdf', 1000, repeat('c', 64),
+      '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/hijack.pdf', 'hijack.pdf', 'application/pdf', 1000, repeat('c', 64),
       '\x255044462d312e34'::bytea
     );
     raise exception 'FAIL: Org B owner was able to replace Org A''s document';
@@ -267,7 +267,7 @@ begin
   begin
     perform replace_application_document(
       '70000000-0000-0000-0000-00000000000a',
-      'orgA/auditor-attempt.pdf', 'auditor-attempt.pdf', 'application/pdf', 1000, repeat('d', 64),
+      '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/auditor-attempt.pdf', 'auditor-attempt.pdf', 'application/pdf', 1000, repeat('d', 64),
       '\x255044462d312e34'::bytea
     );
     raise exception 'FAIL: auditor_readonly was able to call replace_application_document()';
@@ -286,7 +286,7 @@ begin
   begin
     perform replace_application_document(
       '70000000-0000-0000-0000-00000000000a',
-      'orgA/fake.pdf', 'fake.pdf', 'application/pdf', 1000, repeat('f', 64),
+      '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/fake.pdf', 'fake.pdf', 'application/pdf', 1000, repeat('f', 64),
       '\xffd8ffe000104a464946'::bytea -- real JPEG header, declared as a PDF
     );
     raise exception 'FAIL: replace_application_document() accepted a JPEG-signature file declared as application/pdf';
@@ -307,7 +307,7 @@ begin
   begin
     perform replace_application_document(
       '70000000-0000-0000-0000-00000000000a',
-      'orgA/huge.pdf', 'huge.pdf', 'application/pdf', 30000000, repeat('g', 64),
+      '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/huge.pdf', 'huge.pdf', 'application/pdf', 30000000, repeat('g', 64),
       '\x255044462d312e34'::bytea
     );
     raise exception 'FAIL: replace_application_document() accepted a 30MB file (25MB/file cap)';
@@ -391,7 +391,7 @@ begin
   begin
     perform replace_application_document(
       '70000000-0000-0000-0000-00000000000a',
-      'orgA/post-archive.pdf', 'post-archive.pdf', 'application/pdf', 1000, repeat('h', 64),
+      '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/post-archive.pdf', 'post-archive.pdf', 'application/pdf', 1000, repeat('h', 64),
       '\x255044462d312e34'::bytea
     );
     raise exception 'FAIL: replace_application_document() accepted a new revision for an archived document';
@@ -420,7 +420,7 @@ do $$
 begin
   begin
     insert into document_revisions (application_document_id, revision_number, storage_path, original_filename, mime_type, byte_size, sha256)
-    values ('70000000-0000-0000-0000-00000000000b', 1, 'orgB/dup.pdf', 'dup.pdf', 'application/pdf', 1000, repeat('i', 64));
+    values ('70000000-0000-0000-0000-00000000000b', 1, '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/dup.pdf', 'dup.pdf', 'application/pdf', 1000, repeat('i', 64));
     raise exception 'FAIL: a duplicate (application_document_id, revision_number) was accepted by document_revisions';
   exception
     when unique_violation then
@@ -434,7 +434,7 @@ set local role service_role;
 do $$
 begin
   begin
-    update document_revisions set storage_path = 'tampered' where application_document_id = '70000000-0000-0000-0000-00000000000a';
+    update document_revisions set storage_path = '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/tampered.pdf' where application_document_id = '70000000-0000-0000-0000-00000000000a';
     raise exception 'FAIL: service_role was able to UPDATE a document_revisions row';
   exception
     when others then
@@ -461,7 +461,7 @@ do $$
 begin
   begin
     insert into document_revisions (application_document_id, revision_number, storage_path, original_filename, mime_type, byte_size, sha256)
-    values ('70000000-0000-0000-0000-00000000000a', 99, 'orgA/direct-insert.pdf', 'direct-insert.pdf', 'application/pdf', 1000, repeat('j', 64));
+    values ('70000000-0000-0000-0000-00000000000a', 99, '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/direct-insert.pdf', 'direct-insert.pdf', 'application/pdf', 1000, repeat('j', 64));
     raise exception 'FAIL: an ordinary authenticated session was able to INSERT directly into document_revisions';
   exception
     when insufficient_privilege then

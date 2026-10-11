@@ -43,7 +43,7 @@ set local role service_role;
 insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
 values
   ('77000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-   'org-a/rejected-fixture-drawing.pdf', 'rejected-fixture-drawing.pdf', 'application/pdf', 2048, repeat('e', 64), 'blueprint')
+   '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/rejected-fixture-drawing.pdf', 'rejected-fixture-drawing.pdf', 'application/pdf', 2048, repeat('e', 64), 'blueprint')
 on conflict (id) do nothing;
 
 -- === 1 & 3. service_role can INSERT a row citing a drawing_review_id that

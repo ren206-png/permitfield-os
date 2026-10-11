@@ -50,9 +50,9 @@ set local role service_role;
 insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
 values
   ('71000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-   'org-a/drawing-a.pdf', 'drawing-a.pdf', 'application/pdf', 2048, repeat('c', 64), 'blueprint'),
+   '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/drawing-a.pdf', 'drawing-a.pdf', 'application/pdf', 2048, repeat('c', 64), 'blueprint'),
   ('71000000-0000-0000-0000-00000000000b', '40000000-0000-0000-0000-00000000000b',
-   'org-b/drawing-b.pdf', 'drawing-b.pdf', 'application/pdf', 2048, repeat('d', 64), 'blueprint')
+   '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/drawing-b.pdf', 'drawing-b.pdf', 'application/pdf', 2048, repeat('d', 64), 'blueprint')
 on conflict (id) do nothing;
 
 insert into jurisdiction_code_chunks (id, jurisdiction_id, code_section, content, source_url, license_status, corpus_version, drawing_category)

@@ -138,7 +138,7 @@ begin
 
   begin
     perform record_permit_signature(v_second, '20000000-0000-0000-0000-00000000000a', '71000000-0000-0000-0000-000000000001',
-      repeat('a', 64), 'x/y/z.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
+      repeat('a', 64), '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/zz-signed.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
     raise exception 'FAIL: authenticated recorded a signature';
   exception
     when sqlstate '42501' then
@@ -158,7 +158,7 @@ declare
 begin
   begin
     perform record_permit_signature(v_request, '20000000-0000-0000-0000-00000000000a', '71000000-0000-0000-0000-000000000002',
-      repeat('a', 64), 'x/y/z.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
+      repeat('a', 64), '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/zz-signed.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
     raise exception 'FAIL: signed a document that is not the filing''s latest';
   exception
     when others then
@@ -168,7 +168,7 @@ begin
 
   begin
     perform record_permit_signature(v_request, '20000000-0000-0000-0000-00000000000a', '71000000-0000-0000-0000-000000000001',
-      repeat('a', 64), 'x/y/z.pdf', 'signed.pdf', 'Jordan Rivera', '', 'typed', null);
+      repeat('a', 64), '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/zz-signed.pdf', 'signed.pdf', 'Jordan Rivera', '', 'typed', null);
     raise exception 'FAIL: signed without consent';
   exception
     when others then
@@ -178,7 +178,7 @@ begin
 
   begin
     perform record_permit_signature(v_request, '20000000-0000-0000-0000-00000000000b', '71000000-0000-0000-0000-000000000001',
-      repeat('a', 64), 'x/y/z.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
+      repeat('a', 64), '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/zz-signed.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
     raise exception 'FAIL: recorded a signature under the wrong org';
   exception
     when others then
@@ -202,7 +202,7 @@ begin
 
   begin
     perform record_permit_signature(v_request, '20000000-0000-0000-0000-00000000000a', v_signed,
-      repeat('a', 64), 'x/y/z.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
+      repeat('a', 64), '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/zz-signed.pdf', 'signed.pdf', 'Jordan Rivera', 'consent', 'typed', null);
     raise exception 'FAIL: signed the same request twice';
   exception
     when others then

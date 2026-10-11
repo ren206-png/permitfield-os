@@ -112,7 +112,7 @@ declare
   control_count int;
 begin
   insert into application_documents (application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
-  values ('40000000-0000-0000-0000-00000000000b', 'orgB/test.pdf', 'test.pdf', 'application/pdf', 1000,
+  values ('40000000-0000-0000-0000-00000000000b', '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/test.pdf', 'test.pdf', 'application/pdf', 1000,
           repeat('b', 64), 'other');
 
   select count(*) into control_count
@@ -131,7 +131,7 @@ declare
   doc_count int;
 begin
   insert into application_documents (application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
-  values ('40000000-0000-0000-0000-00000000000a', 'orgA/test.pdf', 'test.pdf', 'application/pdf', 1000,
+  values ('40000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/test.pdf', 'test.pdf', 'application/pdf', 1000,
           repeat('a', 64), 'other');
 
   select count(*) into doc_count
