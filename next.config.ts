@@ -40,6 +40,31 @@ const nextConfig: NextConfig = {
   // makes www authoritative at the routing layer so served host and
   // declared canonical agree. Permanent (308) since this is a lasting
   // domain decision, not a temporary redirect.
+  // Don't advertise the framework (x-powered-by: Next.js).
+  poweredByHeader: false,
+  // Baseline browser security headers on every response (none were set
+  // before the 2026-10-11 security review): no framing by other sites
+  // (clickjacking on sign-in, signing and payment pages), no MIME sniffing
+  // of uploaded documents, no full URL -- which can carry a client link's
+  // token (/sign/[token], /estimate/[token]...) -- sent to other sites as
+  // the Referer, and no camera/microphone/location access. A full
+  // Content-Security-Policy is deliberately not set here: the pages use
+  // inline scripts (theme, Next.js bootstrapping) and it needs its own pass.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       {
