@@ -19,6 +19,7 @@ import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
 import type { PermitExtraction, ExtractedFieldKey } from '@/lib/ai/schemas/extraction';
 import { LocalTime } from '@/components/local-time';
+import { docKindLabel } from '@/lib/documents/doc-kinds';
 
 const SIGNED_URL_TTL_SECONDS = 300;
 
@@ -378,7 +379,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   <div>
                     <p className="font-medium text-zinc-900">{doc.original_filename}</p>
                     <p className="text-xs text-zinc-500">
-                      {doc.doc_kind} · {Math.round(doc.byte_size / 1024)} KB
+                      {docKindLabel(doc.doc_kind)} · {Math.round(doc.byte_size / 1024)} KB
                     </p>
                   </div>
                   {doc.signedUrl && (
