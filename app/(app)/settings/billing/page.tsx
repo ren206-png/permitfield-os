@@ -1,4 +1,3 @@
-import { notFound } from 'next/navigation';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isBillingEnabled } from '@/lib/flags';
 import { createClient } from '@/lib/supabase/server';
@@ -6,11 +5,11 @@ import { BILLING_TIERS, SELF_SERVE_TIERS } from '@/lib/billing/tiers';
 import { CheckoutButton } from './checkout-button';
 import { PortalButton } from './portal-button';
 import { LocalTime } from '@/components/local-time';
+import { getFoundingRank } from '@/lib/billing/founding-status';
+import { EarlyAccessBilling } from './early-access';
 
-// BILLING_PROPOSAL.md §3. Flag-gated the same way every other flag-gated
-// page in this codebase is (see app/(app)/projects/new/page.tsx's header
-// comment) -- notFound() means this route doesn't exist at all with
-// PERMITFIELD_FF_BILLING off.
+// BILLING_PROPOSAL.md §3. With PERMITFIELD_FF_BILLING off this renders the
+// early-access page (./early-access.tsx) instead of the Stripe checkout.
 //
 // Visible to every org member (org_subscriptions_select's own RLS policy
 // is open to any member, not just the owner -- see that migration's header
@@ -22,8 +21,11 @@ import { LocalTime } from '@/components/local-time';
 // authorization, matching the "RLS/Server-Action layer is the real gate,
 // the page is not" discipline this codebase follows elsewhere.
 export default async function BillingPage() {
+  // Before live billing: an early-access page (free plan, future prices, the
+  // founding-customer discount) instead of the Stripe checkout.
   if (!isBillingEnabled()) {
-    notFound();
+    const { orgId } = await requireOrgContext();
+    return <EarlyAccessBilling foundingRank={await getFoundingRank(orgId)} />;
   }
 
   const { orgId, role } = await requireOrgContext();

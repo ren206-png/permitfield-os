@@ -5,7 +5,6 @@ import { isCurrentUserAdmin } from '@/lib/auth/admin';
 import {
   isAdminPanelEnabled,
   isAiAssistantEnabled,
-  isBillingEnabled,
   isDashboardEnabled,
   isFailureNotificationsEnabled,
   isPublicApiEnabled,
@@ -40,7 +39,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // RLS policy is member-wide, not owner-only; see that migration's header
   // comment), it just renders read-only for a non-owner. The owner gate
   // lives in app/(app)/settings/billing/actions.ts instead.
-  const showBillingLink = isBillingEnabled();
+  // Always shown: before live billing the page explains early access and the
+  // founding-customer discount (app/(app)/settings/billing/early-access.tsx).
+  const showBillingLink = true;
   // Gate 4 (Quotes & Payments), Phase A. No entitlement check here on
   // purpose, matching showBillingLink's own reasoning above -- the nav link
   // is visible to every org member the moment the flag is on, same as
