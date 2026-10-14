@@ -84,6 +84,12 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // find ADMIN_EMAILS accounts) and those accounts' memberships, to work out
 // whether the caller's org is one of the first 10 customer orgs. Returns
 // only that org's own place number; nothing about other orgs leaves it.
+//
+// Exception 7 (deleting your own account, app/(app)/settings/security/
+// actions.ts): delete_account() is executable only by the service role. The
+// action passes the user id from the caller's own session (requireUser) --
+// never from the form -- then removes the files under the companies that
+// function reports it deleted.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

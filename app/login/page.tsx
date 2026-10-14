@@ -14,8 +14,8 @@ import { LoginForm } from './login-form';
 // with the "never enter credentials into a field you don't own" instinct
 // this whole product is built to encourage in contractors dealing with
 // permit portals).
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; mode?: string }> }) {
-  const { next: requestedNext, error: callbackError, mode } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; mode?: string; deleted?: string }> }) {
+  const { next: requestedNext, error: callbackError, mode, deleted } = await searchParams;
   // Where to go after signing in -- a team invitation link or a page inside
   // the app (safeNextPath).
   const next = safeNextPath(requestedNext);
@@ -39,6 +39,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
         <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+          {deleted === '1' && (
+            <p role="status" className="mb-4 text-sm text-emerald-700">
+              Your account has been deleted. Thanks for trying PermitField.
+            </p>
+          )}
           {callbackError === 'reset_link' && (
             <p role="alert" className="mb-4 text-sm text-red-600">
               That password-reset link didn&apos;t work -- it may have expired or already been used. Use &quot;Forgot password?&quot; to get a new one.
