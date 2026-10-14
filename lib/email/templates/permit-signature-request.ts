@@ -1,5 +1,6 @@
 import { escapeHtml } from './escape-html';
 import type { RenderedEmail } from './types';
+import { FALLBACK_TIME_ZONE } from '@/lib/format/date-time';
 
 // E-signature, Stage B -- asks one person to sign a filled city permit form.
 // Plain, single-link email like estimate-sent.ts; replies go to the person
@@ -17,7 +18,13 @@ export interface PermitSignatureRequestEmailInput {
 }
 
 export function renderPermitSignatureRequestEmail(input: PermitSignatureRequestEmailInput): RenderedEmail {
-  const expires = new Date(input.expiresAt).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  const expires = new Date(input.expiresAt).toLocaleDateString('en-CA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    // Rendered on the server (UTC); an email has no viewer zone to defer to.
+    timeZone: FALLBACK_TIME_ZONE,
+  });
   const subject = `Please sign: ${input.permitTypeTitle} for ${input.projectAddress}`;
   const intro = `${input.organizationName} has prepared the ${input.permitTypeTitle} application to ${input.authorityName} for ${input.projectAddress} and needs your signature.`;
   const how = 'Open the link to review the filled form, then type or draw your signature. It takes about a minute.';

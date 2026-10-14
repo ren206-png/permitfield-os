@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isFailureNotificationsEnabled } from '@/lib/flags';
 import { fetchAllRows } from '@/lib/supabase/paginate';
 import { markNotificationReadAction } from './actions';
+import { LocalTime } from '@/components/local-time';
 
 interface NotificationRow {
   id: string;
@@ -68,7 +69,7 @@ export default async function NotificationsPage() {
                 <div>
                   <p className="text-sm font-medium text-zinc-900">{KIND_LABELS[n.kind] ?? n.kind}</p>
                   <p className="mt-1 text-sm text-zinc-600">{n.message}</p>
-                  <p className="mt-2 text-xs text-zinc-400">{new Date(n.created_at).toLocaleString()}</p>
+                  <p className="mt-2 text-xs text-zinc-400"><LocalTime value={n.created_at} /></p>
                 </div>
                 {!n.read_at && (
                   <form action={markNotificationReadAction}>

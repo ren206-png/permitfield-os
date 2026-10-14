@@ -12,6 +12,7 @@ import { LockedFeature } from '@/components/locked-feature';
 import { reminderKindLabel } from '@/lib/quotes-payments/reminder-labels';
 import { SendEstimateButton } from './send-estimate-button';
 import { GenerateEstimateClientLinkButton } from './generate-client-link-button';
+import { LocalTime } from '@/components/local-time';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -256,7 +257,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
                     <p className="text-xs text-zinc-500">
                       {job.status === 'canceled'
                         ? `Canceled${job.cancelReason ? ` · ${job.cancelReason}` : ''}`
-                        : `Scheduled for ${new Date(job.sendAfter).toLocaleString()}`}
+                        : <>Scheduled for <LocalTime value={job.sendAfter} /></>}
                     </p>
                   </div>
                   <ReminderJobStatusBadge status={job.status} />
@@ -269,7 +270,7 @@ export default async function EstimateDetailPage({ params }: { params: Promise<{
                           {attempt.outcome === 'success' ? 'Delivered' : 'Failed'}
                         </span>
                         {' · '}
-                        {new Date(attempt.attemptedAt).toLocaleString()}
+                        <LocalTime value={attempt.attemptedAt} />
                         {attempt.errorDetail && ` · ${attempt.errorDetail}`}
                       </li>
                     ))}

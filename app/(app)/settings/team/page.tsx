@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ROLE_LABELS } from '@/lib/team/team';
 import { switchOrganizationAction } from './actions';
 import { InviteForm, MemberRoleForm, RevokeInvitationButton } from './team-controls';
+import { LocalTime } from '@/components/local-time';
 
 // Team settings (20260806000074_org_invitations.sql). Every member sees the
 // roster; owners also invite, change roles, remove people and see pending
@@ -76,7 +77,7 @@ export default async function TeamSettingsPage() {
                   {member.user_id === userId && <span className="ml-1 text-xs text-zinc-500">(you)</span>}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  {ROLE_LABELS[member.role] ?? member.role} · joined {new Date(member.joined_at).toLocaleDateString('en-CA')}
+                  {ROLE_LABELS[member.role] ?? member.role} · joined <LocalTime value={member.joined_at} dateOnly />
                 </p>
               </div>
               {isOwner && <MemberRoleForm memberId={member.member_id} role={member.role} isSelf={member.user_id === userId} />}
@@ -123,7 +124,7 @@ export default async function TeamSettingsPage() {
                     <p className="truncate text-sm text-zinc-900">{invitation.email}</p>
                     <p className="text-xs text-zinc-500">
                       {ROLE_LABELS[invitation.role] ?? invitation.role} ·{' '}
-                      {expired ? 'expired -- invite again to send a new link' : `expires ${new Date(invitation.expires_at).toLocaleDateString('en-CA')}`}
+                      {expired ? 'expired -- invite again to send a new link' : <>expires <LocalTime value={invitation.expires_at} dateOnly /></>}
                     </p>
                   </div>
                   <RevokeInvitationButton invitationId={invitation.id} />

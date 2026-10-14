@@ -2,6 +2,7 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { fetchAllRows } from '@/lib/supabase/paginate';
 import type { User } from '@supabase/supabase-js';
+import { LocalTime } from '@/components/local-time';
 
 interface OrgRow {
   id: string;
@@ -164,7 +165,7 @@ export default async function AdminPage() {
                   <td className="px-4 py-2 text-zinc-600">{row.memberCount}</td>
                   <td className="px-4 py-2 text-zinc-600">{row.contractorCompany}</td>
                   <td className="px-4 py-2 text-zinc-600">{row.applicationCount}</td>
-                  <td className="px-4 py-2 text-zinc-500">{new Date(row.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-zinc-500"><LocalTime value={row.createdAt} dateOnly /></td>
                 </tr>
               ))
             ) : (
@@ -210,9 +211,9 @@ export default async function AdminPage() {
                   </td>
                   <td className="px-4 py-2 text-zinc-600">{u.email_confirmed_at ? 'Yes' : 'No'}</td>
                   <td className="px-4 py-2 text-zinc-500">
-                    {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : 'Never'}
+                    {u.last_sign_in_at ? <LocalTime value={u.last_sign_in_at} /> : 'Never'}
                   </td>
-                  <td className="px-4 py-2 text-zinc-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-zinc-500"><LocalTime value={u.created_at} dateOnly /></td>
                 </tr>
               );
             })}

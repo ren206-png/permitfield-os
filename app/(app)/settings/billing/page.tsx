@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { BILLING_TIERS, SELF_SERVE_TIERS } from '@/lib/billing/tiers';
 import { CheckoutButton } from './checkout-button';
 import { PortalButton } from './portal-button';
+import { LocalTime } from '@/components/local-time';
 
 // BILLING_PROPOSAL.md §3. Flag-gated the same way every other flag-gated
 // page in this codebase is (see app/(app)/projects/new/page.tsx's header
@@ -133,13 +134,13 @@ function BillingStatus({
       {status === 'trialing' && trialEndsAt && (
         <div className="flex justify-between">
           <dt className="text-zinc-500">Trial ends</dt>
-          <dd className="font-medium text-zinc-900">{new Date(trialEndsAt).toLocaleDateString()}</dd>
+          <dd className="font-medium text-zinc-900"><LocalTime value={trialEndsAt} dateOnly /></dd>
         </div>
       )}
       {status === 'active' && currentPeriodEnd && (
         <div className="flex justify-between">
           <dt className="text-zinc-500">Renews</dt>
-          <dd className="font-medium text-zinc-900">{new Date(currentPeriodEnd).toLocaleDateString()}</dd>
+          <dd className="font-medium text-zinc-900"><LocalTime value={currentPeriodEnd} dateOnly /></dd>
         </div>
       )}
     </dl>

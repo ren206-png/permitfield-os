@@ -10,6 +10,7 @@ import {
   OverrideReadinessForm,
   PermitStatusForm,
 } from './readiness-controls';
+import { LocalTime } from '@/components/local-time';
 
 // "Permit progress" panel (PERMITFIELD_FF_READINESS): the permit's own status
 // (permit_status, 20260806000022) and the readiness checklist that gates its
@@ -137,7 +138,7 @@ export async function ReadinessPanel({
           <ul className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-600">
             {((history ?? []) as HistoryRow[]).map((row) => (
               <li key={row.id}>
-                {new Date(row.created_at).toLocaleDateString('en-CA')} · {row.from_status ? `${PERMIT_STATUS_LABELS[row.from_status]} → ` : ''}
+                <LocalTime value={row.created_at} dateOnly /> · {row.from_status ? `${PERMIT_STATUS_LABELS[row.from_status]} → ` : ''}
                 {PERMIT_STATUS_LABELS[row.to_status]}
                 {row.reason ? ` -- ${row.reason}` : ''}
               </li>
@@ -232,7 +233,7 @@ export async function ReadinessPanel({
 
         {override ? (
           <p className="mt-3 rounded bg-amber-50 p-2 text-xs text-amber-800">
-            Readiness override recorded {new Date(override.at).toLocaleString()}: {override.reason}
+            Readiness override recorded <LocalTime value={override.at} />: {override.reason}
           </p>
         ) : (
           requiredOpen > 0 &&

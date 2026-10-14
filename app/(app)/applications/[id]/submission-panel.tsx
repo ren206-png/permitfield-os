@@ -7,6 +7,7 @@ import { portalAnswers, portalAnswersText } from '@/lib/pdf/portal-answers';
 import { loadFieldResolutionContext } from '@/lib/submissions/portal-context';
 import { PortalAnswers } from './portal-answers';
 import { EmailSubmitButton, RecordSubmissionForm } from './submission-controls';
+import { LocalTime } from '@/components/local-time';
 
 // "Submit to authority" panel (PERMITFIELD_FF_CITY_SUBMISSION). One card per
 // filing the permit type requires, shaped by how that authority takes
@@ -53,13 +54,13 @@ function humanize(trigger: string): string {
   return trigger.replace(/_/g, ' ');
 }
 
+// The time is rendered next to this by <LocalTime>, in the viewer's zone.
 function describeSubmission(row: SubmissionRow): string {
-  const when = new Date(row.created_at).toLocaleString();
   if (row.method === 'email') {
-    return row.status === 'sent' ? `Emailed to ${row.to_email} · ${when}` : `Email to ${row.to_email} failed · ${when}`;
+    return row.status === 'sent' ? `Emailed to ${row.to_email}` : `Email to ${row.to_email} failed`;
   }
   const how = row.method === 'portal' ? 'Submitted online' : 'Filed in person';
-  return `${how}${row.external_reference ? ` · ref ${row.external_reference}` : ''} · ${when}`;
+  return `${how}${row.external_reference ? ` · ref ${row.external_reference}` : ''}`;
 }
 
 export async function SubmissionPanel({
@@ -250,7 +251,7 @@ export async function SubmissionPanel({
                 <ul className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-600">
                   {history.map((row) => (
                     <li key={row.id} className={row.status === 'failed' ? 'text-red-600' : undefined}>
-                      {describeSubmission(row)}
+                      {describeSubmission(row)} · <LocalTime value={row.created_at} />
                       {row.status === 'failed' && row.error_message ? ` -- ${row.error_message}` : ''}
                     </li>
                   ))}
