@@ -1,4 +1,4 @@
--- 20260806000088_storage_path_ownership.sql.
+-- 20260806000089_storage_path_ownership.sql.
 -- Proves:
 --   1. is_application_storage_path() accepts buildStoragePath()'s shape and
 --      rejects other prefixes, '..' segments (plain and percent-encoded),
