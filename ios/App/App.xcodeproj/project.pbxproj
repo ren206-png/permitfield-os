@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3ACCEB75F827966136860227 /* AppleSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA946A91C4BEC46F00AD64A4 /* AppleSignInPlugin.swift */; };
 		0731E6871EA5BC551A74BBDB /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1514CFE8A7634C6F141894AB /* MainViewController.swift */; };
 		1E6C3A23880E94B93EC11789 /* DocumentScannerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9EECC3F35CA30A116CD0A2 /* DocumentScannerPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -21,6 +22,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		8831C5B6FBDF55AE6A86E0C0 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		DA946A91C4BEC46F00AD64A4 /* AppleSignInPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInPlugin.swift; sourceTree = "<group>"; };
 		1514CFE8A7634C6F141894AB /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		BC9EECC3F35CA30A116CD0A2 /* DocumentScannerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScannerPlugin.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -69,6 +72,8 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				8831C5B6FBDF55AE6A86E0C0 /* App.entitlements */,
+				DA946A91C4BEC46F00AD64A4 /* AppleSignInPlugin.swift */,
 				1514CFE8A7634C6F141894AB /* MainViewController.swift */,
 				BC9EECC3F35CA30A116CD0A2 /* DocumentScannerPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
@@ -166,6 +171,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				3ACCEB75F827966136860227 /* AppleSignInPlugin.swift in Sources */,
 				0731E6871EA5BC551A74BBDB /* MainViewController.swift in Sources */,
 				1E6C3A23880E94B93EC11789 /* DocumentScannerPlugin.swift in Sources */,
 			);
@@ -307,6 +313,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9QW83K696S;
 				CURRENT_PROJECT_VERSION = 1;
@@ -330,6 +337,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9QW83K696S;
 				CURRENT_PROJECT_VERSION = 1;

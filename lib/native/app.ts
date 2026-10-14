@@ -6,6 +6,7 @@ import { useSyncExternalStore } from 'react';
 // changes on the website in a normal browser.
 
 export type DocumentScanResult = { base64?: string; pageCount?: number; byteSize?: number; cancelled?: boolean };
+export type AppleSignInResult = { identityToken?: string; nonce?: string; givenName?: string; familyName?: string; cancelled?: boolean };
 
 type CapacitorGlobal = {
   isNativePlatform?: () => boolean;
@@ -13,6 +14,9 @@ type CapacitorGlobal = {
     DocumentScanner?: {
       isAvailable: () => Promise<{ available: boolean }>;
       scan: () => Promise<DocumentScanResult>;
+    };
+    AppleSignIn?: {
+      signIn: () => Promise<AppleSignInResult>;
     };
   };
 };

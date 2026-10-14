@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { OAUTH_PROVIDER_LABELS, type OAuthProvider } from '@/lib/auth/oauth-providers';
 import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
-import { useIsNativeApp } from '@/lib/native/app';
+import { nativeApp, useIsNativeApp } from '@/lib/native/app';
 
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
@@ -24,10 +24,12 @@ function callbackUrl(next: string | null): string {
 export function LoginForm({
   next = null,
   providers = [],
+  appleEnabled = false,
   initialMode = 'sign-in',
 }: {
   next?: string | null;
   providers?: OAuthProvider[];
+  appleEnabled?: boolean;
   // The homepage's "Create your account" buttons open on the sign-up tab.
   initialMode?: 'sign-in' | 'sign-up';
 }) {
@@ -55,6 +57,7 @@ export function LoginForm({
   // offers email (and Sign in with Apple) only; the website shows all.
   const isNativeApp = useIsNativeApp();
   const visibleProviders = isNativeApp ? [] : providers;
+  const showApple = isNativeApp && appleEnabled;
 
   // Ticks the resend cooldown down to 0 once a resend has been sent, so the
   // button can't be mashed into re-triggering Supabase's own rate limit
@@ -179,6 +182,43 @@ export function LoginForm({
 
     setInfo(`Confirmation email resent to ${unconfirmedEmail}.`);
     setResendCooldown(60);
+  }
+
+  // iPhone app only: Apple's native sheet, then a Supabase session from its
+  // identity token. Apple shares the person's name only the first time.
+  async function handleApple() {
+    const apple = nativeApp()?.Plugins?.AppleSignIn;
+    if (!apple) return;
+    setError(null);
+    setInfo(null);
+    setPending(true);
+    try {
+      const result = await apple.signIn();
+      if (result.cancelled || !result.identityToken || !result.nonce) {
+        setPending(false);
+        return;
+      }
+      const supabase = createClient();
+      const { error: appleError } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: result.identityToken,
+        nonce: result.nonce,
+        ...(captchaToken ? { options: { captchaToken } } : {}),
+      });
+      setCaptchaResetKey((key) => key + 1);
+      if (appleError) {
+        setError(appleError.message);
+        setPending(false);
+        return;
+      }
+      const fullName = [result.givenName, result.familyName].filter(Boolean).join(' ');
+      if (fullName) await supabase.auth.updateUser({ data: { full_name: fullName } });
+      router.refresh();
+      router.push(next ?? '/applications');
+    } catch (appleFailure) {
+      setError(appleFailure instanceof Error ? appleFailure.message : 'Sign in with Apple did not work. Try again.');
+      setPending(false);
+    }
   }
 
   async function handleForgot(event: FormEvent<HTMLFormElement>) {
@@ -364,6 +404,20 @@ export function LoginForm({
           {pending ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
         </button>
       </form>
+
+      {showApple && (
+        <div className="mt-6 flex flex-col gap-2">
+          <p className="text-center text-xs text-zinc-500">or</p>
+          <button
+            type="button"
+            onClick={() => void handleApple()}
+            disabled={pending || captchaMissing}
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Continue with Apple
+          </button>
+        </div>
+      )}
 
       {visibleProviders.length > 0 && (
         <div className="mt-6 flex flex-col gap-2">

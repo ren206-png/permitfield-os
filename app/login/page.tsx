@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PRODUCT_NAME, LEGAL_DISCLAIMER } from '@/lib/brand';
 import { safeNextPath } from '@/lib/auth/next-path';
-import { fetchEnabledOAuthProviders } from '@/lib/auth/oauth-providers';
+import { fetchAppleSignInEnabled, fetchEnabledOAuthProviders } from '@/lib/auth/oauth-providers';
 import { LoginForm } from './login-form';
 
 // Server Component shell only -- the actual sign-in/sign-up interaction runs
@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   // Where to go after signing in -- a team invitation link or a page inside
   // the app (safeNextPath).
   const next = safeNextPath(requestedNext);
-  const providers = await fetchEnabledOAuthProviders();
+  const [providers, appleEnabled] = await Promise.all([fetchEnabledOAuthProviders(), fetchAppleSignInEnabled()]);
 
   const supabase = await createClient();
   const {
@@ -54,7 +54,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               That sign-in link didn&apos;t work -- it may have expired or already been used. Sign in below.
             </p>
           )}
-          <LoginForm next={next} providers={providers} initialMode={mode === 'sign-up' ? 'sign-up' : 'sign-in'} />
+          <LoginForm
+            next={next}
+            providers={providers}
+            appleEnabled={appleEnabled}
+            initialMode={mode === 'sign-up' ? 'sign-up' : 'sign-in'}
+          />
         </div>
         <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
         <p className="mt-2 text-center text-xs text-zinc-500">
