@@ -154,7 +154,7 @@ begin
   end if;
 
   -- The new revision must live under this document's own application
-  -- (20260806000088). The storage_path triggers enforce the same rule; this
+  -- (20260806000089). The storage_path triggers enforce the same rule; this
   -- fails earlier, with nothing written.
   if not is_application_storage_path(p_storage_path, v_org_id, v_doc.application_id) then
     raise exception 'invalid_path: the file must be stored under this application';
