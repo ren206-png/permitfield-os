@@ -78,6 +78,12 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // resolves orgId/userId from the caller's own session (requireOrgContext),
 // then uses the service client only to count that user's own help questions
 // and to write their ai_jobs / ai_token_ledger rows with those ids.
+//
+// Exception 6 (founding-customer place, lib/billing/founding-status.ts):
+// reads every organization's id in creation order, the auth user list (to
+// find ADMIN_EMAILS accounts) and those accounts' memberships, to work out
+// whether the caller's org is one of the first 10 customer orgs. Returns
+// only that org's own place number; nothing about other orgs leaves it.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

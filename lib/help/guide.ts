@@ -79,5 +79,5 @@ Clients, Estimates, Invoices and Tax profile (sidebar) let a contractor send quo
 
 ## Pricing and data
 
-PermitField is free during early access; customers get at least 30 days' notice before any charge and can stop at any time. Only the customer's own company sees its applications. Data is stored with providers in the United States, is never sold, and goes to a city only when the customer submits. Privacy policy: www.permitfieldos.com/privacy. Terms: www.permitfieldos.com/terms.
+PermitField is free during early access; customers get at least 30 days' notice before any charge and can stop at any time. Billing (sidebar) shows the current plan and the prices once paid plans start: Starter CA$149/month (up to 10 active applications), Pro CA$499/month (up to 50, plus the AI compliance check and API), or CA$79 per application. The first 10 companies to sign up are founding customers with 25% off for as long as they keep a paid plan; the Billing page says if a company is one. There is no payment form yet. Only the customer's own company sees its applications. Data is stored with providers in the United States, is never sold, and goes to a city only when the customer submits. Privacy policy: www.permitfieldos.com/privacy. Terms: www.permitfieldos.com/terms.
 `;
