@@ -72,6 +72,12 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // <orgId>/<applicationId>/ path, and then records it through
 // record_uploaded_signed_form() -- again as the caller -- which re-checks the
 // role and the path. The service client does nothing but the storage write.
+//
+// Exception 5 (in-app help assistant, app/(app)/help-actions.ts): ai_jobs and
+// ai_token_ledger have no INSERT policy for `authenticated`. The action
+// resolves orgId/userId from the caller's own session (requireOrgContext),
+// then uses the service client only to count that user's own help questions
+// and to write their ai_jobs / ai_token_ledger rows with those ids.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
