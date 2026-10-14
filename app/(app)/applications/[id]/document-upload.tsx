@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DOC_KINDS } from '@/lib/documents/doc-kinds';
+import { base64ToBytes, nativeApp, scanFileName, useIsNativeApp } from '@/lib/native/app';
 
 
 // Posts directly to the existing app/api/documents/route.ts multipart
@@ -17,14 +18,46 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // iPhone app only: pages scanned with the camera (DocumentScannerPlugin),
+  // uploaded together with any chosen files.
+  const isNativeApp = useIsNativeApp();
+  const [canScan, setCanScan] = useState(false);
+  const [scans, setScans] = useState<{ file: File; pageCount: number }[]>([]);
+  const [scanning, setScanning] = useState(false);
+
+  useEffect(() => {
+    if (!isNativeApp) return;
+    nativeApp()
+      ?.Plugins?.DocumentScanner?.isAvailable()
+      .then((result) => setCanScan(result.available))
+      .catch(() => setCanScan(false));
+  }, [isNativeApp]);
+
+  async function handleScan() {
+    const scanner = nativeApp()?.Plugins?.DocumentScanner;
+    if (!scanner) return;
+    setError(null);
+    setScanning(true);
+    try {
+      const result = await scanner.scan();
+      if (result.base64) {
+        const file = new File([base64ToBytes(result.base64)], scanFileName(new Date()), { type: 'application/pdf' });
+        setScans((current) => [...current, { file, pageCount: result.pageCount ?? 1 }]);
+      }
+    } catch (scanError) {
+      setError(scanError instanceof Error ? scanError.message : 'The scan did not work. Try again.');
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setWarning(null);
-    const files = fileInputRef.current?.files;
-    if (!files || files.length === 0) {
-      setError('Choose at least one file.');
+    const files = [...Array.from(fileInputRef.current?.files ?? []), ...scans.map((scan) => scan.file)];
+    if (files.length === 0) {
+      setError(isNativeApp ? 'Choose at least one file, or scan a document.' : 'Choose at least one file.');
       return;
     }
 
@@ -32,7 +65,7 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
     formData.set('applicationId', applicationId);
     formData.set('docKind', docKind);
     if (triggerExtraction) formData.set('complete', 'true');
-    for (const file of Array.from(files)) formData.append('file', file);
+    for (const file of files) formData.append('file', file);
 
     setPending(true);
     try {
@@ -65,6 +98,7 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
         );
       } else {
         if (fileInputRef.current) fileInputRef.current.value = '';
+        setScans([]);
         setTriggerExtraction(false);
       }
       router.refresh();
@@ -90,6 +124,34 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
             accept="application/pdf,image/jpeg,image/png,image/tiff"
             className="block w-full text-sm text-zinc-700 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-zinc-200"
           />
+          {canScan && (
+            <button
+              type="button"
+              onClick={() => void handleScan()}
+              disabled={scanning || pending}
+              className="mt-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-900 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {scanning ? 'Scanning…' : 'Scan with camera'}
+            </button>
+          )}
+          {scans.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm text-zinc-700">
+              {scans.map((scan, index) => (
+                <li key={scan.file.name + index} className="flex items-center justify-between gap-2">
+                  <span>
+                    {scan.file.name} ({scan.pageCount} page{scan.pageCount === 1 ? '' : 's'})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setScans((current) => current.filter((_, i) => i !== index))}
+                    className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-900"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div>
           <label htmlFor="docKind" className="mb-1 block text-sm font-medium text-zinc-700">

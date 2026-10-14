@@ -21,7 +21,7 @@ Cities or permit types not listed aren't supported yet; customers can ask for th
 
 ## Getting started
 
-1. Create an account at www.permitfieldos.com: "Create your account", then email and password (at least 10 characters), or "Continue with Google" or "Continue with Microsoft". Email sign-ups confirm their address from a link in an email. The sign-in page has a short "Verify you are human" check from Cloudflare.
+1. Create an account at www.permitfieldos.com: "Create your account", then email and password (at least 10 characters), or "Continue with Google" or "Continue with Microsoft". Email sign-ups confirm their address from a link in an email. In the iPhone app, sign in with email or "Continue with Apple" (Google and Microsoft sign-in are on the website only), and on an application's Documents panel "Scan with camera" turns paper drawings into a PDF to upload. The sign-in page has a short "Verify you are human" check from Cloudflare.
 2. Set up the company: company name, then the contractor company, licence number and province that go on permit forms.
 3. Invite teammates in Team (sidebar).
 
@@ -71,7 +71,7 @@ Team (sidebar): owners invite people by email and choose a role: Owner, Permit m
 
 Security (sidebar): set up two-factor sign-in with an authenticator app. API keys (sidebar, owners only): read-only access to projects and applications for other software.
 
-Forgot password: on the sign-in page click "Forgot password?" under the password box, enter the account email and click "Send reset link". The email's link works for 1 hour on any device: open it, click Continue, then choose a new password (at least 10 characters; passwords found in known data breaches are refused). Signed-in users can change their password from Security (sidebar) -> "Change password". People who sign in with Google or Microsoft manage their password with that provider. If the reset email doesn't arrive (check spam), email support.
+Forgot password: on the sign-in page click "Forgot password?" under the password box, enter the account email and click "Send reset link". The email's link works for 1 hour on any device: open it, click Continue, then choose a new password (at least 10 characters; passwords found in known data breaches are refused). Signed-in users can change their password from Security (sidebar) -> "Change password". People who sign in with Google or Microsoft manage their password with that provider. If the reset email doesn't arrive (check spam), email support. Deleting an account: Security (sidebar) -> "Delete account", type DELETE and confirm. It permanently removes the person's sign-in and details; if they're the only member of their company, the company and all its applications, documents and files are deleted too. In a shared company the records stay with the company, and the only owner must first make someone else an owner in Team. It can't be undone.
 
 ## Estimates and invoices
 

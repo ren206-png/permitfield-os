@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { TwoFactorSettings } from './two-factor-settings';
+import { DeleteAccountForm } from './delete-account-form';
 
-// Security settings: password, and two-factor sign-in with an authenticator
-// app (lib/auth/mfa.ts). Per person, not per organization.
+// Security settings: password, two-factor sign-in with an authenticator app
+// (lib/auth/mfa.ts), and deleting the account. Per person, not per organization.
 export default async function SecuritySettingsPage() {
   await requireOrgContext();
   return (
@@ -24,6 +25,9 @@ export default async function SecuritySettingsPage() {
       </div>
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         <TwoFactorSettings />
+      </div>
+      <div className="mt-6 rounded-lg border border-red-200 bg-white p-6 shadow-sm">
+        <DeleteAccountForm />
       </div>
     </div>
   );

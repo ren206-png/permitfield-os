@@ -117,10 +117,10 @@ export default function PrivacyPage() {
 
       <h2>How long we keep it</h2>
       <p>
-        We keep your information while your account is active. If you close your account, we delete or anonymize your information
-        within 90 days, except for records we need to keep: records of signatures and submissions are kept as evidence of what was
-        signed and sent, and some information is kept longer where the law requires it. Backup copies are replaced on a rolling
-        basis.
+        We keep your information while your account is active. You can delete your account at any time in Settings, Security.
+        That removes your sign-in and personal details straight away. If you&apos;re the only member of your company, the company&apos;s
+        data and files are deleted too; if you share it with others, its records stay with the company and show you as a deleted
+        user. Backup copies are replaced on a rolling basis within 90 days.
       </p>
 
       <h2>Your choices and rights</h2>
