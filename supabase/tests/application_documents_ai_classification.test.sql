@@ -48,9 +48,9 @@ set local role service_role;
 insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
 values
   ('76000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-   'org-a/spec-a.pdf', 'spec-a.pdf', 'application/pdf', 1024, repeat('e', 64), 'other'),
+   '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/spec-a.pdf', 'spec-a.pdf', 'application/pdf', 1024, repeat('e', 64), 'other'),
   ('76000000-0000-0000-0000-00000000000b', '40000000-0000-0000-0000-00000000000b',
-   'org-b/spec-b.pdf', 'spec-b.pdf', 'application/pdf', 1024, repeat('f', 64), 'other')
+   '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/spec-b.pdf', 'spec-b.pdf', 'application/pdf', 1024, repeat('f', 64), 'other')
 on conflict (id) do nothing;
 
 insert into ai_jobs (id, org_id, kind, provider, model_id, status, input_token_count, output_token_count)

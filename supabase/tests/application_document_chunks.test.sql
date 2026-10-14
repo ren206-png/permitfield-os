@@ -36,10 +36,10 @@ set local role service_role;
 insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256, doc_kind)
 values
   ('70000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-   'org-a/test-doc-a.pdf', 'test-doc-a.pdf', 'application/pdf', 1024,
+   '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/test-doc-a.pdf', 'test-doc-a.pdf', 'application/pdf', 1024,
    repeat('a', 64), 'other'),
   ('70000000-0000-0000-0000-00000000000b', '40000000-0000-0000-0000-00000000000b',
-   'org-b/test-doc-b.pdf', 'test-doc-b.pdf', 'application/pdf', 1024,
+   '20000000-0000-0000-0000-00000000000b/40000000-0000-0000-0000-00000000000b/test-doc-b.pdf', 'test-doc-b.pdf', 'application/pdf', 1024,
    repeat('b', 64), 'other')
 on conflict (id) do nothing;
 

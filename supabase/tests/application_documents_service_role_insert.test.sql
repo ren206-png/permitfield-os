@@ -56,7 +56,7 @@ do $$
 begin
   insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256)
   values ('53000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-          'org-a/40000000-0000-0000-0000-00000000000a/control.pdf', 'control.pdf', 'application/pdf', 1024,
+          '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/control.pdf', 'control.pdf', 'application/pdf', 1024,
           repeat('a1', 32));
   raise exception 'FAIL (control): service_role INSERT succeeded into application_documents without the insert grant -- the later success assertion would prove nothing without this control';
 exception
@@ -78,7 +78,7 @@ declare
 begin
   insert into application_documents (id, application_id, storage_path, original_filename, mime_type, byte_size, sha256)
   values ('53000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a',
-          'org-a/40000000-0000-0000-0000-00000000000a/control.pdf', 'control.pdf', 'application/pdf', 1024,
+          '20000000-0000-0000-0000-00000000000a/40000000-0000-0000-0000-00000000000a/control.pdf', 'control.pdf', 'application/pdf', 1024,
           repeat('a1', 32));
 
   select count(*) into v_count from application_documents where id = '53000000-0000-0000-0000-00000000000a';
