@@ -18,6 +18,7 @@ import { DrawingTriggerButton } from './drawing-trigger-button';
 import { DrawingFindingsList } from './drawing-findings-list';
 import { PermitExpiryField } from './permit-expiry-field';
 import type { PermitExtraction, ExtractedFieldKey } from '@/lib/ai/schemas/extraction';
+import { LocalTime } from '@/components/local-time';
 
 const SIGNED_URL_TTL_SECONDS = 300;
 
@@ -482,7 +483,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   <div>
                     <p className="font-medium text-zinc-900">{generatedDocumentLabel(doc.original_filename, filingAuthorityNames)}</p>
                     <p className="text-xs text-zinc-500">
-                      {doc.fill_method === 'acroform' ? 'Form fields' : doc.fill_method === 'uploaded' ? 'Uploaded' : 'Printed on the form'} · {new Date(doc.created_at).toLocaleString()}
+                      {doc.fill_method === 'acroform' ? 'Form fields' : doc.fill_method === 'uploaded' ? 'Uploaded' : 'Printed on the form'} · <LocalTime value={doc.created_at} />
                       {missingRequired.length > 0 && (
                         <span className="text-amber-700">
                           {' '}

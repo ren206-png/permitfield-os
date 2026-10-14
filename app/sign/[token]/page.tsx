@@ -3,6 +3,7 @@ import { resolveTargetToken, getBridgeRequestContext } from '@/lib/bridge/client
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { loadSigningView } from '@/lib/esign/permit-signatures';
 import { SignPermitForm } from './sign-permit-form';
+import { LocalTime } from '@/components/local-time';
 
 // E-signature, Stage B: the page a signer opens from their emailed link to
 // review and sign a filled city permit form. Authorized only by its bearer
@@ -37,7 +38,7 @@ export default async function SignPermitPage({ params }: { params: Promise<{ tok
       <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
         {view.status === 'signed' ? (
           <p className="text-sm font-medium text-emerald-700">
-            Signed{view.signedAt ? ` on ${new Date(view.signedAt).toLocaleDateString('en-CA')}` : ''}. Thank you -- {view.organizationName} has the
+            Signed{view.signedAt ? <> on <LocalTime value={view.signedAt} dateOnly /></> : ''}. Thank you -- {view.organizationName} has the
             signed form.
           </p>
         ) : !view.applicationOpen || !view.document ? (

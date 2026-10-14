@@ -5,6 +5,7 @@ import { can } from '@/lib/entitlements';
 import { createClient } from '@/lib/supabase/server';
 import { CreateKeyForm } from './create-key-form';
 import { RevokeButton } from './revoke-button';
+import { LocalTime } from '@/components/local-time';
 
 interface ApiKeyRow {
   id: string;
@@ -78,15 +79,15 @@ export default async function ApiKeysPage() {
                       <p className="truncate text-sm font-medium text-zinc-900">{key.name}</p>
                       <p className="text-xs text-zinc-500">
                         <code className="font-mono">{key.key_prefix}…</code> · Created{' '}
-                        {new Date(key.created_at).toLocaleDateString()} ·{' '}
+                        <LocalTime value={key.created_at} dateOnly /> ·{' '}
                         {key.last_used_at
-                          ? `Last used ${new Date(key.last_used_at).toLocaleDateString()}`
+                          ? <>Last used <LocalTime value={key.last_used_at} dateOnly /></>
                           : 'Never used'}
                       </p>
                     </div>
                     {key.revoked_at ? (
                       <span className="text-xs font-medium text-zinc-500">
-                        Revoked {new Date(key.revoked_at).toLocaleDateString()}
+                        Revoked <LocalTime value={key.revoked_at} dateOnly />
                       </span>
                     ) : (
                       <RevokeButton keyId={key.id} keyName={key.name} />

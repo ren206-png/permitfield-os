@@ -20,6 +20,7 @@ import { ReversePaymentButton } from './reverse-payment-button';
 import { GenerateInvoiceClientLinkButton } from './generate-client-link-button';
 import { IssueCreditNoteForm } from './issue-credit-note-form';
 import { VoidCreditNoteForm } from './void-credit-note-form';
+import { LocalTime } from '@/components/local-time';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function centsField(row: any, key: string): string {
@@ -490,7 +491,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     <p className="text-xs text-zinc-500">
                       {job.status === 'canceled'
                         ? `Canceled${job.cancelReason ? ` · ${job.cancelReason}` : ''}`
-                        : `Scheduled for ${new Date(job.sendAfter).toLocaleString()}`}
+                        : <>Scheduled for <LocalTime value={job.sendAfter} /></>}
                     </p>
                   </div>
                   <ReminderJobStatusBadge status={job.status} />
@@ -503,7 +504,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                           {attempt.outcome === 'success' ? 'Delivered' : 'Failed'}
                         </span>
                         {' · '}
-                        {new Date(attempt.attemptedAt).toLocaleString()}
+                        <LocalTime value={attempt.attemptedAt} />
                         {attempt.errorDetail && ` · ${attempt.errorDetail}`}
                       </li>
                     ))}

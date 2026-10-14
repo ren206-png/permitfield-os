@@ -6,6 +6,7 @@ import { centsToDollarsString } from '@/lib/money/cents';
 import { dbValueToCents } from '@/lib/quotes-payments/db-mapping';
 import { EstimateStatusBadge } from '@/components/estimate-status-badge';
 import { AcceptEstimateForm } from './accept-estimate-form';
+import { LocalTime } from '@/components/local-time';
 
 // Gate 4 (Quotes & Payments), Phase A. Route shape: `/estimate/[token]`
 // (singular, un-prefixed) -- the bearer token itself, not an estimate id, is
@@ -124,7 +125,7 @@ export default async function PublicEstimatePage({ params }: { params: Promise<{
           <p className="mt-1 text-sm text-zinc-600">
             {estimate.currency_code}
             {revisionNumber !== null && ` · Revision ${revisionNumber}`}
-            {sentAt && ` · Sent ${new Date(sentAt).toLocaleDateString()}`}
+            {sentAt && <> · Sent <LocalTime value={sentAt} dateOnly /></>}
             {estimate.expiry_date && ` · Expires ${estimate.expiry_date}`}
           </p>
         </div>

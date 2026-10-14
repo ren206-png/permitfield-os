@@ -3,6 +3,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { ProjectStatusBadge } from '@/components/project-status-badge';
 import { ClientDetailCard } from './client-detail-card';
+import { LocalTime } from '@/components/local-time';
 
 // Same "re-derive org membership + let RLS additionally scope every query"
 // discipline as application detail (app/(app)/applications/[id]/page.tsx's
@@ -52,7 +53,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       <div>
         <h1 className="text-xl font-semibold text-zinc-900">{client.name}</h1>
         <p className="mt-0.5 text-sm text-zinc-500">
-          Client since {new Date(client.created_at).toLocaleDateString()}
+          Client since <LocalTime value={client.created_at} dateOnly />
         </p>
       </div>
 
@@ -87,7 +88,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <li key={project.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                 <div>
                   <p className="font-medium text-zinc-900">{project.title}</p>
-                  <p className="text-xs text-zinc-500">{new Date(project.created_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-zinc-500"><LocalTime value={project.created_at} dateOnly /></p>
                 </div>
                 <ProjectStatusBadge status={project.status} />
               </li>

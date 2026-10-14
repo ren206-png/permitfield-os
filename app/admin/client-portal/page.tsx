@@ -5,6 +5,7 @@ import { listTokensForApplication } from '@/lib/bridge/client-portal';
 import { isClientPortalEnabled } from '@/lib/flags';
 import { IssueTokenForm } from './issue-token-form';
 import { RevokeTokenButton } from './revoke-token-button';
+import { LocalTime } from '@/components/local-time';
 
 // Staff-facing client-portal token issuance/revocation, added after Gate
 // 2.0/2.5 filled the gap GATE_2_0_SPEC.md §7 explicitly left open (see
@@ -104,8 +105,8 @@ export default async function ClientPortalAdminPage() {
                               {token.recipientName ? `${token.recipientName} <${token.recipientEmailDisplay}>` : token.recipientEmailDisplay}
                             </td>
                             <td className="py-1 pr-4 text-zinc-600">{effectivelyExpired ? 'expired' : token.status}</td>
-                            <td className="py-1 pr-4 text-zinc-500">{new Date(token.issuedAt).toLocaleDateString()}</td>
-                            <td className="py-1 pr-4 text-zinc-500">{new Date(token.expiresAt).toLocaleDateString()}</td>
+                            <td className="py-1 pr-4 text-zinc-500"><LocalTime value={token.issuedAt} dateOnly /></td>
+                            <td className="py-1 pr-4 text-zinc-500"><LocalTime value={token.expiresAt} dateOnly /></td>
                             <td className="py-1">
                               {token.status === 'active' && !effectivelyExpired ? <RevokeTokenButton tokenId={token.id} /> : null}
                             </td>

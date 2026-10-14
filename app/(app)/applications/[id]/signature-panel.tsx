@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { CancelSignatureButton, RequestSignatureForm, UploadSignedFormForm } from './signature-controls';
+import { LocalTime } from '@/components/local-time';
 
 // "Signatures" panel (PERMITFIELD_FF_PERMIT_ESIGN). One row per filing whose
 // form has a signature line. Signing is offered only where the authority has
@@ -108,11 +109,11 @@ export async function SignaturePanel({
                       <p className="text-xs font-medium text-zinc-700">{ROLE_LABEL[role]} signature</p>
                       {latest?.status === 'signed' ? (
                         <p className="mt-1 text-xs text-emerald-700">
-                          Signed by {latest.signer_name} on {new Date(latest.signed_at ?? latest.created_at).toLocaleString()}.
+                          Signed by {latest.signer_name} on <LocalTime value={latest.signed_at ?? latest.created_at} />.
                         </p>
                       ) : latest?.status === 'pending' ? (
                         <div className="mt-1 text-xs text-zinc-600">
-                          Waiting for {latest.signer_name} ({latest.signer_email}), sent {new Date(latest.created_at).toLocaleString()}.{' '}
+                          Waiting for {latest.signer_name} ({latest.signer_email}), sent <LocalTime value={latest.created_at} />.{' '}
                           {canRequest && open && <CancelSignatureButton applicationId={applicationId} requestId={latest.id} />}
                         </div>
                       ) : (
@@ -136,7 +137,7 @@ export async function SignaturePanel({
               )}
               {uploadedAt.has(filing.id) && (
                 <p className="mt-2 text-xs text-emerald-700">
-                  Signed copy uploaded {new Date(uploadedAt.get(filing.id)!).toLocaleString()} -- it is the form that gets submitted.
+                  Signed copy uploaded <LocalTime value={uploadedAt.get(filing.id)!} /> -- it is the form that gets submitted.
                 </p>
               )}
               {canRequest && open && (
