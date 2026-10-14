@@ -18,4 +18,7 @@ export const DRAFT_WATERMARK_TEXT = 'PERMITFIELD DRAFT — CONTRACTOR REVIEW REQ
 export const LEGAL_ENTITY_NAME = 'Renco Technologies Inc';
 export const LEGAL_GOVERNING_PROVINCE = 'Alberta';
 export const LEGAL_CONTACT_EMAIL = 'privacy@permitfieldos.com';
+// Where the help assistant sends customers it can't help (forwarded to the
+// founder's inbox by the domain's email forwarding).
+export const SUPPORT_EMAIL = 'support@permitfieldos.com';
 export const LEGAL_LAST_UPDATED = 'October 8, 2026';

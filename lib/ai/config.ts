@@ -50,6 +50,14 @@ export const AUDIT_MAX_VALIDATION_ATTEMPTS = 2;
 // jurisdiction_code_chunks.embedding is declared vector(1024) to match
 // (migration 20260806000008). Changing provider/dims before real corpus
 // ingestion starts is a migration, not a rewrite.
+// In-app help assistant (app/(app)/help-actions.ts): short how-to answers
+// from lib/help/guide.ts. Haiku, low effort -- fast and a fraction of a cent
+// per question (chosen 2026-10-14).
+export const HELP_MODEL_ID = 'claude-haiku-5-5';
+export const HELP_MAX_TOKENS = 2048;
+// Questions per user per hour, on top of AI_USER_DAILY_COST_CAP_USD_CENTS.
+export const HELP_HOURLY_QUESTION_LIMIT = 30;
+
 export const EMBEDDING_MODEL_ID = 'voyage-3';
 export const EMBEDDING_DIMENSIONS = 1024;
 

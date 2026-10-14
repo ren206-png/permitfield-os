@@ -4,6 +4,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCurrentUserAdmin } from '@/lib/auth/admin';
 import {
   isAdminPanelEnabled,
+  isAiAssistantEnabled,
   isBillingEnabled,
   isDashboardEnabled,
   isFailureNotificationsEnabled,
@@ -11,10 +12,11 @@ import {
   isQuotesPaymentsEnabled,
   isQuotesPaymentsOnlineEnabled,
 } from '@/lib/flags';
-import { PRODUCT_SHORT, LEGAL_DISCLAIMER } from '@/lib/brand';
+import { PRODUCT_SHORT, LEGAL_DISCLAIMER, SUPPORT_EMAIL } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
 import { createClient } from '@/lib/supabase/server';
 import { AppSidebar } from '@/components/app-sidebar';
+import { HelpAssistant } from '@/components/help-assistant';
 
 // Shared chrome for every authenticated, org-scoped page. requireOrgContext()
 // is the single gate every (app) route passes through: no session -> /login,
@@ -129,6 +131,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
+
+      {isAiAssistantEnabled() && <HelpAssistant supportEmail={SUPPORT_EMAIL} />}
 
       <footer className="border-t border-zinc-200 bg-white py-4">
         <p className="mx-auto max-w-6xl px-4 text-center text-xs text-zinc-500 sm:px-6">{LEGAL_DISCLAIMER}</p>
