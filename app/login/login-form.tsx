@@ -48,6 +48,8 @@ export function LoginForm({
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const captchaMissing = TURNSTILE_SITE_KEY !== '' && !captchaToken;
+  // "Forgot password?" swaps the form for a send-a-reset-link form.
+  const [forgot, setForgot] = useState(false);
 
   // Ticks the resend cooldown down to 0 once a resend has been sent, so the
   // button can't be mashed into re-triggering Supabase's own rate limit
@@ -174,6 +176,87 @@ export function LoginForm({
     setResendCooldown(60);
   }
 
+  async function handleForgot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setInfo(null);
+    setPending(true);
+    // The email's link goes to /auth/confirm (Supabase's recovery template),
+    // which works in any browser -- not only the one that asked for it.
+    const { error: resetError } = await createClient().auth.resetPasswordForEmail(email.trim(), {
+      ...(captchaToken ? { captchaToken } : {}),
+    });
+    setCaptchaResetKey((key) => key + 1);
+    setPending(false);
+    if (resetError && (resetError.status === 429 || /captcha/i.test(resetError.message))) {
+      setError(
+        resetError.status === 429
+          ? 'Too many reset requests. Wait a few minutes and try again.'
+          : 'The security check failed. Wait for it to finish, then try again.'
+      );
+      return;
+    }
+    // Same message whether or not the address has an account, so this form
+    // can't be used to find out who has one.
+    setInfo(`If ${email.trim()} has a PermitField account, we've emailed it a link to choose a new password. The link works for 1 hour.`);
+  }
+
+  function showForgot(value: boolean) {
+    setForgot(value);
+    setError(null);
+    setInfo(null);
+    setUnconfirmedEmail(null);
+  }
+
+  if (forgot) {
+    return (
+      <div>
+        <h2 className="text-base font-semibold text-zinc-900">Reset your password</h2>
+        <p className="mt-1 text-sm text-zinc-600">Enter your account email and we&apos;ll send you a link to choose a new password.</p>
+        <form onSubmit={handleForgot} className="mt-4 flex flex-col gap-4">
+          <div>
+            <label htmlFor="reset-email" className="mb-1 block text-sm font-medium text-zinc-700">
+              Email
+            </label>
+            <input
+              id="reset-email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+
+          <Turnstile onToken={setCaptchaToken} resetKey={captchaResetKey} />
+
+          {error && (
+            <p role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+          )}
+          {info && (
+            <p role="status" className="text-sm text-emerald-600">
+              {info}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={pending || captchaMissing}
+            className="mt-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending ? 'Please wait…' : 'Send reset link'}
+          </button>
+        </form>
+        <button type="button" onClick={() => showForgot(false)} className="mt-4 text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900">
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6 flex rounded-md border border-zinc-200 p-1 text-sm font-medium">
@@ -228,6 +311,15 @@ export function LoginForm({
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
           />
+          {mode === 'sign-in' && (
+            <button
+              type="button"
+              onClick={() => showForgot(true)}
+              className="mt-1 text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
 
         <Turnstile onToken={setCaptchaToken} resetKey={captchaResetKey} />

@@ -71,7 +71,7 @@ Team (sidebar): owners invite people by email and choose a role: Owner, Permit m
 
 Security (sidebar): set up two-factor sign-in with an authenticator app. API keys (sidebar, owners only): read-only access to projects and applications for other software.
 
-There is no "forgot password" screen yet: customers who are locked out should email support.
+Forgot password: on the sign-in page click "Forgot password?" under the password box, enter the account email and click "Send reset link". The email's link works for 1 hour on any device: open it, click Continue, then choose a new password (at least 10 characters; passwords found in known data breaches are refused). Signed-in users can change their password from Security (sidebar) -> "Change password". People who sign in with Google or Microsoft manage their password with that provider. If the reset email doesn't arrive (check spam), email support.
 
 ## Estimates and invoices
 

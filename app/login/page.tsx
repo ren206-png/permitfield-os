@@ -39,6 +39,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
         <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+          {callbackError === 'reset_link' && (
+            <p role="alert" className="mb-4 text-sm text-red-600">
+              That password-reset link didn&apos;t work -- it may have expired or already been used. Use &quot;Forgot password?&quot; to get a new one.
+            </p>
+          )}
           {callbackError === 'callback' && (
             <p role="alert" className="mb-4 text-sm text-red-600">
               That sign-in link didn&apos;t work -- it may have expired or already been used. Sign in below.
