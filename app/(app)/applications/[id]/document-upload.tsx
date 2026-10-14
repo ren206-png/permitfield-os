@@ -2,13 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { DOC_KINDS } from '@/lib/documents/doc-kinds';
 
-const DOC_KINDS = [
-  { value: 'blueprint', label: 'Blueprint' },
-  { value: 'spec_sheet', label: 'Spec sheet' },
-  { value: 'scope_of_work', label: 'Scope of work' },
-  { value: 'other', label: 'Other' },
-] as const;
 
 // Posts directly to the existing app/api/documents/route.ts multipart
 // endpoint (Phase 2) -- this component is new, that endpoint isn't. The
