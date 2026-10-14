@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { OAUTH_PROVIDER_LABELS, type OAuthProvider } from '@/lib/auth/oauth-providers';
 import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
+import { useIsNativeApp } from '@/lib/native/app';
 
 const inputClass =
   'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
@@ -50,6 +51,10 @@ export function LoginForm({
   const captchaMissing = TURNSTILE_SITE_KEY !== '' && !captchaToken;
   // "Forgot password?" swaps the form for a send-a-reset-link form.
   const [forgot, setForgot] = useState(false);
+  // Google blocks its sign-in inside apps' web views, so the iPhone app
+  // offers email (and Sign in with Apple) only; the website shows all.
+  const isNativeApp = useIsNativeApp();
+  const visibleProviders = isNativeApp ? [] : providers;
 
   // Ticks the resend cooldown down to 0 once a resend has been sent, so the
   // button can't be mashed into re-triggering Supabase's own rate limit
@@ -360,10 +365,10 @@ export function LoginForm({
         </button>
       </form>
 
-      {providers.length > 0 && (
+      {visibleProviders.length > 0 && (
         <div className="mt-6 flex flex-col gap-2">
           <p className="text-center text-xs text-zinc-500">or</p>
-          {providers.map((provider) => (
+          {visibleProviders.map((provider) => (
             <button
               key={provider}
               type="button"
