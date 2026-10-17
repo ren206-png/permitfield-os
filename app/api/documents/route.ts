@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { inngest, type PermitEventPayloads } from '@/lib/inngest/client';
 import { fetchAllRows } from '@/lib/supabase/paginate';
+import { documentsFingerprint, extractionBlockReason } from '@/lib/extraction/rerun';
 import {
   ALLOWED_MIME_TYPES,
   MAX_APPLICATION_TOTAL_BYTES,
@@ -199,12 +200,30 @@ export async function POST(request: NextRequest) {
   // believes a file is missing. A caller that wants to retry the failed
   // files and then trigger extraction can simply resubmit with `complete`
   // set once every file has succeeded.
-  const triggeredExtraction = triggerExtraction && failures.length === 0;
-  if (triggeredExtraction) {
-    await inngest.send({
-      name: 'permit/application.documents_ready',
-      data: { applicationId } satisfies PermitEventPayloads['permit/application.documents_ready'],
-    });
+  //
+  // A repeat request (new documents after a finished run) is allowed until
+  // the application is signed or submitted -- lib/extraction/rerun.ts --
+  // and the caller is told why when it isn't, instead of nothing happening.
+  let triggeredExtraction = false;
+  let extractionNotStarted: string | null = null;
+  if (triggerExtraction && failures.length === 0) {
+    const gate = await extractionGate(supabase, applicationId);
+    // The files are already stored at this point: report a failed check as
+    // "not started", not as a failed upload.
+    extractionNotStarted =
+      'error' in gate
+        ? 'Your files were saved, but AI extraction could not be started. Upload again with the box ticked to retry.'
+        : gate.blockReason;
+    if (!('error' in gate) && !gate.blockReason) {
+      await inngest.send({
+        name: 'permit/application.documents_ready',
+        data: {
+          applicationId,
+          documentsFingerprint: gate.fingerprint,
+        } satisfies PermitEventPayloads['permit/application.documents_ready'],
+      });
+      triggeredExtraction = true;
+    }
   }
 
   if (failures.length > 0 && insertedIds.length === 0) {
@@ -212,7 +231,35 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { documentIds: insertedIds, failures, triggeredExtraction },
+    { documentIds: insertedIds, failures, triggeredExtraction, extractionNotStarted },
     { status: failures.length > 0 ? 207 : 201 }
   );
+}
+
+// Reads, with the caller's own RLS-scoped session, what extractionBlockReason
+// needs plus the documents fingerprint for the event.
+async function extractionGate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  applicationId: string
+): Promise<{ blockReason: string | null; fingerprint: string } | { error: string }> {
+  const [application, documents, signatures, signedUploads] = await Promise.all([
+    supabase.from('permit_applications').select('status').eq('id', applicationId).single(),
+    supabase.from('application_documents').select('sha256').eq('application_id', applicationId),
+    supabase.from('permit_signatures').select('id', { count: 'exact', head: true }).eq('application_id', applicationId),
+    supabase
+      .from('generated_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('application_id', applicationId)
+      .eq('fill_method', 'uploaded'),
+  ]);
+  const failed = application.error ?? documents.error ?? signatures.error ?? signedUploads.error;
+  if (failed) return { error: failed.message };
+
+  return {
+    blockReason: extractionBlockReason({
+      status: (application.data?.status as string | undefined) ?? 'draft',
+      hasSignedForm: (signatures.count ?? 0) > 0 || (signedUploads.count ?? 0) > 0,
+    }),
+    fingerprint: documentsFingerprint((documents.data ?? []).map((d) => d.sha256 as string)),
+  };
 }

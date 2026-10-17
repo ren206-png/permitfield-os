@@ -36,7 +36,7 @@ Applications (sidebar) -> New application. Pick the city and permit type, the co
 
 ## Uploading documents
 
-On the application page, under Documents: choose the files, pick the document type (Blueprint for drawings, Scope of work, Spec sheet, or Other) and click Upload. Accepted: PDF, JPEG, PNG, TIFF; up to 25 MB per file and 100 MB per application. Upload drawings, scope of work and specs; on the LAST file, tick "This is my last upload for now -- start AI extraction" before clicking Upload. If you forget, upload one more file with the box ticked.
+On the application page, under Documents: choose the files, pick the document type (Blueprint for drawings, Scope of work, Spec sheet, or Other) and click Upload. Accepted: PDF, JPEG, PNG, TIFF; up to 25 MB per file and 100 MB per application. Upload drawings, scope of work and specs; on the LAST file, tick "This is my last upload for now -- start AI extraction" before clicking Upload. If you forget, upload one more file with the box ticked. Found a missing drawing after the AI has run? Upload it with the box ticked and the AI reads all the documents again and refills the form. This works until a form is signed or the application is submitted; after that the file is saved but the form isn't refilled, and the page says so.
 
 ## What happens next (AI extraction and the filled form)
 

@@ -35,10 +35,11 @@ import { AiJobInsertSchema, AiTokenLedgerInsertSchema } from '@/lib/ai/schemas/a
 // passed) should not re-spend model calls re-classifying documents it
 // already has an answer for.
 //
-// idempotency is keyed on applicationId, matching permit.extract's own key
-// for the same event -- this run processes every eligible document for one
-// application in one go, same granularity as extract.ts's own per-
-// application loop.
+// idempotency is keyed on applicationId + the documents fingerprint,
+// matching permit.extract's own key for the same event -- this run
+// processes every eligible document for one application in one go, and a
+// later batch with new documents gets its own run (already-classified
+// documents are skipped, see above).
 //
 // Gate AI-1, sub-phase AI-1.4 (GATE_AI_1_FINDINGS.md §G/§H RUNAWAY_SPEND):
 // first real caller of lib/ai/cost-caps.ts's checkOrgMonthlyCostCap(),
@@ -58,7 +59,7 @@ export const permitClassifyDocuments = inngest.createFunction(
     id: 'permit-classify-documents',
     name: 'Classify uploaded application documents',
     triggers: [{ event: 'permit/application.documents_ready' }],
-    idempotency: 'event.data.applicationId',
+    idempotency: 'event.data.applicationId + "-" + event.data.documentsFingerprint',
     retries: 2,
   },
   async ({ event, step }) => {

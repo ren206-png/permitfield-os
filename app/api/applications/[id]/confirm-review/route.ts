@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   await inngest.send({
     name: 'permit/application.review_confirmed',
-    data: { applicationId } satisfies PermitEventPayloads['permit/application.review_confirmed'],
+    data: { applicationId, runKey: latestAudit.id as string } satisfies PermitEventPayloads['permit/application.review_confirmed'],
   });
 
   return NextResponse.json({ applicationId, status: 'reviewed' }, { status: 200 });
