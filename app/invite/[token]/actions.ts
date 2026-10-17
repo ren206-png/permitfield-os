@@ -34,6 +34,7 @@ export async function acceptInvitationAction(_prev: AcceptInvitationState, formD
 
 export async function signOutForInvitationAction(formData: FormData): Promise<void> {
   const token = String(formData.get('token') ?? '');
-  await (await createClient()).auth.signOut();
+  // This browser only, like the sidebar's Sign out (app/actions/auth.ts).
+  await (await createClient()).auth.signOut({ scope: 'local' });
   redirect(INVITE_TOKEN_PATTERN.test(token) ? `/login?next=${encodeURIComponent(`/invite/${token}`)}` : '/login');
 }
