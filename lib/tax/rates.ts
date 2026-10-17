@@ -23,7 +23,7 @@ import type { SupportedProvinceCode } from './types';
 /** Denominator shared by every rate below: rateBasisPoints / RATE_DENOMINATOR == ratePercent / 100. */
 export const RATE_DENOMINATOR = 10_000n;
 
-export type GstHstTaxType = 'gst' | 'hst';
+type GstHstTaxType = 'gst' | 'hst';
 
 interface GstHstRate {
   taxType: GstHstTaxType;

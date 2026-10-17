@@ -3,7 +3,7 @@
 // takes. The optional fields exist for authority submissions
 // (lib/submissions/), which attach the filled form and route replies back
 // to the contractor; reminder templates leave them unset.
-export interface RenderedEmailAttachment {
+interface RenderedEmailAttachment {
   filename: string;
   content: Buffer;
   contentType: string;

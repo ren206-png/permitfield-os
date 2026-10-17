@@ -43,7 +43,7 @@ async function assertQuotesEntitlement(orgId: string): Promise<void> {
   }
 }
 
-export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'void';
+type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'void';
 
 export interface EstimateRecord {
   id: string;
@@ -61,7 +61,7 @@ export interface EstimateRecord {
   updatedAt: string;
 }
 
-export interface EstimateRevisionRecord {
+interface EstimateRevisionRecord {
   id: string;
   orgId: string;
   estimateId: string;

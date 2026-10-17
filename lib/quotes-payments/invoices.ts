@@ -28,7 +28,7 @@ async function assertInvoicesEntitlement(orgId: string): Promise<void> {
   }
 }
 
-export type InvoiceStatus = 'draft' | 'issued' | 'void';
+type InvoiceStatus = 'draft' | 'issued' | 'void';
 
 export interface InvoiceRecord {
   id: string;

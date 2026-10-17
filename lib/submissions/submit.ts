@@ -16,7 +16,7 @@ import { resolveSubmissionRecipient } from './recipient';
 // up front because an email cannot be unsent.
 
 // Signed download links for drawings/documents embedded in the email.
-export const DOCUMENT_LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
+const DOCUMENT_LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 const MAX_PAYMENT_METHOD_LENGTH = 200;
 

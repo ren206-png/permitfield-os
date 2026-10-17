@@ -25,7 +25,7 @@ async function assertPaymentsEntitlement(orgId: string): Promise<void> {
 }
 
 export type PaymentMethod = 'e_transfer' | 'cheque';
-export type PaymentStatus = 'recorded' | 'reversed';
+type PaymentStatus = 'recorded' | 'reversed';
 
 export interface PaymentRecord {
   id: string;
@@ -66,7 +66,7 @@ function mapPaymentRow(row: any): PaymentRecord {
   };
 }
 
-export interface PaymentAllocationInput {
+interface PaymentAllocationInput {
   invoiceId: string;
   amountCents: bigint;
 }

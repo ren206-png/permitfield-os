@@ -33,7 +33,7 @@ async function assertChangeOrdersEntitlement(orgId: string): Promise<void> {
   }
 }
 
-export type ChangeOrderStatus = 'draft' | 'pending_acceptance' | 'accepted' | 'issued' | 'void';
+type ChangeOrderStatus = 'draft' | 'pending_acceptance' | 'accepted' | 'issued' | 'void';
 
 export interface ChangeOrderRecord {
   id: string;

@@ -12,8 +12,8 @@ import { hashApiKey, parseBearerToken } from './keys';
 // never from the request -- and every resources.ts query filters on it.
 
 export const KEY_RATE_LIMIT_PER_MINUTE = 120;
-export const DENIED_IP_LIMIT = 20;
-export const DENIED_IP_WINDOW_MINUTES = 15;
+const DENIED_IP_LIMIT = 20;
+const DENIED_IP_WINDOW_MINUTES = 15;
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 

@@ -60,7 +60,7 @@ export async function computeTaxOutcome(
 }
 
 /** JSON-safe (no BigInt) projection of one computed line-item breakdown, for the *_line_items jsonb snapshot params send_estimate()/issue_invoice() expect. */
-export function serializeLineItemBreakdown(breakdown: TaxLineItemBreakdown): Record<string, unknown> {
+function serializeLineItemBreakdown(breakdown: TaxLineItemBreakdown): Record<string, unknown> {
   return {
     id: breakdown.id ?? null,
     description: breakdown.description,

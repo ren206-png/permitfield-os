@@ -15,8 +15,8 @@
 // row are what let an exact cost be recomputed later once real, confirmed
 // rates exist. Changing these two constants before that happens is a
 // one-file change, not a rewrite.
-export const PLACEHOLDER_INPUT_USD_PER_MILLION_TOKENS = 3;
-export const PLACEHOLDER_OUTPUT_USD_PER_MILLION_TOKENS = 15;
+const PLACEHOLDER_INPUT_USD_PER_MILLION_TOKENS = 3;
+const PLACEHOLDER_OUTPUT_USD_PER_MILLION_TOKENS = 15;
 
 /**
  * Converts a model call's raw token counts into integer USD cents, using the

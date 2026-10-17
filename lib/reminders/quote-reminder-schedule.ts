@@ -13,13 +13,13 @@
 // (lib/inngest/functions/reminders.ts) re-checks eligibility when each one
 // is due, so an accepted estimate or paid invoice is skipped then.
 
-export const ESTIMATE_EXPIRY_REMINDER_LEAD_DAYS = 3;
-export const INVOICE_DUE_SOON_LEAD_DAYS = 3;
-export const INVOICE_OVERDUE_DELAY_DAYS = 1;
+const ESTIMATE_EXPIRY_REMINDER_LEAD_DAYS = 3;
+const INVOICE_DUE_SOON_LEAD_DAYS = 3;
+const INVOICE_OVERDUE_DELAY_DAYS = 1;
 const SEND_HOUR_UTC = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type QuoteReminderKind = 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue';
+type QuoteReminderKind = 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue';
 
 export interface PlannedReminder {
   kind: QuoteReminderKind;

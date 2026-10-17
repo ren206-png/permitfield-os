@@ -11,7 +11,7 @@ export const FOUNDING_DISCOUNT_PERCENT = 25;
 
 // Pay per permit (CA$ per application) -- decided alongside the plans, not
 // sold yet (no checkout for it exists).
-export const PAY_PER_PERMIT_CENTS = 7900;
+const PAY_PER_PERMIT_CENTS = 7900;
 
 export type PriceLine = { name: string; detail: string; regularCents: number; unit: string };
 

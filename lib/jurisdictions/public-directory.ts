@@ -57,7 +57,7 @@ async function getReadClient() {
   return createClient();
 }
 
-export type PublicCoverageLevel = 'verified' | 'assisted';
+type PublicCoverageLevel = 'verified' | 'assisted';
 
 export type PublicJurisdiction = {
   id: string;
@@ -102,7 +102,7 @@ const PUBLIC_COVERAGE_LEVELS: PublicCoverageLevel[] = ['verified', 'assisted'];
 // has no required order since every returned id is later only used to build
 // a Set).
 
-export async function getPublicJurisdictions(): Promise<PublicJurisdiction[]> {
+async function getPublicJurisdictions(): Promise<PublicJurisdiction[]> {
   const supabase = await getReadClient();
   const data = await fetchAllRows<{
     id: string;

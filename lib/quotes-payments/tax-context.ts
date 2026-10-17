@@ -19,7 +19,7 @@
 import type { QPClient } from './types';
 import type { OrgTaxContext, TaxRegistrationStatus } from '@/lib/tax/types';
 
-export interface OrgTaxProfileRecord {
+interface OrgTaxProfileRecord {
   id: string;
   orgId: string;
   legalName: string;

@@ -72,7 +72,7 @@ export function splitApplicantName(fullName: string): { firstName: string | null
 const ORGANIZATION_WORDS =
   /\b(inc|incorporated|ltd|limited|corp|corporation|co|company|llp|lp|ulc|plc|group|construction|contracting|contractors?|interiors|design|designs|services|enterprises|holdings|developments|builders|electric|electrical|mechanical|plumbing|engineering|architects?|architecture)\b\.?/i;
 
-export function looksLikeOrganization(name: string, contractorCompanyName?: string | null): boolean {
+function looksLikeOrganization(name: string, contractorCompanyName?: string | null): boolean {
   const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (contractorCompanyName && normalize(name) === normalize(contractorCompanyName)) return true;
   return ORGANIZATION_WORDS.test(name);
