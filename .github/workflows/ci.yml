@@ -122,7 +122,10 @@ jobs:
       # documented pattern for CI per Supabase's own GitHub Actions guide.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: 'latest' asks GitHub's API on every run and failed on a
+          # rate limit (2026-10-17), and an unpinned tool shouldn't push to
+          # the production database. Bump deliberately.
+          version: 2.114.0
 
       # `supabase start` requires Docker, which ubuntu-latest runners
       # provide out of the box -- this is the step that was impossible in
