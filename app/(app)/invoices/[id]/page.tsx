@@ -17,6 +17,7 @@ import { IssueInvoiceButton } from './issue-invoice-button';
 import { VoidInvoiceForm } from './void-invoice-form';
 import { RecordPaymentForm } from './record-payment-form';
 import { ReversePaymentButton } from './reverse-payment-button';
+import { RefundPaymentButton } from './refund-payment-button';
 import { GenerateInvoiceClientLinkButton } from './generate-client-link-button';
 import { IssueCreditNoteForm } from './issue-credit-note-form';
 import { VoidCreditNoteForm } from './void-credit-note-form';
@@ -391,7 +392,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <li key={p.id} className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-2 text-sm">
                   <div>
                     <p className="text-zinc-900">
-                      {centsToDollarsString(p.amountCents)} · {p.method === 'e_transfer' ? 'E-transfer' : 'Cheque'}
+                      {centsToDollarsString(p.amountCents)} · {p.method === 'e_transfer' ? 'E-transfer' : p.method === 'card' ? 'Card' : 'Cheque'}
                     </p>
                     <p className="text-xs text-zinc-500">
                       {p.receivedAt}
@@ -400,7 +401,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   </div>
                   <div className="flex items-center gap-2">
                     <PaymentStatusBadge status={p.status} />
-                    {p.status === 'recorded' && <ReversePaymentButton paymentId={p.id} invoiceId={invoice.id} />}
+                    {p.status === 'recorded' &&
+                      (p.method === 'card' ? (
+                        <RefundPaymentButton paymentId={p.id} invoiceId={invoice.id} amountLabel={centsToDollarsString(p.amountCents)} />
+                      ) : (
+                        <ReversePaymentButton paymentId={p.id} invoiceId={invoice.id} />
+                      ))}
                   </div>
                 </li>
               ))}

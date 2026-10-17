@@ -4,8 +4,9 @@ import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireOrgContext } from '@/lib/auth/org-context';
-import { isClientPortalEnabled, isQuotesPaymentsEnabled } from '@/lib/flags';
+import { isClientPortalEnabled, isQuotesPaymentsEnabled, isQuotesPaymentsOnlineEnabled } from '@/lib/flags';
 import { can } from '@/lib/entitlements';
+import { refundOnlinePayment } from '@/lib/quotes-payments/stripe-connect';
 import { issueInvoice, voidInvoice } from '@/lib/quotes-payments/invoices';
 import { recordPayment, reversePayment, type PaymentMethod } from '@/lib/quotes-payments/payments';
 import { createDraftCreditNote, issueCreditNote, voidCreditNote } from '@/lib/quotes-payments/credit-notes';
@@ -223,6 +224,18 @@ export async function reversePaymentAction(
 
   const supabase = await createClient();
 
+  // A card payment must be refunded through Stripe; reversing only the ledger
+  // would leave the customer charged while the invoice shows as unpaid.
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('method')
+    .eq('id', paymentId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (existing?.method === 'card') {
+    return { error: 'This was paid by card. Use Refund to return the money to the customer.' };
+  }
+
   try {
     await reversePayment(supabase, {
       orgId,
@@ -233,6 +246,46 @@ export async function reversePaymentAction(
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Failed to reverse the payment.' };
+  }
+
+  if (invoiceId) {
+    revalidatePath(`/invoices/${invoiceId}`);
+  }
+  return {};
+}
+
+export async function refundOnlinePaymentAction(
+  _prevState: ReversePaymentState,
+  formData: FormData
+): Promise<ReversePaymentState> {
+  if (!isQuotesPaymentsEnabled() || !isQuotesPaymentsOnlineEnabled()) {
+    notFound();
+  }
+
+  const { orgId, userId, role } = await requireOrgContext();
+  if (!(await can(orgId, 'payments.manage')) || !(await can(orgId, 'payments.online'))) {
+    return { error: 'Your organization’s plan does not include online payments.' };
+  }
+
+  const paymentId = String(formData.get('paymentId') ?? '').trim();
+  const invoiceId = String(formData.get('invoiceId') ?? '').trim();
+  const reversalReason = String(formData.get('reversalReason') ?? '').trim();
+  if (!paymentId) {
+    return { error: 'Missing payment id.' };
+  }
+
+  const supabase = await createClient();
+
+  try {
+    await refundOnlinePayment(supabase, {
+      orgId,
+      paymentId,
+      reversalReason: reversalReason || null,
+      actorUserId: userId,
+      actorRole: role,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Failed to refund the payment.' };
   }
 
   if (invoiceId) {
