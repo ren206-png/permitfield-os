@@ -17,7 +17,7 @@ import Link from 'next/link';
 // literal "4" here would be exactly the same kind of drift risk the
 // JURISDICTIONS array was, just smaller -- cheaper to drop the number than
 // to make this component async just to fetch a count for one word.
-export function Hero() {
+export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="relative overflow-hidden">
       {/* Decorative gradient background -- purely visual, no content. */}
@@ -55,10 +55,10 @@ export function Hero() {
         </p>
         <div className="mt-8 flex items-center justify-center gap-4">
           <Link
-            href="/login?mode=sign-up"
+            href={signedIn ? '/applications' : '/login?mode=sign-up'}
             className="rounded-md bg-orange-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-orange-200 transition hover:bg-orange-500 hover:shadow-lg hover:shadow-orange-300 dark:shadow-none"
           >
-            Create your account
+            {signedIn ? 'Open the app' : 'Create your account'}
           </Link>
           <a
             href="#how-it-works"

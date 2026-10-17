@@ -57,20 +57,23 @@ export async function generateMetadata(): Promise<Metadata> {
 // comment), so this component does its own auth.getUser() check rather than
 // assuming one was already done upstream -- same "proxy checks are never a
 // substitute for a Server Component's own check" discipline
-// lib/auth/org-context.ts already follows. There's still no dashboard-at-root
-// concept for signed-in users -- /applications remains the one home screen.
+// lib/auth/org-context.ts already follows. Signed-in visitors see the same
+// homepage (it used to redirect them to /applications, so the owner could
+// never open their own landing page); its sign-up and sign-in links become
+// "Open the app" instead. /applications is still the app's home screen:
+// sign-in, OAuth callbacks, the app logo and the iPhone app all go there.
 export default async function RootPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) {
-    redirect('/applications');
+  if (isMarketingV2Enabled()) {
+    return <MarketingHomepage signedIn={user !== null} />;
   }
 
-  if (isMarketingV2Enabled()) {
-    return <MarketingHomepage />;
+  if (user) {
+    redirect('/applications');
   }
 
   // Defensive fallback, not normally reachable: with the flag off, proxy.ts
