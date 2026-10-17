@@ -104,7 +104,7 @@ const SIGNED_URL_TTL_SECONDS = 300; // Matches the existing convention (app/(app
 // duplicated here rather than reaching into an unrelated page component,
 // a small implementation decision L.2 explicitly left to 2.4, not a schema gap.
 
-export type BridgeErrorResponse = { error: 'link_unavailable' };
+type BridgeErrorResponse = { error: 'link_unavailable' };
 
 // The granular reason every denial actually happened, written only to
 // `client_access_log.detail` (§3's failure-mode section) -- never returned
@@ -545,7 +545,7 @@ export async function resolveToken(
   };
 }
 
-export type ApplicationStatusHistoryEntry = {
+type ApplicationStatusHistoryEntry = {
   toStatus: string;
   createdAt: string;
 };
@@ -628,7 +628,7 @@ export async function getApplicationSummary(
   };
 }
 
-export type ReadinessChecklistItem = {
+type ReadinessChecklistItem = {
   title: string;
   isRequired: boolean;
   status: string;
@@ -697,7 +697,7 @@ export async function getReadinessChecklist(
   }));
 }
 
-export type DocumentListEntry = {
+type DocumentListEntry = {
   id: string;
   originalFilename: string;
   docKind: string;
@@ -1351,7 +1351,7 @@ export async function revokeToken(tokenId: string, revokedByOrgUserId: string): 
   return { revoked: true };
 }
 
-export type TokenListEntry = {
+type TokenListEntry = {
   id: string;
   recipientEmailDisplay: string;
   recipientName: string | null;

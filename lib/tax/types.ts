@@ -115,7 +115,7 @@ export interface TaxCalculationOk {
  * a review-required result -- TypeScript's discriminated-union narrowing on
  * `status` is required to reach any monetary field.
  */
-export interface TaxCalculationReviewRequired {
+interface TaxCalculationReviewRequired {
   status: 'review_required';
   reason: TaxReviewReason;
   /** Human-readable detail for logging/support tooling. */

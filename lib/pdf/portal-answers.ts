@@ -6,7 +6,7 @@ import { resolveFieldValue, type FieldResolutionContext } from './resolve-fields
 // these details on screen before the upload). The same resolvers that fill
 // the PDF forms (resolve-fields.ts), so the sheet and the forms agree.
 
-export const PORTAL_ANSWER_FIELDS: { label: string; mapsTo: string }[] = [
+const PORTAL_ANSWER_FIELDS: { label: string; mapsTo: string }[] = [
   { label: 'Building number and street', mapsTo: 'application.addressStreetLine' },
   { label: 'Unit', mapsTo: 'application.addressUnit' },
   { label: 'City', mapsTo: 'application.addressCity' },

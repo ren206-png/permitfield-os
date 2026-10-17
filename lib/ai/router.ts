@@ -26,7 +26,7 @@
 import { GEMINI_ASSISTANT_MODEL_ID, GEMINI_CLASSIFICATION_MODEL_ID } from './config';
 import { AiTaskKindSchema, type AiProvider, type AiTaskKind } from './schemas/ai-task';
 
-export type { AiProvider, AiTaskKind } from './schemas/ai-task';
+export type {  AiTaskKind } from './schemas/ai-task';
 
 export interface AiTaskRoute {
   provider: AiProvider;

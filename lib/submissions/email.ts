@@ -10,7 +10,7 @@
 // links ... are not accepted") gets every document attached instead, listed in
 // the body, and one that asks for it gets the method of payment.
 
-export interface SubmissionDocumentLink {
+interface SubmissionDocumentLink {
   name: string;
   url: string;
 }

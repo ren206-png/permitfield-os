@@ -44,7 +44,7 @@ async function assertTaxProfileEntitlement(orgId: string): Promise<void> {
   }
 }
 
-export type TaxProfileReviewStatus = 'unreviewed' | 'reviewed' | 'needs_attention';
+type TaxProfileReviewStatus = 'unreviewed' | 'reviewed' | 'needs_attention';
 
 export interface OrgTaxProfileFullRecord {
   id: string;

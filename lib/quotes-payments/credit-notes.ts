@@ -34,7 +34,7 @@ async function assertCreditNotesEntitlement(orgId: string): Promise<void> {
   }
 }
 
-export type CreditNoteStatus = 'draft' | 'issued' | 'void';
+type CreditNoteStatus = 'draft' | 'issued' | 'void';
 
 export interface CreditNoteRecord {
   id: string;

@@ -9,7 +9,7 @@ import type { PDFParse as PDFParseType } from 'pdf-parse';
 // text-native page to vision) just cost more tokens, but false positives
 // (auditing a blank page as if it were real extracted text) produce
 // confidently-wrong findings, which SS0.1 treats as the worse failure mode.
-export const MIN_CHARS_PER_PAGE_FOR_TEXT_ROUTE = 40;
+const MIN_CHARS_PER_PAGE_FOR_TEXT_ROUTE = 40;
 
 export type ExtractionRoute = 'text' | 'vision';
 

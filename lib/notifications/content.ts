@@ -34,7 +34,7 @@ export type NotificationTargetEventData =
   | PermitEventPayloads['permit/application.pdf_generated']
   | PermitEventPayloads['permit/application.drawing_reviewed'];
 
-export type NotificationEventKind =
+type NotificationEventKind =
   | 'extraction_completed'
   | 'extraction_failed'
   | 'audit_completed'

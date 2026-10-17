@@ -52,7 +52,7 @@ export function permitStatusErrorMessage(message: string): string {
 }
 
 /** One item from the city's own submission checklist (permit_requirements). */
-export interface CityRequirement {
+interface CityRequirement {
   /** permit_requirements.id, kept on the checklist item so its review status can be shown. */
   id?: string;
   title: string;

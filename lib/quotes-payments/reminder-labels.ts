@@ -10,9 +10,9 @@
 // Jobs are created when an estimate is sent and when an invoice is issued
 // (lib/reminders/quote-reminder-schedule.ts, via the send/issue Server
 // Actions), so these labels now describe real scheduled reminders.
-export type ReminderJobKind = 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue';
+type ReminderJobKind = 'estimate_expiring' | 'invoice_due_soon' | 'invoice_overdue';
 
-export const REMINDER_KIND_LABELS: Record<ReminderJobKind, string> = {
+const REMINDER_KIND_LABELS: Record<ReminderJobKind, string> = {
   estimate_expiring: 'Estimate expiring',
   invoice_due_soon: 'Invoice due soon',
   invoice_overdue: 'Invoice overdue',

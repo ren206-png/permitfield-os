@@ -5,8 +5,8 @@ import { useSyncExternalStore } from 'react';
 // plugins (ios/App/App/DocumentScannerPlugin.swift). Nothing here runs or
 // changes on the website in a normal browser.
 
-export type DocumentScanResult = { base64?: string; pageCount?: number; byteSize?: number; cancelled?: boolean };
-export type AppleSignInResult = { identityToken?: string; nonce?: string; givenName?: string; familyName?: string; cancelled?: boolean };
+type DocumentScanResult = { base64?: string; pageCount?: number; byteSize?: number; cancelled?: boolean };
+type AppleSignInResult = { identityToken?: string; nonce?: string; givenName?: string; familyName?: string; cancelled?: boolean };
 
 type CapacitorGlobal = {
   isNativePlatform?: () => boolean;

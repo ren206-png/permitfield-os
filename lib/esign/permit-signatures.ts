@@ -17,7 +17,7 @@ import { pngBase64ToBytes, type SignatureSubmission } from './signature';
 
 type Client = SupabaseClient;
 
-export type SignerRole = 'applicant' | 'owner';
+type SignerRole = 'applicant' | 'owner';
 
 function first<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
