@@ -35,9 +35,9 @@ const CAPABILITIES = [
 export function Capabilities() {
   return (
     <section id="features" className="relative border-t border-white/5">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.15),transparent_70%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_top,rgba(245,158,11,0.15),transparent_70%)]" />
       <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
-        <p className="text-center text-sm font-medium text-indigo-300">Features</p>
+        <p className="text-center text-sm font-medium text-orange-300">Features</p>
         <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">
           What PermitField OS does today
         </h2>
@@ -45,9 +45,9 @@ export function Capabilities() {
           {CAPABILITIES.map((capability) => (
             <div
               key={capability.title}
-              className="group rounded-2xl border border-white/10 bg-white/[0.03] p-7 transition hover:-translate-y-0.5 hover:border-indigo-400/40 hover:bg-white/[0.05]"
+              className="group rounded-2xl border border-white/10 bg-white/[0.03] p-7 transition hover:-translate-y-0.5 hover:border-orange-400/40 hover:bg-white/[0.05]"
             >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-600 to-amber-600 text-sm font-semibold text-white shadow-lg shadow-orange-950/50">
                 {capability.title.charAt(0)}
               </span>
               <h3 className="mt-5 text-lg font-semibold text-white">{capability.title}</h3>

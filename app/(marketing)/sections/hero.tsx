@@ -21,18 +21,18 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="relative overflow-hidden">
       {/* Decorative glow -- purely visual, no content. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(79,70,229,0.28),transparent_60%)]" />
-      <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-40 -z-10 h-[30rem] w-[44rem] max-w-full -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(234,88,12,0.28),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-40 -z-10 h-[30rem] w-[44rem] max-w-full -translate-x-1/2 rounded-full bg-amber-600/20 blur-3xl" />
 
       <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <div className="mb-6 flex items-center justify-center gap-4 text-sm font-medium text-indigo-300">
-          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-r from-transparent to-indigo-400 sm:block" />
+        <div className="mb-6 flex items-center justify-center gap-4 text-sm font-medium text-orange-300">
+          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-r from-transparent to-orange-400 sm:block" />
           Built for Canadian trade contractors
-          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-l from-transparent to-indigo-400 sm:block" />
+          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-l from-transparent to-orange-400 sm:block" />
         </div>
         <h1 className="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-6xl sm:leading-[1.05]">
           Permit applications,{' '}
-          <span className="bg-gradient-to-r from-indigo-300 via-violet-300 to-sky-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-orange-300 via-amber-300 to-yellow-200 bg-clip-text text-transparent">
             organized from intake to filing.
           </span>
         </h1>
@@ -48,7 +48,7 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
         <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
           <Link
             href={signedIn ? '/applications' : '/login?mode=sign-up'}
-            className="rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50 transition hover:brightness-110"
+            className="rounded-full bg-gradient-to-r from-orange-600 to-amber-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-950/50 transition hover:brightness-110"
           >
             {signedIn ? 'Open the app' : 'Create your account'}
           </Link>
@@ -68,14 +68,14 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
 function HeroIllustration() {
   const rows = [
     { name: 'Tenant improvement', status: 'Draft', tone: 'bg-slate-500/20 text-slate-300' },
-    { name: 'Electrical service upgrade', status: 'Documents ready', tone: 'bg-indigo-500/20 text-indigo-200' },
+    { name: 'Electrical service upgrade', status: 'Documents ready', tone: 'bg-orange-500/20 text-orange-200' },
     { name: 'Commercial renovation', status: 'Submitted', tone: 'bg-emerald-500/20 text-emerald-300' },
   ];
   return (
     <div
       role="img"
       aria-label="Illustration of the PermitField OS application tracker showing applications in draft, documents-ready and submitted states"
-      className="relative mx-auto mt-16 max-w-4xl rounded-3xl border border-indigo-400/20 bg-gradient-to-b from-indigo-500/10 to-transparent p-3 shadow-2xl shadow-indigo-950/60 sm:p-4"
+      className="relative mx-auto mt-16 max-w-4xl rounded-3xl border border-orange-400/20 bg-gradient-to-b from-orange-500/10 to-transparent p-3 shadow-2xl shadow-orange-950/60 sm:p-4"
     >
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f2c] text-left">
         <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-3">
@@ -86,7 +86,7 @@ function HeroIllustration() {
         </div>
         <div className="grid sm:grid-cols-[11rem_1fr]">
           <div className="hidden space-y-2 border-r border-white/5 p-4 text-xs text-slate-500 sm:block">
-            <div className="rounded-md bg-indigo-500/15 px-3 py-2 text-indigo-200">Applications</div>
+            <div className="rounded-md bg-orange-500/15 px-3 py-2 text-orange-200">Applications</div>
             <div className="px-3 py-2">Documents</div>
             <div className="px-3 py-2">Coverage</div>
             <div className="px-3 py-2">Team</div>
@@ -95,14 +95,14 @@ function HeroIllustration() {
             {rows.map((row) => (
               <div key={row.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3.5">
                 <div className="flex items-center gap-3">
-                  <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500/40 to-violet-500/40" />
+                  <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500/40 to-amber-500/40" />
                   <span className="text-sm font-medium text-white">{row.name}</span>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-medium ${row.tone}`}>{row.status}</span>
               </div>
             ))}
-            <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-400/30 px-4 py-3 text-xs text-indigo-200">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-orange-400/30 px-4 py-3 text-xs text-orange-200">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-orange-400" />
               Key fields extracted from your uploads, ready for your review
             </div>
           </div>

@@ -25,12 +25,12 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="border-t border-white/5">
       <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
-        <p className="text-center text-sm font-medium text-indigo-300">Three steps</p>
+        <p className="text-center text-sm font-medium text-orange-300">Three steps</p>
         <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">How it works</h2>
         <ol className="mt-12 grid gap-6 sm:grid-cols-3">
           {STEPS.map((step, index) => (
             <li key={step.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-600 text-sm font-semibold text-white shadow-lg shadow-orange-950/50">
                 {String(index + 1).padStart(2, '0')}
               </span>
               <h3 className="mt-5 text-lg font-semibold text-white">{step.title}</h3>

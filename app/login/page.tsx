@@ -31,12 +31,33 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
   const notice = 'mb-4 rounded-lg border px-3 py-2 text-sm';
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-[#060a1e] px-4 py-14">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(79,70,229,0.3),transparent_60%)]" />
-      <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 left-1/2 h-[26rem] w-[40rem] max-w-full -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl" />
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-14 overflow-hidden bg-[#060a1e] px-4 py-14 lg:flex-row lg:gap-20 lg:px-12">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(234,88,12,0.3),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 left-1/2 h-[26rem] w-[40rem] max-w-full -translate-x-1/2 rounded-full bg-amber-600/20 blur-3xl" />
+      <aside className="relative hidden max-w-md lg:block">
+        <p className="text-sm font-medium text-orange-300">Built for Canadian trade contractors</p>
+        <h2 className="mt-3 text-4xl font-semibold leading-tight tracking-tight text-white">
+          Permit applications,{' '}
+          <span className="bg-gradient-to-r from-orange-300 via-amber-300 to-yellow-200 bg-clip-text text-transparent">
+            organized from intake to filing.
+          </span>
+        </h2>
+        <ul className="mt-8 space-y-4 text-sm text-slate-300">
+          {[
+            'Every application’s documents, status and history in one record.',
+            'AI-assisted extraction of key fields, for your review.',
+            'Your data is scoped to your organization, enforced in the database.',
+          ].map((line) => (
+            <li key={line} className="flex gap-3">
+              <span aria-hidden="true" className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-500/20 text-xs text-orange-300">✓</span>
+              {line}
+            </li>
+          ))}
+        </ul>
+      </aside>
       <div className="relative w-full max-w-md">
         <Link href="/" className="flex items-center justify-center gap-2.5 text-xl font-semibold tracking-tight text-white">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold shadow-lg shadow-indigo-900/50">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-orange-600 to-amber-600 text-base font-bold shadow-lg shadow-orange-950/50">
             P
           </span>
           <h1>{PRODUCT_NAME}</h1>
@@ -44,7 +65,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <p className="mt-3 text-center text-sm text-slate-400">
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
-        <div className="mt-8 rounded-2xl border border-white/10 bg-[#0a0f2c]/90 p-7 shadow-2xl shadow-indigo-950/60 backdrop-blur">
+        <div className="mt-8 rounded-2xl border border-white/10 bg-[#0a0f2c]/90 p-7 shadow-2xl shadow-orange-950/60 backdrop-blur">
           {deleted === '1' && (
             <p role="status" className={`${notice} border-emerald-400/30 bg-emerald-500/10 text-emerald-300`}>
               Your account has been deleted. Thanks for trying PermitField.

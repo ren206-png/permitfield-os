@@ -39,7 +39,7 @@ export async function Coverage() {
       className="border-t border-white/5"
     >
       <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
-        <p className="text-center text-sm font-medium text-indigo-300">Coverage</p>
+        <p className="text-center text-sm font-medium text-orange-300">Coverage</p>
         <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">
           What&apos;s covered today
         </h2>
@@ -54,7 +54,7 @@ export async function Coverage() {
           {jurisdictions.map((jurisdiction) => {
             const place = `${jurisdiction.municipality}, ${jurisdiction.provinceCode.toUpperCase()}`;
             const rowClassName =
-              'flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-indigo-400/40 hover:bg-white/[0.05]';
+              'flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-orange-400/40 hover:bg-white/[0.05]';
             const row = (
               <>
                 <span className="text-sm font-medium text-white">

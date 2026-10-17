@@ -8,14 +8,14 @@ export function FooterCta({ signedIn }: { signedIn: boolean }) {
   return (
     <footer className="border-t border-white/5">
       <div className="relative overflow-hidden px-6 py-20 text-center">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(79,70,229,0.3),transparent_65%)]" />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(234,88,12,0.3),transparent_65%)]" />
         <div className="mx-auto max-w-3xl">
           <h2 className="text-3xl font-semibold tracking-tight text-white">
             Ready to organize your next permit application?
           </h2>
           <Link
             href={signedIn ? '/applications' : '/login?mode=sign-up'}
-            className="mt-8 inline-block rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50 transition hover:brightness-110"
+            className="mt-8 inline-block rounded-full bg-gradient-to-r from-orange-600 to-amber-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-950/50 transition hover:brightness-110"
           >
             {signedIn ? 'Open the app' : 'Create your account'}
           </Link>

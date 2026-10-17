@@ -15,7 +15,7 @@ import { StructuredData } from './structured-data';
 // its capability claims from MARKETING_CAPABILITY_LEDGER.md; nothing here
 // should be edited without updating both documents.
 //
-// Visual redesign: a dark navy page with indigo-violet glow, pill buttons and
+// Visual redesign: a dark navy page with orange glow, pill buttons and
 // a framed product illustration. The page is dark only, so #marketing-root
 // always carries the `dark` class (globals.css keys `dark:` off it) and the
 // old light/dark toggle is gone.
@@ -24,7 +24,7 @@ import { StructuredData } from './structured-data';
 // on this flag-gated route, not across the authenticated app.
 export function MarketingHomepage({ signedIn }: { signedIn: boolean }) {
   const pill =
-    'whitespace-nowrap rounded-full border border-white/20 px-4 py-2 text-sm sm:px-5 font-medium text-white transition hover:border-indigo-400/70 hover:bg-white/5';
+    'whitespace-nowrap rounded-full border border-white/20 px-4 py-2 text-sm sm:px-5 font-medium text-white transition hover:border-orange-400/70 hover:bg-white/5';
   return (
     <div id="marketing-root" className="dark flex min-h-full flex-col bg-[#060a1e] text-slate-300">
       <StructuredData />
@@ -32,7 +32,7 @@ export function MarketingHomepage({ signedIn }: { signedIn: boolean }) {
       <header className="sticky top-0 z-30 border-b border-white/5 bg-[#060a1e]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <span className="flex items-center gap-2.5 whitespace-nowrap text-lg font-semibold tracking-tight text-white">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-900/50">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-600 to-amber-600 text-sm font-bold text-white shadow-lg shadow-orange-950/50">
               P
             </span>
             {PRODUCT_NAME}

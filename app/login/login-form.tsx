@@ -8,7 +8,7 @@ import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
 import { nativeApp, useIsNativeApp } from '@/lib/native/app';
 
 const inputClass =
-  'w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400';
+  'w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400';
 
 // The /auth/callback URL a sign-in that leaves the site returns to, carrying
 // the invitation (if any) through. Supabase only honours it when it is in the
@@ -290,7 +290,7 @@ export function LoginForm({
           <button
             type="submit"
             disabled={pending || captchaMissing}
-            className="mt-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-2 rounded-full bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? 'Please wait…' : 'Send reset link'}
           </button>
@@ -309,7 +309,7 @@ export function LoginForm({
           type="button"
           onClick={() => setMode('sign-in')}
           className={`flex-1 rounded-full px-3 py-1.5 transition-colors ${
-            mode === 'sign-in' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
+            mode === 'sign-in' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-white'
           }`}
         >
           Sign in
@@ -318,7 +318,7 @@ export function LoginForm({
           type="button"
           onClick={() => setMode('sign-up')}
           className={`flex-1 rounded-full px-3 py-1.5 transition-colors ${
-            mode === 'sign-up' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
+            mode === 'sign-up' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-white'
           }`}
         >
           Create account
@@ -399,7 +399,7 @@ export function LoginForm({
         <button
           type="submit"
           disabled={pending || captchaMissing}
-          className="mt-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 rounded-full bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
         </button>
