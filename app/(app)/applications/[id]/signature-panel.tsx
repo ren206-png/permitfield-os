@@ -28,6 +28,17 @@ interface RequestRow {
   status: 'pending' | 'signed' | 'cancelled';
   created_at: string;
   signed_at: string | null;
+  // The name the signer typed when signing (one row per request, unique
+  // request_id). It can differ from signer_name, the person the request was
+  // sent to, and it's the name on the signed form.
+  permit_signatures: { typed_name: string } | { typed_name: string }[] | null;
+}
+
+function signedName(request: RequestRow): string {
+  const signature = Array.isArray(request.permit_signatures)
+    ? request.permit_signatures[0]
+    : request.permit_signatures;
+  return signature?.typed_name || request.signer_name;
 }
 
 const ROLE_LABEL = { applicant: 'Applicant', owner: 'Property owner' } as const;
@@ -56,7 +67,9 @@ export async function SignaturePanel({
       .order('sequence', { ascending: true }),
     supabase
       .from('permit_signature_requests')
-      .select('id, permit_type_filing_id, signer_role, signer_name, signer_email, status, created_at, signed_at')
+      .select(
+        'id, permit_type_filing_id, signer_role, signer_name, signer_email, status, created_at, signed_at, permit_signatures ( typed_name )'
+      )
       .eq('application_id', applicationId)
       .neq('status', 'cancelled')
       .order('created_at', { ascending: false }),
@@ -109,7 +122,8 @@ export async function SignaturePanel({
                       <p className="text-xs font-medium text-zinc-700">{ROLE_LABEL[role]} signature</p>
                       {latest?.status === 'signed' ? (
                         <p className="mt-1 text-xs text-emerald-700">
-                          Signed by {latest.signer_name} on <LocalTime value={latest.signed_at ?? latest.created_at} />.
+                          Signed by {signedName(latest)} on <LocalTime value={latest.signed_at ?? latest.created_at} />.
+                          {signedName(latest) !== latest.signer_name && ` (Sent to ${latest.signer_name}, ${latest.signer_email}.)`}
                         </p>
                       ) : latest?.status === 'pending' ? (
                         <div className="mt-1 text-xs text-zinc-600">
