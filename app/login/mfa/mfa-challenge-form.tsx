@@ -41,7 +41,8 @@ export function MfaChallengeForm() {
   }
 
   async function handleSignOut() {
-    await createClient().auth.signOut();
+    // This browser only, like the sidebar's Sign out (app/actions/auth.ts).
+    await createClient().auth.signOut({ scope: 'local' });
     router.push('/login');
   }
 
