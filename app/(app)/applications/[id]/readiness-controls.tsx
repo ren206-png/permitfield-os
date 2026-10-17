@@ -15,7 +15,9 @@ const initialState: ReadinessActionState = {};
 
 const primaryButton =
   'rounded-md bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60';
-const linkButton = 'text-xs font-medium text-zinc-700 underline underline-offset-2 disabled:opacity-60';
+// py-1.5 makes each a ~28px tap target on phones (it was 16px, with Delete
+// right beside Mark complete).
+const linkButton = 'py-1.5 text-xs font-medium text-zinc-700 underline underline-offset-2 disabled:opacity-60';
 const input = 'rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900';
 
 function Result({ state }: { state: ReadinessActionState }) {
@@ -85,7 +87,7 @@ export function ChecklistItemActions({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex flex-wrap justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-x-4">
         {status !== 'complete' && (
           <form action={formAction}>
             <input type="hidden" name="applicationId" value={applicationId} />
@@ -120,7 +122,7 @@ export function ChecklistItemActions({
           >
             <input type="hidden" name="applicationId" value={applicationId} />
             <input type="hidden" name="itemId" value={itemId} />
-            <button type="submit" disabled={deleting} className="text-xs font-medium text-red-600 underline underline-offset-2">
+            <button type="submit" disabled={deleting} className="py-1.5 text-xs font-medium text-red-600 underline underline-offset-2">
               Delete
             </button>
           </form>
