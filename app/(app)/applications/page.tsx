@@ -136,7 +136,9 @@ export default async function ApplicationsPage({
           name="q"
           defaultValue={q ?? ''}
           placeholder="Search title or address"
-          className="min-w-0 flex-1 rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none"
+          // Own row on phones (basis 100%): with flex-1 alone the status
+          // select and Filter button squeezed it to a sliver at 375px.
+          className="min-w-0 flex-[1_1_100%] rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none sm:flex-1"
         />
         <select
           name="status"

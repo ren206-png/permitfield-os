@@ -15,8 +15,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col bg-zinc-50">
       <header className="border-b border-zinc-200 bg-zinc-900">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4 px-4 py-3 sm:items-center sm:px-6">
+          {/* Wraps on phones: in one row these links pushed the whole admin
+              page ~100px wider than a 375px screen. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2">
             <span className="text-sm font-semibold tracking-tight text-white">{PRODUCT_SHORT} · Platform Admin</span>
             <Link href="/admin" className="text-sm text-zinc-300 hover:text-white">
               Organizations
@@ -31,7 +33,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               Back to app
             </Link>
           </div>
-          <form action={signOutAction}>
+          <form action={signOutAction} className="shrink-0">
             <button type="submit" className="text-sm text-zinc-300 hover:text-white">
               Sign out
             </button>
