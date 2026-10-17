@@ -23,19 +23,18 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="border-t border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/40">
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        <h2 className="text-2xl font-semibold text-zinc-900 dark:text-white">How it works</h2>
-        <ol className="mt-10 grid gap-8 sm:grid-cols-3">
+    <section id="how-it-works" className="border-t border-white/5">
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
+        <p className="text-center text-sm font-medium text-orange-300">Three steps</p>
+        <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">How it works</h2>
+        <ol className="mt-12 grid gap-6 sm:grid-cols-3">
           {STEPS.map((step, index) => (
-            <li key={step.title}>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-sm font-semibold text-white shadow-md shadow-orange-200 dark:shadow-none">
+            <li key={step.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-orange-600 to-amber-600 text-sm font-semibold text-white shadow-lg shadow-orange-950/50">
                 {String(index + 1).padStart(2, '0')}
               </span>
-              <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
-                {step.title}
-              </h3>
-              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{step.body}</p>
+              <h3 className="mt-5 text-lg font-semibold text-white">{step.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{step.body}</p>
             </li>
           ))}
         </ol>

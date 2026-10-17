@@ -7,29 +7,6 @@ import { Capabilities } from './sections/capabilities';
 import { Coverage } from './sections/coverage';
 import { FooterCta } from './sections/footer-cta';
 import { StructuredData } from './structured-data';
-import { ThemeToggle } from './theme-toggle';
-
-// Dark is now the default theme for this page (matches the
-// orange-on-near-black reference palette this homepage was restyled
-// after), not just an OS-preference-following option -- #marketing-root
-// below always renders with the `dark` class server-side. This script
-// applies the *opposite* case: a returning visitor who explicitly chose
-// light mode via ThemeToggle gets that class removed before first paint,
-// so they don't see a flash of dark before it switches to light. Scoped to
-// this one element, not <html> -- see theme-toggle.tsx and globals.css for
-// why (keeps this entirely out of the authenticated app).
-//
-// The storage key below is a literal, not an import of
-// MARKETING_THEME_STORAGE_KEY from theme-toggle.tsx: that file is a "use
-// client" module, and a server component importing a plain (non-component)
-// value export from across that boundary gets `undefined` at render time --
-// confirmed by inspecting the rendered HTML, which shipped
-// `localStorage.getItem(undefined)`. Keep this string in sync with
-// MARKETING_THEME_STORAGE_KEY in theme-toggle.tsx if it ever changes.
-const MARKETING_THEME_STORAGE_KEY = 'permitfield-marketing-theme';
-const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.stringify(
-  MARKETING_THEME_STORAGE_KEY,
-)})==='light'){document.getElementById('marketing-root').classList.remove('dark');}}catch(e){}})();`;
 
 // Marketing Homepage v2 (COPY_DECK.md). Rendered for every visitor to '/'
 // when NEXT_PUBLIC_MARKETING_V2 is on -- see app/page.tsx and proxy.ts. A
@@ -38,61 +15,66 @@ const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.st
 // its capability claims from MARKETING_CAPABILITY_LEDGER.md; nothing here
 // should be edited without updating both documents.
 //
-// Phase 3 analytics (MARKETING_PHASE_0_FINDINGS.md SS5's open item #2,
-// resolved): Vercel Web Analytics, chosen because the app already deploys
-// on Vercel (same section) -- no new account, no API key/site ID in code,
-// nothing to fabricate. Mounted here (not app/layout.tsx) so it only loads
-// on this flag-gated route, not site-wide across the existing authenticated
-// app -- turning this flag on does not turn on telemetry for /applications
-// or any other existing page. Collection itself still needs "Web Analytics"
-// turned on for this project in the Vercel dashboard (a project setting,
-// not a code change) before any data appears -- see this phase's report for
-// that action item.
+// Visual redesign: a dark navy page with orange glow, pill buttons and
+// a framed product illustration. The page is dark only, so #marketing-root
+// always carries the `dark` class (globals.css keys `dark:` off it) and the
+// old light/dark toggle is gone.
+//
+// Vercel Web Analytics is mounted here (not app/layout.tsx) so it only loads
+// on this flag-gated route, not across the authenticated app.
 export function MarketingHomepage({ signedIn }: { signedIn: boolean }) {
+  const pill =
+    'whitespace-nowrap rounded-full border border-white/20 px-4 py-2 text-sm sm:px-5 font-medium text-white transition hover:border-orange-400/70 hover:bg-white/5';
   return (
-    <div id="marketing-root" className="dark flex min-h-full flex-col bg-white dark:bg-zinc-950">
-      <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
+    <div id="marketing-root" className="dark flex min-h-full flex-col bg-[#060a1e] text-slate-300">
       <StructuredData />
       <Analytics />
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/80">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <span className="flex items-center gap-2 whitespace-nowrap text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-orange-600 text-sm font-bold text-white shadow-sm shadow-orange-200 dark:shadow-none">
+      <header className="sticky top-0 z-30 border-b border-white/5 bg-[#060a1e]/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <span className="flex items-center gap-2.5 whitespace-nowrap text-lg font-semibold tracking-tight text-white">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-600 to-amber-600 text-sm font-bold text-white shadow-lg shadow-orange-950/50">
               P
             </span>
             {PRODUCT_NAME}
           </span>
-          <nav className="flex items-center gap-3 whitespace-nowrap text-sm text-zinc-600 dark:text-zinc-400 sm:gap-6">
-            <a href="#how-it-works" className="hidden hover:text-orange-600 dark:hover:text-orange-400 sm:inline">
-              How it works
-            </a>
-            <a href="#coverage" className="hidden hover:text-orange-600 dark:hover:text-orange-400 sm:inline">
-              What&apos;s covered
-            </a>
-            {signedIn ? (
-              <Link
-                href="/applications"
-                className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
-              >
-                Open the app
-              </Link>
-            ) : (
-              <>
-                <Link href="/login" className="hover:text-orange-600 dark:hover:text-orange-400">
-                  Sign in
-                </Link>
-                <Link
-                  href="/login?mode=sign-up"
-                  className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
-                >
-                  {/* Phones: the full label wrapped onto two lines beside the logo. */}
-                  <span className="sm:hidden">Sign up</span>
-                  <span className="hidden sm:inline">Create your account</span>
-                </Link>
-              </>
-            )}
-            <ThemeToggle />
+          <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
+            <a href="#how-it-works" className="hover:text-white">How it works</a>
+            <a href="#features" className="hover:text-white">Features</a>
+            <a href="#coverage" className="hover:text-white">Coverage</a>
+            {!signedIn && <Link href="/login" className="hover:text-white">Sign in</Link>}
           </nav>
+          <div className="flex items-center gap-3">
+            <Link href={signedIn ? '/applications' : '/login?mode=sign-up'} className={pill}>
+              {signedIn ? 'Open the app' : 'Get started'}
+            </Link>
+            {/* No-JS mobile menu. */}
+            <details className="group relative md:hidden">
+              <summary
+                aria-label="Menu"
+                className="flex h-10 w-10 cursor-pointer list-none flex-col items-center justify-center gap-1.5 [&::-webkit-details-marker]:hidden"
+              >
+                <span className="h-0.5 w-6 bg-white" />
+                <span className="h-0.5 w-6 bg-white" />
+                <span className="h-0.5 w-6 bg-white" />
+              </summary>
+              <div className="absolute right-0 top-12 w-52 rounded-xl border border-white/10 bg-[#0b1030] p-2 text-sm shadow-xl">
+                {[
+                  ['#how-it-works', 'How it works'],
+                  ['#features', 'Features'],
+                  ['#coverage', 'Coverage'],
+                ].map(([href, label]) => (
+                  <a key={href} href={href} className="block rounded-lg px-3 py-2 hover:bg-white/5">
+                    {label}
+                  </a>
+                ))}
+                {!signedIn && (
+                  <Link href="/login" className="block rounded-lg px-3 py-2 hover:bg-white/5">
+                    Sign in
+                  </Link>
+                )}
+              </div>
+            </details>
+          </div>
         </div>
       </header>
 
