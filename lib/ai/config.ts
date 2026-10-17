@@ -11,7 +11,10 @@ export const MODEL_ID = 'claude-sonnet-5';
 // Persisted with every `extractions` row (extractions.prompt_version) so a
 // bad prompt revision can be identified -- and the exact rows it produced
 // found -- without guessing.
-export const EXTRACTION_PROMPT_VERSION = 'extraction-v1';
+// v2 (2026-10-17): the area is explicitly square metres. v1 asked for "project
+// area" with no unit, and a drawing showing "111 m² (1,195 sq ft)" came back
+// as 1195 -- which Ottawa's and Edmonton's forms would file as m².
+export const EXTRACTION_PROMPT_VERSION = 'extraction-v2';
 
 // Same purpose as EXTRACTION_PROMPT_VERSION, for the audit prompt (Phase 3).
 // Declared here now so both phases share one place to look for prompt

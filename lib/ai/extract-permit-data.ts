@@ -25,8 +25,8 @@ Each document is introduced with its document ID before its content.
 TASK
 Call the record_permit_extraction tool exactly once with the following \
 fields, extracted from the documents shown: applicant name, contractor \
-license number, project area, electrical service size in amps, estimated \
-job value, and a short scope-of-work summary.
+license number, project area in square metres, electrical service size in \
+amps, estimated job value, and a short scope-of-work summary.
 
 HARD RULES
 - Every field carries a confidence score from 0 to 1.
@@ -39,6 +39,10 @@ missing field is missing information, not a zero and not an assumption.
 - Extract the estimated job value exactly as printed on the document \
 (currency symbol, thousands separators, and cents included) as a plain \
 string. Do not convert it to cents. Do not perform arithmetic on it.
+- The project area (square_footage) is always in square metres (m²). If the \
+documents give the area in square metres, use that figure even when square \
+feet are also shown. If they give it only in square feet or another unit, \
+its value is null -- do not convert units.
 - Do not infer, guess, or complete facts that are not stated in the \
 documents.`;
 
