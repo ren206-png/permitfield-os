@@ -172,10 +172,11 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Every path except: API routes, the Inngest endpoint, Next internals,
-    // and static assets. /api routes each do their own auth.getUser() check
+    // static assets, and the public landing-page screenshots in
+    // public/showcase/ (images only, nothing to protect). /api routes each do their own auth.getUser() check
     // (see app/api/documents/route.ts, confirm-review/route.ts) and must
     // return JSON errors, not an HTML redirect, on missing auth.
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|showcase/).*)',
     // Session-authenticated API routes, for the two-factor check above.
     // Everything else under /api (Inngest, webhooks, the bearer-key public
     // API, token-authorized public PDFs) never carries a user session.
