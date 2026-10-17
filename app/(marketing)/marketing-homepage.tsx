@@ -31,9 +31,10 @@ const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.st
   MARKETING_THEME_STORAGE_KEY,
 )})==='light'){document.getElementById('marketing-root').classList.remove('dark');}}catch(e){}})();`;
 
-// Marketing Homepage v2 (COPY_DECK.md). Rendered only for unauthenticated
-// visitors to '/' when NEXT_PUBLIC_MARKETING_V2 is on -- see app/page.tsx
-// and proxy.ts. Every section below sources its copy from COPY_DECK.md and
+// Marketing Homepage v2 (COPY_DECK.md). Rendered for every visitor to '/'
+// when NEXT_PUBLIC_MARKETING_V2 is on -- see app/page.tsx and proxy.ts. A
+// signed-in visitor (`signedIn`) gets "Open the app" in place of the sign-in
+// and sign-up links. Every section below sources its copy from COPY_DECK.md and
 // its capability claims from MARKETING_CAPABILITY_LEDGER.md; nothing here
 // should be edited without updating both documents.
 //
@@ -47,7 +48,7 @@ const NO_FOUC_SCRIPT = `(function(){try{if(window.localStorage.getItem(${JSON.st
 // turned on for this project in the Vercel dashboard (a project setting,
 // not a code change) before any data appears -- see this phase's report for
 // that action item.
-export function MarketingHomepage() {
+export function MarketingHomepage({ signedIn }: { signedIn: boolean }) {
   return (
     <div id="marketing-root" className="dark flex min-h-full flex-col bg-white dark:bg-zinc-950">
       <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
@@ -68,30 +69,41 @@ export function MarketingHomepage() {
             <a href="#coverage" className="hidden hover:text-orange-600 dark:hover:text-orange-400 sm:inline">
               What&apos;s covered
             </a>
-            <Link href="/login" className="hover:text-orange-600 dark:hover:text-orange-400">
-              Sign in
-            </Link>
-            <Link
-              href="/login?mode=sign-up"
-              className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
-            >
-              {/* Phones: the full label wrapped onto two lines beside the logo. */}
-              <span className="sm:hidden">Sign up</span>
-              <span className="hidden sm:inline">Create your account</span>
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/applications"
+                className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
+              >
+                Open the app
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="hover:text-orange-600 dark:hover:text-orange-400">
+                  Sign in
+                </Link>
+                <Link
+                  href="/login?mode=sign-up"
+                  className="rounded-md bg-orange-600 px-3 py-1.5 font-medium text-white shadow-sm shadow-orange-200 transition hover:bg-orange-500 hover:shadow-md hover:shadow-orange-300 dark:shadow-none"
+                >
+                  {/* Phones: the full label wrapped onto two lines beside the logo. */}
+                  <span className="sm:hidden">Sign up</span>
+                  <span className="hidden sm:inline">Create your account</span>
+                </Link>
+              </>
+            )}
             <ThemeToggle />
           </nav>
         </div>
       </header>
 
       <main className="flex-1">
-        <Hero />
+        <Hero signedIn={signedIn} />
         <HowItWorks />
         <Capabilities />
         <Coverage />
       </main>
 
-      <FooterCta />
+      <FooterCta signedIn={signedIn} />
     </div>
   );
 }
