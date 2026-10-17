@@ -11,9 +11,12 @@ import { UPLOADS_BUCKET, isAllowedMimeType } from '@/lib/storage/documents';
 // (app/api/documents/route.ts, once the upload set is complete).
 //
 // SS7 adversarial check #8 ("the retry storm"): `idempotency` is keyed on
-// applicationId so Inngest collapses concurrent/retried runs for the same
-// application into a single execution instead of racing to insert multiple
-// append-only `extractions` rows. `retries` covers genuine transient
+// applicationId + the documents fingerprint, so Inngest collapses
+// retried/duplicate runs for the same set of documents into one execution,
+// while a run for a new set (a document added after a finished run) goes
+// ahead -- keyed on applicationId alone, that second run was silently
+// dropped for 24 hours. `concurrency` 1 per application keeps two different
+// sets from racing to insert `extractions` rows. `retries` covers genuine transient
 // failures (network, Anthropic 5xx) -- validation failures are NOT retried
 // at the Inngest level, they're handled inside extractPermitData's own
 // bounded retry loop and then persisted as a terminal zod_valid=false row.
@@ -22,20 +25,20 @@ export const permitExtract = inngest.createFunction(
     id: 'permit-extract',
     name: 'Extract permit application data',
     triggers: [{ event: 'permit/application.documents_ready' }],
-    idempotency: 'event.data.applicationId',
+    idempotency: 'event.data.applicationId + "-" + event.data.documentsFingerprint',
+    concurrency: { limit: 1, key: 'event.data.applicationId' },
     retries: 2,
   },
   async ({ event, step }) => {
     const { applicationId } = event.data as PermitEventPayloads['permit/application.documents_ready'];
     const supabase = createServiceClient();
 
-    // The application row itself isn't needed past this existence check --
-    // only its documents feed the rest of the run -- so only `documents` is
-    // kept from this step's return value.
-    const { documents } = await step.run('load-application-and-documents', async () => {
+    // The application row itself isn't needed past this existence check and
+    // its status -- only its documents feed the rest of the run.
+    const { documents, status } = await step.run('load-application-and-documents', async () => {
       const { data: application, error: appError } = await supabase
         .from('permit_applications')
-        .select('id, currency_code')
+        .select('id, currency_code, status')
         .eq('id', applicationId)
         .single();
 
@@ -55,8 +58,15 @@ export const permitExtract = inngest.createFunction(
         throw new Error(`No application_documents rows found for ${applicationId}; nothing to extract.`);
       }
 
-      return { application, documents };
+      return { documents, status: application.status as string };
     });
+
+    // Never re-extract a submitted application: 'extracting' would overwrite
+    // 'submitted'. app/api/documents/route.ts already refuses to send the
+    // event then; this re-checks live in case it was submitted meanwhile.
+    if (status === 'submitted') {
+      return { applicationId, skipped: 'submitted' as const };
+    }
 
     await step.run('mark-extracting', async () => {
       const { error } = await supabase

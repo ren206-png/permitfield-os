@@ -47,7 +47,7 @@ export const permitAudit = inngest.createFunction(
         // and share this identity.
         id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
-        data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
+        data: { applicationId, auditId: null, audited: false, runKey: extractionId } satisfies PermitEventPayloads['permit/application.audited'],
       });
       return { applicationId, auditId: null, audited: false };
     }
@@ -131,7 +131,7 @@ export const permitAudit = inngest.createFunction(
         // emit-extracted-event for the full "why".
         id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
-        data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
+        data: { applicationId, auditId: null, audited: false, runKey: extractionId } satisfies PermitEventPayloads['permit/application.audited'],
       });
       return { applicationId, auditId: null, audited: false };
     }
@@ -198,7 +198,7 @@ export const permitAudit = inngest.createFunction(
         // emit-extracted-event for the full "why".
         id: `permit/application.audited:${extractionId}`,
         name: 'permit/application.audited',
-        data: { applicationId, auditId: null, audited: false } satisfies PermitEventPayloads['permit/application.audited'],
+        data: { applicationId, auditId: null, audited: false, runKey: extractionId } satisfies PermitEventPayloads['permit/application.audited'],
       });
       return { applicationId, auditId: null, audited: false };
     }
@@ -310,6 +310,7 @@ export const permitAudit = inngest.createFunction(
         applicationId,
         auditId: persisted.auditId,
         audited: persisted.auditId !== null,
+        runKey: extractionId,
       } satisfies PermitEventPayloads['permit/application.audited'],
     });
 

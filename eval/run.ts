@@ -252,14 +252,14 @@ function runNotificationContentChecks() {
 
   const auditedOk = deriveNotificationContent(
     'permit/application.audited',
-    { applicationId: 'app-1', auditId: 'audit-1', audited: true },
+    { applicationId: 'app-1', auditId: 'audit-1', audited: true, runKey: 'extraction-1' },
     ctx
   );
   report('audited, audited=true -> audit_completed', auditedOk?.eventKind === 'audit_completed', `got ${JSON.stringify(auditedOk)}`);
 
   const auditedSkipped = deriveNotificationContent(
     'permit/application.audited',
-    { applicationId: 'app-1', auditId: null, audited: false },
+    { applicationId: 'app-1', auditId: null, audited: false, runKey: 'extraction-1' },
     ctx
   );
   report(

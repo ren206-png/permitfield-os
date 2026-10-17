@@ -100,6 +100,9 @@ export function DocumentUpload({ applicationId }: { applicationId: string }) {
         if (fileInputRef.current) fileInputRef.current.value = '';
         setScans([]);
         setTriggerExtraction(false);
+        // The route saved the files but refused to re-run extraction
+        // (signed, submitted, or a run in progress -- lib/extraction/rerun.ts).
+        if (typeof body.extractionNotStarted === 'string') setWarning(body.extractionNotStarted);
       }
       router.refresh();
     } catch {

@@ -48,12 +48,16 @@ import { buildStoragePath, computeSha256, FORM_TEMPLATES_BUCKET, GENERATED_BUCKE
 // 'review_confirmed'), closing that cross-trigger collision while still
 // collapsing true retries/duplicates of the SAME event, which always share
 // the same event.name.
+//
+// Plus event.data.runKey (the extraction or audit the trigger is for): a
+// re-extraction after new documents emits a new 'audited' event that must
+// refill the forms, not collapse into the first run's slot for 24 hours.
 export const permitGeneratePdf = inngest.createFunction(
   {
     id: 'permit-generate-pdf',
     name: 'Generate filled permit PDFs',
     triggers: [{ event: 'permit/application.audited' }, { event: 'permit/application.review_confirmed' }],
-    idempotency: 'event.data.applicationId + "-" + event.name',
+    idempotency: 'event.data.applicationId + "-" + event.name + "-" + event.data.runKey',
     retries: 2,
   },
   async ({ event, step }) => {
@@ -196,7 +200,7 @@ export const permitGeneratePdf = inngest.createFunction(
         // somehow firing) to collapse rather than double-run, so reusing
         // applicationId as the emitted event's dedup key is consistent with
         // that already-declared intent, not a new risk.
-        id: `permit/application.pdf_generated:${applicationId}`,
+        id: `permit/application.pdf_generated:${applicationId}:${event.data.runKey}`,
         name: 'permit/application.pdf_generated',
         data: {
           applicationId,
@@ -426,7 +430,7 @@ export const permitGeneratePdf = inngest.createFunction(
     await step.sendEvent('emit-pdf-generated-event', {
       // Deterministic id -- see emit-pdf-generated-skipped above for the
       // full "why".
-      id: `permit/application.pdf_generated:${applicationId}`,
+      id: `permit/application.pdf_generated:${applicationId}:${event.data.runKey}`,
       name: 'permit/application.pdf_generated',
       data: {
         applicationId,

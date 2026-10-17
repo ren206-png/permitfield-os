@@ -14,7 +14,13 @@ export interface PermitEventPayloads {
   // extraction (app/api/documents/route.ts, on the upload that completes the
   // set -- or, until Phase 5's wizard exists, sent manually/by a test
   // fixture). Triggers lib/inngest/functions/extract.ts.
-  'permit/application.documents_ready': { applicationId: string };
+  //
+  // `documentsFingerprint` (lib/extraction/rerun.ts) identifies the set of
+  // documents this run reads. extract.ts and classify-documents.ts key
+  // their idempotency on it, so a new document starts a fresh run while a
+  // double-click or a re-upload of the same files still collapses. Keyed on
+  // applicationId alone, a second run was silently dropped for 24 hours.
+  'permit/application.documents_ready': { applicationId: string; documentsFingerprint: string };
   // Emitted after permit.extract persists an extractions row, success or
   // failure. Phase 3's audit function (lib/inngest/functions/audit.ts) is
   // the subscriber to the success case; permit.notify_on_failure
@@ -38,10 +44,14 @@ export interface PermitEventPayloads {
   // (GATE_5_FINDINGS.md §K), lib/inngest/functions/notify.ts's permitNotify.
   // generate-pdf.ts is also a subscriber, on the 'assisted'-tier
   // direct-fill path.
+  //
+  // `runKey` is the extractionId this audit ran on: generate-pdf.ts keys its
+  // idempotency on it, so a re-extraction gets its forms refilled.
   'permit/application.audited': {
     applicationId: string;
     auditId: string | null;
     audited: boolean;
+    runKey: string;
   };
   // Emitted by a confirm-review API route (app/api/applications/[id]/confirm-
   // review/route.ts) once a human has confirmed every audit_findings row for
@@ -52,7 +62,8 @@ export interface PermitEventPayloads {
   // direct-fill path, since that tier never goes through human review at
   // all). See generate-pdf.ts's header comment for why one function safely
   // subscribes to both.
-  'permit/application.review_confirmed': { applicationId: string };
+  // `runKey` is the confirmed audit's id (same purpose as on 'audited').
+  'permit/application.review_confirmed': { applicationId: string; runKey: string };
   // Emitted after permit.generate_pdf finishes, including the "skipped"
   // case (coverage_level/status made the application ineligible for PDF
   // generation at the time this run executed -- re-derived from the DB,
