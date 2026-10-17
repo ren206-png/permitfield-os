@@ -306,9 +306,12 @@ export async function refundOnlinePayment(supabase: QPClient, params: RefundOnli
   }
 
   const stripe = getStripeClient();
-  await stripe.refunds.create({
-    payment_intent: paymentRow.stripe_payment_intent_id,
-  });
+  // The idempotency key makes a double-click (or a retry after a timeout)
+  // return the same refund instead of refunding the customer twice.
+  await stripe.refunds.create(
+    { payment_intent: paymentRow.stripe_payment_intent_id },
+    { idempotencyKey: `permitfield-refund-${paymentRow.id}` }
+  );
 
   return reversePayment(supabase, {
     orgId: params.orgId,
