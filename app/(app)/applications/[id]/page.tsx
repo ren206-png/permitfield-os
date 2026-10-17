@@ -26,7 +26,7 @@ const SIGNED_URL_TTL_SECONDS = 300;
 const EXTRACTION_FIELD_LABELS: Record<ExtractedFieldKey, string> = {
   applicant_name: 'Applicant name',
   license_number: 'License number',
-  square_footage: 'Square footage (m²)',
+  square_footage: 'Project area (m²)',
   electrical_amps: 'Electrical amps',
   estimated_job_value_raw: 'Estimated job value (as printed)',
   scope_of_work_summary: 'Scope of work',

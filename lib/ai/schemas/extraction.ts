@@ -30,8 +30,12 @@ export const PermitExtractionSchema = z.object({
   // all seed rows are 'metric' -- see supabase/seed.sql), so this is square
   // metres. An imperial jurisdiction would need this field to carry its own
   // unit rather than assuming one, same as SS0.8's measurement-fields rule --
-  // out of scope until a US/imperial jurisdiction actually ships.
-  square_footage: extractedField(z.number().positive()),
+  // out of scope until a US/imperial jurisdiction actually ships. The
+  // description below (and the prompt) say so to the model too: the field
+  // name alone got square feet back (EXTRACTION_PROMPT_VERSION v2).
+  square_footage: extractedField(z.number().positive()).describe(
+    'Project floor area in square metres (m²). Null if the documents give it only in square feet.',
+  ),
   electrical_amps: extractedField(z.number().positive()),
   // Deliberate deviation from the mission draft's literal field name
   // `estimated_job_value_cents`: the model is never asked to do currency
