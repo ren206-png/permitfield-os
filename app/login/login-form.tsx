@@ -8,7 +8,7 @@ import { Turnstile, TURNSTILE_SITE_KEY } from './turnstile';
 import { nativeApp, useIsNativeApp } from '@/lib/native/app';
 
 const inputClass =
-  'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
+  'w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400';
 
 // The /auth/callback URL a sign-in that leaves the site returns to, carrying
 // the invitation (if any) through. Supabase only honours it when it is in the
@@ -256,11 +256,11 @@ export function LoginForm({
   if (forgot) {
     return (
       <div>
-        <h2 className="text-base font-semibold text-zinc-900">Reset your password</h2>
-        <p className="mt-1 text-sm text-zinc-600">Enter your account email and we&apos;ll send you a link to choose a new password.</p>
+        <h2 className="text-base font-semibold text-white">Reset your password</h2>
+        <p className="mt-1 text-sm text-slate-400">Enter your account email and we&apos;ll send you a link to choose a new password.</p>
         <form onSubmit={handleForgot} className="mt-4 flex flex-col gap-4">
           <div>
-            <label htmlFor="reset-email" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label htmlFor="reset-email" className="mb-1 block text-sm font-medium text-slate-300">
               Email
             </label>
             <input
@@ -277,12 +277,12 @@ export function LoginForm({
           <Turnstile onToken={setCaptchaToken} resetKey={captchaResetKey} />
 
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-red-400">
               {error}
             </p>
           )}
           {info && (
-            <p role="status" className="text-sm text-emerald-600">
+            <p role="status" className="text-sm text-emerald-400">
               {info}
             </p>
           )}
@@ -290,12 +290,12 @@ export function LoginForm({
           <button
             type="submit"
             disabled={pending || captchaMissing}
-            className="mt-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? 'Please wait…' : 'Send reset link'}
           </button>
         </form>
-        <button type="button" onClick={() => showForgot(false)} className="mt-4 text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900">
+        <button type="button" onClick={() => showForgot(false)} className="mt-4 text-sm text-slate-400 underline underline-offset-2 hover:text-white">
           Back to sign in
         </button>
       </div>
@@ -304,12 +304,12 @@ export function LoginForm({
 
   return (
     <div>
-      <div className="mb-6 flex rounded-md border border-zinc-200 p-1 text-sm font-medium">
+      <div className="mb-6 flex rounded-full border border-white/10 bg-white/5 p-1 text-sm font-medium">
         <button
           type="button"
           onClick={() => setMode('sign-in')}
-          className={`flex-1 rounded px-3 py-1.5 transition-colors ${
-            mode === 'sign-in' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'
+          className={`flex-1 rounded-full px-3 py-1.5 transition-colors ${
+            mode === 'sign-in' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
           }`}
         >
           Sign in
@@ -317,8 +317,8 @@ export function LoginForm({
         <button
           type="button"
           onClick={() => setMode('sign-up')}
-          className={`flex-1 rounded px-3 py-1.5 transition-colors ${
-            mode === 'sign-up' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:text-zinc-900'
+          className={`flex-1 rounded-full px-3 py-1.5 transition-colors ${
+            mode === 'sign-up' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
           }`}
         >
           Create account
@@ -327,7 +327,7 @@ export function LoginForm({
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-medium text-zinc-700">
+          <label htmlFor="email" className="mb-1 block text-sm font-medium text-slate-300">
             Email
           </label>
           <input
@@ -341,7 +341,7 @@ export function LoginForm({
           />
         </div>
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium text-zinc-700">
+          <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-300">
             Password
           </label>
           <input
@@ -360,7 +360,7 @@ export function LoginForm({
             <button
               type="button"
               onClick={() => showForgot(true)}
-              className="mt-1 text-sm text-zinc-600 underline underline-offset-2 hover:text-zinc-900"
+              className="mt-1 text-sm text-slate-400 underline underline-offset-2 hover:text-white"
             >
               Forgot password?
             </button>
@@ -370,13 +370,13 @@ export function LoginForm({
         <Turnstile onToken={setCaptchaToken} resetKey={captchaResetKey} />
 
         {error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-red-400">
             {error}
           </p>
         )}
 
         {info && (
-          <p role="status" className="text-sm text-emerald-600">
+          <p role="status" className="text-sm text-emerald-400">
             {info}
           </p>
         )}
@@ -386,7 +386,7 @@ export function LoginForm({
             type="button"
             onClick={handleResend}
             disabled={resendPending || resendCooldown > 0 || captchaMissing}
-            className="text-left text-sm font-medium text-zinc-600 underline decoration-dotted underline-offset-2 hover:text-zinc-900 disabled:cursor-not-allowed disabled:text-zinc-400 disabled:no-underline"
+            className="text-left text-sm font-medium text-slate-300 underline decoration-dotted underline-offset-2 hover:text-white disabled:cursor-not-allowed disabled:text-slate-600 disabled:no-underline"
           >
             {resendPending
               ? 'Resending…'
@@ -399,7 +399,7 @@ export function LoginForm({
         <button
           type="submit"
           disabled={pending || captchaMissing}
-          className="mt-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? 'Please wait…' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
         </button>
@@ -407,12 +407,12 @@ export function LoginForm({
 
       {showApple && (
         <div className="mt-6 flex flex-col gap-2">
-          <p className="text-center text-xs text-zinc-500">or</p>
+          <p className="text-center text-xs text-slate-500">or</p>
           <button
             type="button"
             onClick={() => void handleApple()}
             disabled={pending || captchaMissing}
-            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Continue with Apple
           </button>
@@ -421,14 +421,14 @@ export function LoginForm({
 
       {visibleProviders.length > 0 && (
         <div className="mt-6 flex flex-col gap-2">
-          <p className="text-center text-xs text-zinc-500">or</p>
+          <p className="text-center text-xs text-slate-500">or</p>
           {visibleProviders.map((provider) => (
             <button
               key={provider}
               type="button"
               onClick={() => void handleOAuth(provider)}
               disabled={pending}
-              className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Continue with {OAUTH_PROVIDER_LABELS[provider]}
             </button>

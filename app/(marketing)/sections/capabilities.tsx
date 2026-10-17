@@ -34,25 +34,27 @@ const CAPABILITIES = [
 
 export function Capabilities() {
   return (
-    <section className="mx-auto max-w-5xl px-6 py-16">
-      <h2 className="text-2xl font-semibold text-zinc-900 dark:text-white">
-        What PermitField OS does today
-      </h2>
-      <div className="mt-10 grid gap-6 sm:grid-cols-2">
-        {CAPABILITIES.map((capability) => (
-          <div
-            key={capability.title}
-            className="group rounded-xl border border-zinc-200 p-6 transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-lg hover:shadow-orange-100 dark:border-zinc-800 dark:hover:border-orange-800/60 dark:hover:shadow-none"
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-sm font-semibold text-white shadow-sm shadow-orange-200 dark:shadow-none">
-              {capability.title.charAt(0)}
-            </span>
-            <h3 className="mt-4 text-base font-semibold text-zinc-900 dark:text-white">
-              {capability.title}
-            </h3>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{capability.body}</p>
-          </div>
-        ))}
+    <section id="features" className="relative border-t border-white/5">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.15),transparent_70%)]" />
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
+        <p className="text-center text-sm font-medium text-indigo-300">Features</p>
+        <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">
+          What PermitField OS does today
+        </h2>
+        <div className="mt-12 grid gap-6 sm:grid-cols-2">
+          {CAPABILITIES.map((capability) => (
+            <div
+              key={capability.title}
+              className="group rounded-2xl border border-white/10 bg-white/[0.03] p-7 transition hover:-translate-y-0.5 hover:border-indigo-400/40 hover:bg-white/[0.05]"
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50">
+                {capability.title.charAt(0)}
+              </span>
+              <h3 className="mt-5 text-lg font-semibold text-white">{capability.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{capability.body}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

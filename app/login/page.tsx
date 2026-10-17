@@ -29,28 +29,34 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     redirect(next ?? '/applications');
   }
 
+  const notice = 'mb-4 rounded-lg border px-3 py-2 text-sm';
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-16">
-      <div className="w-full max-w-sm">
-        <h1 className="text-center text-2xl font-semibold tracking-tight text-zinc-900">
-          {PRODUCT_NAME}
-        </h1>
-        <p className="mt-2 text-center text-sm text-zinc-600">
+    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-[#060a1e] px-4 py-14">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(79,70,229,0.3),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 left-1/2 h-[26rem] w-[40rem] max-w-full -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl" />
+      <div className="relative w-full max-w-md">
+        <Link href="/" className="flex items-center justify-center gap-2.5 text-xl font-semibold tracking-tight text-white">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold shadow-lg shadow-indigo-900/50">
+            P
+          </span>
+          <h1>{PRODUCT_NAME}</h1>
+        </Link>
+        <p className="mt-3 text-center text-sm text-slate-400">
           Permitting and local compliance copilot for Canadian trade contractors.
         </p>
-        <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+        <div className="mt-8 rounded-2xl border border-white/10 bg-[#0a0f2c]/90 p-7 shadow-2xl shadow-indigo-950/60 backdrop-blur">
           {deleted === '1' && (
-            <p role="status" className="mb-4 text-sm text-emerald-700">
+            <p role="status" className={`${notice} border-emerald-400/30 bg-emerald-500/10 text-emerald-300`}>
               Your account has been deleted. Thanks for trying PermitField.
             </p>
           )}
           {callbackError === 'reset_link' && (
-            <p role="alert" className="mb-4 text-sm text-red-600">
+            <p role="alert" className={`${notice} border-red-400/30 bg-red-500/10 text-red-300`}>
               That password-reset link didn&apos;t work -- it may have expired or already been used. Use &quot;Forgot password?&quot; to get a new one.
             </p>
           )}
           {callbackError === 'callback' && (
-            <p role="alert" className="mb-4 text-sm text-red-600">
+            <p role="alert" className={`${notice} border-red-400/30 bg-red-500/10 text-red-300`}>
               That sign-in link didn&apos;t work -- it may have expired or already been used. Sign in below.
             </p>
           )}
@@ -61,10 +67,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             initialMode={mode === 'sign-up' ? 'sign-up' : 'sign-in'}
           />
         </div>
-        <p className="mt-6 text-center text-xs text-zinc-500">{LEGAL_DISCLAIMER}</p>
-        <p className="mt-2 text-center text-xs text-zinc-500">
-          <Link href="/privacy" className="underline underline-offset-2">Privacy</Link> ·{' '}
-          <Link href="/terms" className="underline underline-offset-2">Terms</Link>
+        <p className="mt-6 text-center text-xs text-slate-500">{LEGAL_DISCLAIMER}</p>
+        <p className="mt-2 text-center text-xs text-slate-500">
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-slate-300">Privacy</Link> ·{' '}
+          <Link href="/terms" className="underline underline-offset-2 hover:text-slate-300">Terms</Link>
         </p>
       </div>
     </div>

@@ -36,10 +36,11 @@ export async function Coverage() {
   return (
     <section
       id="coverage"
-      className="border-t border-zinc-200 bg-gradient-to-b from-zinc-50 to-white dark:border-zinc-800 dark:from-zinc-900/40 dark:to-zinc-950"
+      className="border-t border-white/5"
     >
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        <h2 className="text-2xl font-semibold text-zinc-900 dark:text-white">
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
+        <p className="text-center text-sm font-medium text-indigo-300">Coverage</p>
+        <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">
           What&apos;s covered today
         </h2>
         {/*
@@ -49,14 +50,14 @@ export async function Coverage() {
           stay legible as light pills on a dark card without any dark:
           variant of their own.
         */}
-        <ul className="mt-8 grid gap-4 sm:grid-cols-2">
+        <ul className="mt-12 grid gap-4 sm:grid-cols-2">
           {jurisdictions.map((jurisdiction) => {
             const place = `${jurisdiction.municipality}, ${jurisdiction.provinceCode.toUpperCase()}`;
             const rowClassName =
-              'flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 dark:hover:shadow-none';
+              'flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-indigo-400/40 hover:bg-white/[0.05]';
             const row = (
               <>
-                <span className="text-sm font-medium text-zinc-900 dark:text-white">
+                <span className="text-sm font-medium text-white">
                   {place}
                 </span>
                 <CoverageBadge coverageLevel={jurisdiction.coverageLevel} />
@@ -85,7 +86,7 @@ export async function Coverage() {
             );
           })}
         </ul>
-        <p className="mt-6 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-slate-400">
           PermitField OS is expanding jurisdiction by jurisdiction.
           &quot;Verified&quot; means we&apos;ve reviewed the applicable code
           and requirements directly; &quot;Assisted&quot; and

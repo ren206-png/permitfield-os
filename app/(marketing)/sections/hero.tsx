@@ -20,54 +20,94 @@ import Link from 'next/link';
 export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="relative overflow-hidden">
-      {/* Decorative gradient background -- purely visual, no content. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-orange-50 via-orange-50/40 to-white dark:from-orange-950/30 dark:via-zinc-950 dark:to-zinc-950"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[-10rem] -z-10 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-orange-300/25 blur-3xl dark:bg-orange-500/15"
-      />
+      {/* Decorative glow -- purely visual, no content. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(79,70,229,0.28),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-40 -z-10 h-[30rem] w-[44rem] max-w-full -translate-x-1/2 rounded-full bg-violet-600/20 blur-3xl" />
 
-      <div className="mx-auto max-w-5xl px-6 py-20 text-center sm:py-28">
-        <span className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-medium text-orange-700 dark:border-orange-800 dark:bg-orange-950/50 dark:text-orange-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+      <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
+        <div className="mb-6 flex items-center justify-center gap-4 text-sm font-medium text-indigo-300">
+          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-r from-transparent to-indigo-400 sm:block" />
           Built for Canadian trade contractors
-        </span>
-        <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 sm:text-6xl dark:text-white">
+          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-l from-transparent to-indigo-400 sm:block" />
+        </div>
+        <h1 className="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-6xl sm:leading-[1.05]">
           Permit applications,{' '}
-          <span className="text-orange-600 dark:text-orange-400">
+          <span className="bg-gradient-to-r from-indigo-300 via-violet-300 to-sky-300 bg-clip-text text-transparent">
             organized from intake to filing.
           </span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
+        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
           PermitField OS keeps your permit applications, documents, and filing
           status in one place — with AI-assisted extraction to cut down manual
           data entry. Built for contractors in the Canadian jurisdictions we{' '}
-          <a
-            href="#coverage"
-            className="underline decoration-zinc-400 underline-offset-2 hover:text-orange-600 dark:hover:text-orange-400"
-          >
+          <a href="#coverage" className="underline decoration-slate-500 underline-offset-2 hover:text-white">
             cover today
           </a>
           .
         </p>
-        <div className="mt-8 flex items-center justify-center gap-4">
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
           <Link
             href={signedIn ? '/applications' : '/login?mode=sign-up'}
-            className="rounded-md bg-orange-600 px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-orange-200 transition hover:bg-orange-500 hover:shadow-lg hover:shadow-orange-300 dark:shadow-none"
+            className="rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/50 transition hover:brightness-110"
           >
             {signedIn ? 'Open the app' : 'Create your account'}
           </Link>
-          <a
-            href="#how-it-works"
-            className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
-          >
+          <a href="#how-it-works" className="rounded-full border border-white/20 px-7 py-3 text-sm font-medium text-white transition hover:bg-white/5">
             See how it works
           </a>
         </div>
+
+        <HeroIllustration />
       </div>
     </section>
+  );
+}
+
+// An illustration of the tracking view, not a screenshot: the three statuses
+// are the real application states, and no customer data or figures appear.
+function HeroIllustration() {
+  const rows = [
+    { name: 'Tenant improvement', status: 'Draft', tone: 'bg-slate-500/20 text-slate-300' },
+    { name: 'Electrical service upgrade', status: 'Documents ready', tone: 'bg-indigo-500/20 text-indigo-200' },
+    { name: 'Commercial renovation', status: 'Submitted', tone: 'bg-emerald-500/20 text-emerald-300' },
+  ];
+  return (
+    <div
+      role="img"
+      aria-label="Illustration of the PermitField OS application tracker showing applications in draft, documents-ready and submitted states"
+      className="relative mx-auto mt-16 max-w-4xl rounded-3xl border border-indigo-400/20 bg-gradient-to-b from-indigo-500/10 to-transparent p-3 shadow-2xl shadow-indigo-950/60 sm:p-4"
+    >
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f2c] text-left">
+        <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-3">
+          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
+          <span className="ml-3 text-xs text-slate-500">Applications</span>
+        </div>
+        <div className="grid sm:grid-cols-[11rem_1fr]">
+          <div className="hidden space-y-2 border-r border-white/5 p-4 text-xs text-slate-500 sm:block">
+            <div className="rounded-md bg-indigo-500/15 px-3 py-2 text-indigo-200">Applications</div>
+            <div className="px-3 py-2">Documents</div>
+            <div className="px-3 py-2">Coverage</div>
+            <div className="px-3 py-2">Team</div>
+          </div>
+          <div className="space-y-3 p-4 sm:p-5">
+            {rows.map((row) => (
+              <div key={row.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500/40 to-violet-500/40" />
+                  <span className="text-sm font-medium text-white">{row.name}</span>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${row.tone}`}>{row.status}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-indigo-400/30 px-4 py-3 text-xs text-indigo-200">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+              Key fields extracted from your uploads, ready for your review
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
