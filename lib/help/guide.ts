@@ -2,6 +2,11 @@
 // app/(app)/help-actions.ts). Keep it true to the product: when a feature
 // changes, update the section here in the same PR, or the assistant will
 // confidently describe the old behaviour.
+//
+// The iPhone app (ios/, capacitor.config.ts) isn't on the App Store yet, so
+// the guide covers the website only. When it is released, add back: sign in
+// with email or "Continue with Apple" (Google and Microsoft are web-only),
+// and "Scan with camera" on an application's Documents panel.
 export const HELP_GUIDE = `# PermitField OS: how the app works
 
 PermitField OS helps Canadian contractors prepare commercial permit applications: it reads your drawings and documents, fills in the city's own application form, builds that city's submission checklist, collects signatures, and records or sends the submission. It is a filing assistant, not legal or building-code advice; the contractor is responsible for what is submitted, and for sealed drawings where a registered professional is required.
@@ -21,7 +26,7 @@ Cities or permit types not listed aren't supported yet; customers can ask for th
 
 ## Getting started
 
-1. Create an account at www.permitfieldos.com: "Create your account", then email and password (at least 10 characters), or "Continue with Google" or "Continue with Microsoft". Email sign-ups confirm their address from a link in an email. In the iPhone app, sign in with email or "Continue with Apple" (Google and Microsoft sign-in are on the website only), and on an application's Documents panel "Scan with camera" turns paper drawings into a PDF to upload. The sign-in page has a short "Verify you are human" check from Cloudflare.
+1. Create an account at www.permitfieldos.com: "Create your account", then email and password (at least 10 characters), or "Continue with Google" or "Continue with Microsoft". Email sign-ups confirm their address from a link in an email. PermitField is a website only for now (www.permitfieldos.com): there is no phone app yet. The sign-in page has a short "Verify you are human" check from Cloudflare.
 2. Set up the company: company name, then the contractor company, licence number and province that go on permit forms.
 3. Invite teammates in Team (sidebar).
 
