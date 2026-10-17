@@ -31,7 +31,7 @@ export function nextPermitStatusOptions(from: PermitStatus | null, role: string)
 // 'code: detail' messages; these are the ones a person can act on.
 export function permitStatusErrorMessage(message: string): string {
   if (message.includes('readiness_incomplete')) {
-    return 'Finish the required checklist items first, or record an override with a reason.';
+    return 'Finish the required checklist items first, or record an override with a reason ("Go ahead without the remaining items", under the Readiness checklist below).';
   }
   if (message.includes('insufficient_privilege')) {
     return 'Your role can’t make this change. Ask a permit manager or the owner.';

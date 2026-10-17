@@ -125,8 +125,9 @@ export async function ReadinessPanel({
         <p className="mt-0.5 text-sm font-medium text-zinc-900">{permitStatus ? PERMIT_STATUS_LABELS[permitStatus] : 'Not started'}</p>
         {options.length > 0 ? (
           <div className="mt-3">
-            {/* Keyed by status so the choice resets to the new first option after each move. */}
-            <PermitStatusForm key={permitStatus ?? 'none'} applicationId={applicationId} options={options} />
+            {/* Keyed by status so the choice resets to the new first option after each move, and by
+                whether an override exists so a stale "finish the checklist first" error clears once one is recorded. */}
+            <PermitStatusForm key={`${permitStatus ?? 'none'}-${override ? 'override' : 'open'}`} applicationId={applicationId} options={options} />
           </div>
         ) : permitStatus === 'ready_to_submit' ? null : (
           <p className="mt-2 text-xs text-zinc-500">No further status changes are available to your role from here.</p>
