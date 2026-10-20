@@ -1,10 +1,9 @@
 // Gate AI-1, sub-phase AI-1.1 (GATE_AI_1_FINDINGS.md §A/§G). Thin REST
-// client for the Gemini API, following lib/ai/embed.ts's existing precedent
-// for a secondary provider in this codebase: no SDK is installed for
+// client for the Gemini API, no SDK is installed for
 // Gemini (confirmed via package.json -- `grep -rl "gemini\|Gemini"`
 // returned zero matches anywhere outside this workstream's own text before
 // this file existed), and a single JSON POST doesn't justify adding one,
-// same reasoning lib/ai/embed.ts's own header gives for Voyage.
+// so a raw fetch is used.
 //
 // KEY BOUNDARY: this is the only module in the repo permitted to read
 // GEMINI_API_KEY, enforced by eslint.config.mjs's geminiClientRestriction

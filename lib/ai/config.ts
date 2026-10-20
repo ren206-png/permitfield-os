@@ -47,12 +47,6 @@ export const AUDIT_MAX_TOKENS = 8192;
 // admitting uncertainty.
 export const AUDIT_MAX_VALIDATION_ATTEMPTS = 2;
 
-// Embeddings provider (PHASE_0_FINDINGS.md SS5): Anthropic serves no
-// embeddings endpoint, so retrieval's vector half uses Voyage AI. voyage-3 /
-// 1024 dims was flagged there as an assumption, not a confirmed final call --
-// jurisdiction_code_chunks.embedding is declared vector(1024) to match
-// (migration 20260806000008). Changing provider/dims before real corpus
-// ingestion starts is a migration, not a rewrite.
 // In-app help assistant (app/(app)/help-actions.ts): short how-to answers
 // from lib/help/guide.ts. Haiku, low effort -- fast and a fraction of a cent
 // per question (chosen 2026-10-14).
@@ -60,9 +54,6 @@ export const HELP_MODEL_ID = 'claude-haiku-5-5';
 export const HELP_MAX_TOKENS = 2048;
 // Questions per user per hour, on top of AI_USER_DAILY_COST_CAP_USD_CENTS.
 export const HELP_HOURLY_QUESTION_LIMIT = 30;
-
-export const EMBEDDING_MODEL_ID = 'voyage-3';
-export const EMBEDDING_DIMENSIONS = 1024;
 
 // How many retrieved code chunks are shown to the audit model per run.
 // Bounded for the same reason document counts are bounded in extraction --
@@ -99,9 +90,9 @@ export const GEMINI_CLASSIFICATION_MODEL_ID = 'gemini-2.5-flash';
 // module's own header comment.
 export const ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS = 8;
 
-// Health-check audit finding: lib/ai/gemini/client.ts and lib/ai/embed.ts's
-// raw `fetch()` calls (Gemini and Voyage have no installed SDK -- see both
-// files' own headers) had no timeout at all, unlike the Anthropic SDK calls
+// Health-check audit finding: lib/ai/gemini/client.ts's
+// raw `fetch()` call (Gemini has no installed SDK -- see that
+// file's own header) had no timeout at all, unlike the Anthropic SDK calls
 // elsewhere in this codebase, which have the SDK's own built-in
 // timeout/retry behavior. A hung upstream request would hang the calling
 // Inngest step indefinitely, bounded only by the platform/Inngest step

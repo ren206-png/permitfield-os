@@ -1,9 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { computeTextDensity } from '@/lib/pdf/text-density';
 import { UPLOADS_BUCKET } from '@/lib/storage/documents';
-import { isVectorRetrievalEnabled } from '@/lib/flags';
 import { chunkText } from './chunk-text';
-import { embedText, toPgvectorLiteral } from './embed';
 
 // Writes application_document_chunks (migration 20260806000038) for one
 // application: the ingestion half of org-document retrieval. Runs as
@@ -57,7 +55,6 @@ export async function ingestApplicationDocumentChunks(
   const alreadyIndexed = new Set((existing ?? []).map((row) => row.application_document_id as string));
 
   const result: IngestResult = { documentsIndexed: 0, documentsSkipped: 0, chunksWritten: 0 };
-  const withVectors = isVectorRetrievalEnabled();
 
   for (const doc of documents ?? []) {
     if (doc.mime_type !== 'application/pdf' || alreadyIndexed.has(doc.id)) {
@@ -83,14 +80,13 @@ export async function ingestApplicationDocumentChunks(
 
     const rows = [];
     for (const [chunkIndex, content] of chunks.entries()) {
-      const embedding = withVectors ? toPgvectorLiteral(await embedText(content, 'document')) : null;
       rows.push({
         org_id: application.org_id,
         application_id: applicationId,
         application_document_id: doc.id,
         chunk_index: chunkIndex,
         content,
-        embedding,
+        embedding: null,
       });
     }
 

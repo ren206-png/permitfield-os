@@ -79,7 +79,6 @@ export default function PrivacyPage() {
         <li>Supabase: database, file storage and sign-in (United States, Oregon region).</li>
         <li>Vercel: website hosting, and cookie-free visitor statistics on our public home page.</li>
         <li>Anthropic: AI reading and review of document text.</li>
-        <li>Voyage AI: AI search indexing of document text.</li>
         <li>Resend: sending email.</li>
         <li>Inngest: running background tasks such as form generation.</li>
         <li>Stripe: payments, once online payments are available.</li>

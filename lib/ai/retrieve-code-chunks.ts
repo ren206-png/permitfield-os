@@ -1,6 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedText, toPgvectorLiteral } from './embed';
-import { isVectorRetrievalEnabled } from '@/lib/flags';
 import { AUDIT_MAX_RETRIEVED_CHUNKS } from './config';
 import type { PermitExtraction } from './schemas/extraction';
 
@@ -112,17 +110,10 @@ export function buildDrawingReviewQueryText(params: {
 /**
  * Calls search_jurisdiction_code_chunks (migration 20260806000014) to fetch
  * the top AUDIT_MAX_RETRIEVED_CHUNKS code chunks for one jurisdiction, fused
- * via RRF across BM25 and (when isVectorRetrievalEnabled()) vector ranking.
- *
- * NOTE: the vector half of this path (embedText + the p_query_embedding RPC
- * argument) has not been exercised against a live Voyage API key or a
- * non-empty jurisdiction_code_chunks table in this environment -- no
- * VOYAGE_API_KEY is available here, and no corpus ingestion pipeline exists
- * yet in any phase, so there are zero real chunks to retrieve regardless.
- * isVectorRetrievalEnabled() defaults OFF for exactly this reason (see
- * lib/flags.ts), so the BM25-only path is what actually runs today. Both
- * paths return an empty array, not an error, when no chunk matches -- an
- * empty corpus is a valid, expected state pre-ingestion, not a failure.
+ * using BM25 keyword ranking only (the RPC's vector half is never used:
+ * p_query_embedding is always null, so no embeddings provider is needed).
+ * Returns an empty array, not an error, when no chunk matches -- an empty
+ * corpus is a valid, expected state pre-ingestion, not a failure.
  */
 export async function retrieveCodeChunks(
   supabase: SupabaseClient,
@@ -130,12 +121,6 @@ export async function retrieveCodeChunks(
   queryText: string,
   filters?: CodeChunkRetrievalFilters
 ): Promise<RetrievedCodeChunk[]> {
-  let queryEmbeddingLiteral: string | null = null;
-  if (isVectorRetrievalEnabled()) {
-    const embedding = await embedText(queryText, 'query');
-    queryEmbeddingLiteral = toPgvectorLiteral(embedding);
-  }
-
   // p_permit_type/p_property_type/p_language/p_drawing_category: omitted
   // filters map to undefined here, and the existing caller
   // (lib/inngest/functions/audit.ts) does not pass any of these arguments at
@@ -149,7 +134,7 @@ export async function retrieveCodeChunks(
   const { data, error } = await supabase.rpc('search_jurisdiction_code_chunks', {
     p_jurisdiction_id: jurisdictionId,
     p_query_text: queryText,
-    p_query_embedding: queryEmbeddingLiteral,
+    p_query_embedding: null,
     p_match_count: AUDIT_MAX_RETRIEVED_CHUNKS,
     p_permit_type: filters?.permitType ?? null,
     p_property_type: filters?.propertyType ?? null,

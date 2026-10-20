@@ -3,11 +3,10 @@
 // this sub-phase," and confirmed via grep that no *.test.ts file referenced
 // it). This file exists specifically to cover the
 // AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS) addition from that same
-// audit, mirroring lib/ai/embed.test.ts's identical coverage for the Voyage
-// client -- same shape of bug (an unbounded fetch could hang a caller
-// indefinitely), same fix (catch the TimeoutError, rethrow a specific
-// message), same test strategy (mock global.fetch, simulate the timeout
-// rejection directly rather than waiting out a real 30s timer).
+// audit: an unbounded fetch could hang a caller indefinitely, so the
+// TimeoutError is caught and rethrown with a specific message. Test strategy:
+// mock global.fetch and simulate the timeout rejection directly rather than
+// waiting out a real 30s timer.
 //
 // Imports './client' via a relative path, same convention every other
 // colocated live/unit test in this repo uses for the module directly under

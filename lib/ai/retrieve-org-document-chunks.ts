@@ -1,6 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedText, toPgvectorLiteral } from './embed';
-import { isVectorRetrievalEnabled } from '@/lib/flags';
 import { ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS } from './config';
 
 /**
@@ -30,8 +28,7 @@ export interface RetrievedOrgDocumentChunk {
 /**
  * Calls search_application_document_chunks (migration 20260806000038) to
  * fetch the top ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS chunks for one org's one
- * application, fused via RRF across BM25 and (when isVectorRetrievalEnabled())
- * vector ranking -- same hybrid-retrieval shape as retrieveCodeChunks above.
+ * application, ranked by BM25 keyword search only -- same as retrieveCodeChunks above.
  *
  * p_org_id and p_application_id are BOTH required and passed straight through
  * from the caller -- this is the CROSS_TENANT_RAG defense-in-depth the RPC's
@@ -44,11 +41,7 @@ export interface RetrievedOrgDocumentChunk {
  * a background job is already scoped to) -- do not accept them from
  * unauthenticated input.
  *
- * NOTE: same untested-vector-half caveat as retrieveCodeChunks -- no
- * VOYAGE_API_KEY and no non-empty application_document_chunks table exist in
- * this environment, so only the BM25-only path (isVectorRetrievalEnabled()
- * defaults OFF) actually runs today. An empty corpus returns [], not an
- * error.
+ * An empty corpus returns [], not an error.
  */
 export async function retrieveOrgDocumentChunks(
   supabase: SupabaseClient,
@@ -56,17 +49,11 @@ export async function retrieveOrgDocumentChunks(
   applicationId: string,
   queryText: string
 ): Promise<RetrievedOrgDocumentChunk[]> {
-  let queryEmbeddingLiteral: string | null = null;
-  if (isVectorRetrievalEnabled()) {
-    const embedding = await embedText(queryText, 'query');
-    queryEmbeddingLiteral = toPgvectorLiteral(embedding);
-  }
-
   const { data, error } = await supabase.rpc('search_application_document_chunks', {
     p_org_id: orgId,
     p_application_id: applicationId,
     p_query_text: queryText,
-    p_query_embedding: queryEmbeddingLiteral,
+    p_query_embedding: null,
     p_match_count: ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS,
   });
 

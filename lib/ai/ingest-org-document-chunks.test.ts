@@ -34,11 +34,10 @@ function fakeSupabase(opts: { docs: unknown[]; existing?: unknown[] }) {
 
 beforeEach(() => {
   computeTextDensity.mockReset();
-  delete process.env.PERMITFIELD_FF_VECTOR_RETRIEVAL;
 });
 
 describe('ingestApplicationDocumentChunks()', () => {
-  it('stores chunks under the application’s own org_id, with no embedding when vectors are off', async () => {
+  it('stores chunks under the application’s own org_id, with no embedding', async () => {
     computeTextDensity.mockResolvedValue({ route: 'text', extractedText: 'Scope of work.\n\nElectrical panel upgrade.' });
     const { client, upserts } = fakeSupabase({ docs: [{ id: 'doc-1', storage_path: 'a.pdf', mime_type: 'application/pdf' }] });
     const result = await ingestApplicationDocumentChunks(client, 'app-1');
