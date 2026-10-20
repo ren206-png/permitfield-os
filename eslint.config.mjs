@@ -58,9 +58,7 @@ const clientPortalServiceClientRestriction = {
 // AbortSignal.timeout(EXTERNAL_API_TIMEOUT_MS) addition from that same
 // audit), added to `ignores` alongside lib/ai/router.ts, following the exact
 // precedent set by clientPortalServiceClientRestriction's own test-file
-// exemption above. lib/ai/embed.ts (the Voyage client) has no equivalent
-// import-boundary rule to exempt from -- it isn't gated by one, since
-// VOYAGE_API_KEY has no analogous single-module restriction in this file.
+// exemption above.
 const geminiClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
   ignores: ["lib/ai/router.ts", "lib/ai/gemini/client.test.ts"],

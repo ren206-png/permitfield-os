@@ -22,15 +22,6 @@ export function isAiAuditEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_AI_AUDIT');
 }
 
-// Gates the vector half of hybrid retrieval (search_jurisdiction_code_chunks
-// migration 20260806000014). Off by default because the MVP corpus starts
-// empty -- there's nothing to embed a query against yet, and Voyage calls
-// cost money for zero benefit until real chunks are ingested. BM25
-// (content_tsv) retrieval still runs regardless of this flag.
-export function isVectorRetrievalEnabled(): boolean {
-  return isEnabled('PERMITFIELD_FF_VECTOR_RETRIEVAL');
-}
-
 // Phase 4, declared here now so all three flags live in one file.
 export function isPdfFillEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_PDF_FILL');
@@ -267,7 +258,7 @@ export function isAiTokenCapsEnabled(): boolean {
 
 // Gate AI-1, sub-phase AI-1.2 (GATE_AI_1_FINDINGS.md §C, §G, §H
 // CROSS_TENANT_RAG). Gates nothing at runtime yet -- same "declared ahead of
-// its consumer" pattern as isVectorRetrievalEnabled above: this flag ships
+// its consumer" pattern as the other flags above: this flag ships
 // alongside the new application_document_chunks table and
 // search_application_document_chunks RPC
 // (20260806000038_application_document_chunks.sql) and

@@ -122,7 +122,7 @@ through validation, tracked as a hallucination-rate proxy over time.
 
 **Retrieval degrades, never errors:** `search_jurisdiction_code_chunks` always runs BM25 lexical ranking
 (`ts_rank` over the GIN-indexed `content_tsv`) and additionally runs vector similarity ranking only when
-`isVectorRetrievalEnabled()` is on and a query embedding was computed; the two rankings are fused with
+a query embedding is supplied (the app never supplies one, so retrieval is BM25-only); the rankings can be fused with
 Reciprocal Rank Fusion (k=60), which combines rank *position* rather than raw incompatible-scale scores.
 Against today's empty corpus this returns zero rows, not an error, and `auditPermitData` short-circuits
 on zero retrieved chunks — returning a clean empty result without ever calling the model — rather than
