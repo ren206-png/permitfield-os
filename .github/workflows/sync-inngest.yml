@@ -1,0 +1,43 @@
+# Re-registers the app's Inngest functions after every successful Vercel
+# production deploy.
+#
+# Found 2026-10-17: Inngest only learns a function's configuration (its
+# triggers, idempotency key, concurrency) when the app is synced, and
+# nothing synced it on deploy. PR #76 changed permit-extract's idempotency
+# key and went live, but Inngest kept the old one (one run per application
+# per 24 h) until a manual `PUT /api/inngest` -- which answered
+# {"modified": true}. Any future change to a function's config would have
+# been silently ignored the same way.
+#
+# Trigger: the GitHub deployment status Vercel posts for each deploy;
+# only a successful Production one runs this. An unsigned PUT to the serve
+# endpoint is Inngest's own sync mechanism (the SDK then registers with
+# Inngest Cloud using INNGEST_SIGNING_KEY server-side), so no secret is
+# needed here. Fails the run if the sync isn't confirmed, so a broken sync
+# shows up as a red workflow instead of stale background jobs.
+name: Sync Inngest
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Register functions with Inngest
+        run: |
+          for attempt in 1 2 3 4 5; do
+            body=$(curl -sS -X PUT https://www.permitfieldos.com/api/inngest -H 'Content-Type: application/json' || true)
+            echo "attempt $attempt: $body"
+            if echo "$body" | grep -q '"Successfully registered"'; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Inngest sync was not confirmed after 5 attempts"
+          exit 1
