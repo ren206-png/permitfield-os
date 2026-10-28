@@ -208,18 +208,37 @@ end $$;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000c","role":"authenticated"}';
 
+-- Gate 6 F2: this used to catch its own 'FAIL' with `when others` and print
+-- PASS. The UPDATE is filtered by RLS (0 rows, no error), so the assertion is
+-- now the row count, plus a check as postgres that the row really exists and
+-- is unchanged.
 do $$
+declare n int := 0;
 begin
   begin
     update ai_human_reviews
     set status = 'released', reviewer_user_id = '10000000-0000-0000-0000-00000000000a', decided_at = now()
     where id = '62000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: plain ''member'' role was able to decide an ai_human_reviews row';
-  exception
-    when others then
-      raise notice 'PASS: non-elevated role correctly denied UPDATE on ai_human_reviews (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: plain ''member'' role decided % ai_human_reviews row(s)', n;
+  end if;
+  raise notice 'PASS: non-elevated role changed no ai_human_reviews rows';
 end $$;
+
+reset role;
+do $$
+declare s text;
+begin
+  select status::text into s from ai_human_reviews where id = '62000000-0000-0000-0000-00000000000a';
+  if s is distinct from 'pending' then
+    raise exception 'FAIL (control): ai_human_reviews fixture row should exist and still be pending, got %', s;
+  end if;
+  raise notice 'PASS (control): the ai_human_reviews row exists and is still pending, so the 0-row UPDATE was a real denial';
+end $$;
+set local role authenticated;
 
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
 
