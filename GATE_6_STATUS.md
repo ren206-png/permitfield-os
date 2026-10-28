@@ -316,3 +316,20 @@ Each migration's header carries its rollback SQL (`drop table` / `drop type` in 
   - Zod 4's `z.uuid()` enforces RFC 9562 version/variant bits. All 12 production `jurisdiction_sources` ids and all 12 `permit_types` ids (e.g. `00000000-0000-0000-0005-00000000000a`) fail it; read-only query 2026-10-28.
   - Found live: "Check now" silently returned "Invalid source." Switched to `z.guid()` in 6.3 code and in 6.2's `RuleSetItemSnapshotSchema.requires` / `run.ts`, with a regression test.
   - The rest of the codebase has 13 older `z.string().uuid()` validators, which are just as strict. They check generated ids (org, job, chunk, client) or `taxonomies` ids, and `taxonomies` has 0 rows in production (read-only, 2026-10-28). So nothing is affected today; a hand-written taxonomy id added later would be rejected. Proposed: switch them to `z.guid()` in 6.7.
+
+**Resolution (Ren, 2026-10-28: "go with your recommendation"):**
+
+- **F4 → option (b), in this branch (`fix/permitfield-6.3a-platform-admins`).**
+  - Migration `20260806000095_platform_admins.sql` adds a `platform_admins` table (user id, granted_at, note). It has no API grants or policies, so no role can read it or add itself.
+  - `is_platform_admin()` now returns true for an org role `platform_admin` **or** a listed account. That only widens it; the grants are unchanged (authenticated yes, anon no).
+  - What it unlocks is the shared catalogue only (policies in 021, 026, 091, 094); it gives no access to any org's data.
+  - No account is listed in the migration, because the repository is public. After merge, Ren's active account (the org owner he signs in with) is added by a one-row insert in production.
+  - `platform_admins.test.sql`, 7 PASS: the control (an unlisted owner is denied); a listed owner becomes admin and keeps its owner role; authenticated and service_role cannot read or insert; the org-role path still works; grants are unchanged.
+  - Mutation (old function body restored): the test fails at "a listed account is not a platform admin".
+  - SQL suite: 50/50 files, 560 PASS.
+- **F5 → done on the local machine; no repository change.**
+  - Fresh clone at `~/Developer/permitfield-os`. 7 local-only branches and 3 stashes were carried over; `.env.local`, the Supabase CLI state and the generated iOS files were copied; `npm ci` was run.
+  - Both local Supabase stacks now run from the new path (Kong mounts `~/Developer/...`; data kept).
+  - Launch configs and the nightly health task were repointed.
+  - The old `~/Desktop/Renco Technologies/permitfield-os` is left in place, untouched and stale, until Ren says whether to delete it.
+  - It had 4,982 iCloud cloud-only placeholder files (mostly `node_modules`/`.next`), which is why this was a clone rather than a move.
