@@ -239,38 +239,66 @@ begin
 end $$;
 
 -- === 5. Append-only otherwise (DELETE always; UPDATE on drawing_reviews) ===
+-- Gate 6 F2: these used to catch their own 'FAIL' with `when others` and
+-- print PASS. RLS filters each statement to 0 rows without an error, so the
+-- assertion is the row count, followed by a postgres-level check that both
+-- rows still exist unchanged.
 do $$
+declare n int := 0;
 begin
   begin
     delete from drawing_findings where id = '75000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to DELETE a drawing_findings row';
-  exception
-    when others then
-      raise notice 'PASS: DELETE on drawing_findings is rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated deleted % drawing_findings row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated deleted no drawing_findings rows';
 end $$;
 
 do $$
+declare n int := 0;
 begin
   begin
     update drawing_reviews set corpus_version = 'HACKED' where id = '74000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to UPDATE a drawing_reviews row';
-  exception
-    when others then
-      raise notice 'PASS: UPDATE on drawing_reviews is rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated updated % drawing_reviews row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated updated no drawing_reviews rows';
 end $$;
 
 do $$
+declare n int := 0;
 begin
   begin
     delete from drawing_reviews where id = '74000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to DELETE a drawing_reviews row';
-  exception
-    when others then
-      raise notice 'PASS: DELETE on drawing_reviews is rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated deleted % drawing_reviews row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated deleted no drawing_reviews rows';
 end $$;
+
+reset role;
+do $$
+declare
+  findings int;
+  corpus text;
+begin
+  select count(*) into findings from drawing_findings where id = '75000000-0000-0000-0000-00000000000a';
+  select corpus_version into corpus from drawing_reviews where id = '74000000-0000-0000-0000-00000000000a';
+  if findings <> 1 or corpus is null or corpus = 'HACKED' then
+    raise exception 'FAIL (control): drawing fixtures should exist unchanged (finding rows %, corpus_version %)', findings, corpus;
+  end if;
+  raise notice 'PASS (control): the drawing_findings and drawing_reviews rows still exist, unchanged';
+end $$;
+set local role authenticated;
 
 set local role service_role;
 

@@ -128,27 +128,50 @@ end $$;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
 
+-- Gate 6 F2: these used to catch their own 'FAIL' with `when others` and
+-- print PASS. With no UPDATE/DELETE policy, RLS filters each statement to 0
+-- rows without an error, so the assertion is the row count; the row is
+-- visible to this caller (section 1's control), and the postgres check below
+-- proves it is unchanged.
 do $$
+declare n int := 0;
 begin
   begin
     update application_document_chunks set content = 'HACKED' where id = '80000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to UPDATE an application_document_chunks row';
-  exception
-    when others then
-      raise notice 'PASS: UPDATE on application_document_chunks correctly rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated updated % application_document_chunks row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated updated no application_document_chunks rows';
 end $$;
 
 do $$
+declare n int := 0;
 begin
   begin
     delete from application_document_chunks where id = '80000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to DELETE an application_document_chunks row';
-  exception
-    when others then
-      raise notice 'PASS: DELETE on application_document_chunks correctly rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated deleted % application_document_chunks row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated deleted no application_document_chunks rows';
 end $$;
+
+reset role;
+do $$
+declare c text;
+begin
+  select content into c from application_document_chunks where id = '80000000-0000-0000-0000-00000000000a';
+  if c is null or c = 'HACKED' then
+    raise exception 'FAIL (control): the org A chunk should still exist unchanged, got %', c;
+  end if;
+  raise notice 'PASS (control): the application_document_chunks row still exists, unchanged';
+end $$;
+set local role authenticated;
 
 -- === 4. Append-only: service_role (BYPASSRLS) is still blocked by the trigger ===
 set local role service_role;

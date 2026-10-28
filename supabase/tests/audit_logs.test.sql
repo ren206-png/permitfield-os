@@ -143,27 +143,54 @@ end $$;
 -- === 4. Append-only: authenticated cannot UPDATE or DELETE ===
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
 
+-- Gate 6 F2: these used to catch their own 'FAIL' with `when others` and
+-- print PASS. With no UPDATE/DELETE policy, RLS filters the statement to 0
+-- rows without an error, so the assertion is the row count; the control
+-- below proves the row is visible to this caller (so 0 is a denial, not an
+-- empty match) and, as postgres, that it is unchanged.
 do $$
+declare n int := 0; visible int;
 begin
+  select count(*) into visible from audit_logs where id = '50000000-0000-0000-0000-00000000000a';
+  if visible <> 1 then
+    raise exception 'FAIL (control): org A owner should see the audit_logs fixture row, got %', visible;
+  end if;
   begin
     update audit_logs set action = 'HACKED' where id = '50000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to UPDATE an audit_logs row';
-  exception
-    when others then
-      raise notice 'PASS: UPDATE on audit_logs correctly rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated updated % audit_logs row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated changed no audit_logs rows (row visible to caller: control)';
 end $$;
 
 do $$
+declare n int := 0;
 begin
   begin
     delete from audit_logs where id = '50000000-0000-0000-0000-00000000000a';
-    raise exception 'FAIL: authenticated was able to DELETE an audit_logs row';
-  exception
-    when others then
-      raise notice 'PASS: DELETE on audit_logs correctly rejected for authenticated (%)', sqlerrm;
+    get diagnostics n = row_count;
+  exception when insufficient_privilege or raise_exception then n := 0;
   end;
+  if n <> 0 then
+    raise exception 'FAIL: authenticated deleted % audit_logs row(s)', n;
+  end if;
+  raise notice 'PASS: authenticated deleted no audit_logs rows';
 end $$;
+
+reset role;
+do $$
+declare a text;
+begin
+  select action into a from audit_logs where id = '50000000-0000-0000-0000-00000000000a';
+  if a is distinct from 'test.seed' then
+    raise exception 'FAIL (control): audit_logs fixture row should exist with action test.seed, got %', a;
+  end if;
+  raise notice 'PASS (control): the audit_logs row still exists, unchanged';
+end $$;
+set local role authenticated;
 
 -- === 5. Append-only: service_role (BYPASSRLS) is still blocked by the trigger ===
 set local role service_role;
