@@ -430,3 +430,11 @@ export function isCitySubmissionEnabled(): boolean {
 export function isPermitEsignEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_PERMIT_ESIGN');
 }
+
+// Gate 6.2: the copilot rule engine (lib/requirements/rules/). Gates
+// evaluateApplicationRequirements(), which reads published rule sets and
+// confirmed project facts and records project_requirement_snapshots.
+// Nothing user-facing calls it yet (the staff UI is 6.4). Default OFF.
+export function isCopilotRulesEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_COPILOT_RULES');
+}
