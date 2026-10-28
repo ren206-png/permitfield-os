@@ -21,6 +21,13 @@ describe('resolveFacts', () => {
     expect(facts.has('use.group')).toBe(false);
   });
 
+  it('a proposal closed by a rejection is no longer awaiting confirmation', () => {
+    const proposal = row({ id: 'p', state: 'proposed', created_at: '2026-10-01T00:00:00Z' });
+    const rejection = row({ id: 'r', state: 'rejected', supersedes_fact_id: 'p', created_at: '2026-10-02T00:00:00Z' });
+    expect(resolveFacts([proposal]).facts.get('project.floor_area')).toEqual({ status: 'awaiting_confirmation' });
+    expect(resolveFacts([proposal, rejection]).facts.has('project.floor_area')).toBe(false);
+  });
+
   it('a confirmed correction supersedes; a proposed or rejected one never hides the confirmed value', () => {
     const base = row({ id: 'a', state: 'confirmed', created_at: '2026-10-01T00:00:00Z' });
     const proposedFix = row({ id: 'b', value: 118, state: 'proposed', supersedes_fact_id: 'a', created_at: '2026-10-02T00:00:00Z' });

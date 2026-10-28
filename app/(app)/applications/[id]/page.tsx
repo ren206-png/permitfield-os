@@ -1,9 +1,10 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
-import { isCitySubmissionEnabled, isDrawingReviewEnabled, isPermitEsignEnabled, isReadinessEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isCopilotEnabled, isDrawingReviewEnabled, isPermitEsignEnabled, isReadinessEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
@@ -290,6 +291,14 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <p className="mt-0.5 text-sm text-zinc-500">{application.project_address}</p>
           </div>
           <div className="flex items-center gap-2">
+            {isCopilotEnabled() && (
+              <Link
+                href={`/applications/${application.id}/copilot`}
+                className="rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50"
+              >
+                Ask the copilot
+              </Link>
+            )}
             <StatusBadge status={application.status} />
             <CoverageBadge coverageLevel={coverageLevel} />
           </div>

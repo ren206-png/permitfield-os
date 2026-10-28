@@ -97,6 +97,14 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // application, facts and rule set with the caller's own session (RLS), and
 // only then inserts snapshots with the service client, taking org_id and
 // project_id from that RLS-visible application row, never from arguments.
+//
+// Exception 9 (Gate 6.4 copilot, app/(app)/applications/[id]/copilot/
+// actions.ts): ai_jobs, ai_token_ledger and copilot_tool_invocations have no
+// INSERT grant for `authenticated`. The action resolves the application with
+// the caller's own session (lib/ai/copilot/scope.ts) and writes the usage
+// and tool-call ledger rows with the service client, taking org_id,
+// project_id and user_id from that scope, never from the browser or the
+// model. The copilot's tools themselves run on the user's session only.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -23,7 +23,7 @@
 // assistant) only has to flip the flag on at its own call site, not invent
 // this file.
 
-import { GEMINI_ASSISTANT_MODEL_ID, GEMINI_CLASSIFICATION_MODEL_ID } from './config';
+import { COPILOT_MODEL_ID, GEMINI_ASSISTANT_MODEL_ID, GEMINI_CLASSIFICATION_MODEL_ID } from './config';
 import { AiTaskKindSchema, type AiProvider, type AiTaskKind } from './schemas/ai-task';
 
 export type {  AiTaskKind } from './schemas/ai-task';
@@ -47,6 +47,8 @@ const TASK_ROUTES: Record<RoutableAiTaskKind, AiTaskRoute> = {
   assistant: { provider: 'gemini', modelId: GEMINI_ASSISTANT_MODEL_ID },
   classification: { provider: 'gemini', modelId: GEMINI_CLASSIFICATION_MODEL_ID },
   checklist_generation: { provider: 'gemini', modelId: GEMINI_ASSISTANT_MODEL_ID },
+  // Gate 6.4: the staff copilot (Ren's decision Q1, GATE_6_STATUS.md).
+  copilot: { provider: 'anthropic', modelId: COPILOT_MODEL_ID },
 };
 
 const RESERVED_KINDS: ReadonlySet<AiTaskKind> = new Set(['extraction', 'audit']);
