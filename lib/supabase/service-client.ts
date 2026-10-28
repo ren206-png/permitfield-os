@@ -90,6 +90,13 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // action passes the user id from the caller's own session (requireUser) --
 // never from the form -- then removes the files under the companies that
 // function reports it deleted.
+//
+// Exception 8 (Gate 6.2 rule engine, lib/requirements/rules/run.ts):
+// project_requirement_snapshots has no INSERT grant for `authenticated` (the
+// engine's output must not be writable by users). The run reads the
+// application, facts and rule set with the caller's own session (RLS), and
+// only then inserts snapshots with the service client, taking org_id and
+// project_id from that RLS-visible application row, never from arguments.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

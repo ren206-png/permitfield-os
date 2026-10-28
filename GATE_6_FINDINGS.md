@@ -2,7 +2,7 @@
 
 **Status:** investigation complete, zero implementation. This document is the whole Phase 0 deliverable. Then STOP.
 
-- **Scope:** PermitField OS only (`ren206-png/permitfield-os`), audited at `main` = `55df0b5` (2026-10-29).
+- **Scope:** PermitField OS only (`ren206-png/permitfield-os`), audited at `main` = `55df0b5` (2026-10-28).
 - **Input:** "PermitField OS — LLM Permitting Copilot … master prompt v2" (Oct 26).
 - **Gate number:** "6" is a **proposal** (D3). Ren assigns the number.
 
@@ -253,7 +253,7 @@
 - **Environment note:** the user's checkout has stale `node_modules`, for example next 16.3.8 installed versus 16.4.3 in the lockfile, and zod 4.4.3 versus 4.6.7. Any local run there would test the wrong versions.
 - **Pre-existing failures:** none. **Environment failures:** none in CI.
 
-**Prod snapshot (read-only, 2026-10-29):**
+**Prod snapshot (read-only, 2026-10-28):**
 
 | Table | Rows |
 |---|---|
