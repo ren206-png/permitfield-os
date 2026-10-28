@@ -87,6 +87,11 @@ jobs:
 
       - run: npm run lint
 
+      # Standalone typecheck (Gate 6.1, GATE_6_FINDINGS.md Q2/O7): before this
+      # step, types were checked only inside `next build`. `next typegen`
+      # first, because app/layout.tsx uses the generated LayoutProps type.
+      - run: npx next typegen && npx tsc --noEmit
+
       - run: npm run build
 
       - run: npm test
