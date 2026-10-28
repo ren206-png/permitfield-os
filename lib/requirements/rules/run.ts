@@ -23,7 +23,7 @@ export type EvaluateApplicationResult =
 
 export async function evaluateApplicationRequirements(applicationId: string): Promise<EvaluateApplicationResult> {
   if (!isCopilotRulesEnabled()) return { ok: false, error: 'disabled' };
-  if (!z.uuid().safeParse(applicationId).success) return { ok: false, error: 'not_found' };
+  if (!z.guid().safeParse(applicationId).success) return { ok: false, error: 'not_found' };
 
   const supabase = await createClient();
   const {

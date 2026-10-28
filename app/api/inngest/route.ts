@@ -9,6 +9,7 @@ import { permitDrawingReview } from '@/lib/inngest/functions/drawing-review';
 import { permitNotify, permitNotifyFlush } from '@/lib/inngest/functions/notify';
 import { permitClassifyDocuments } from '@/lib/inngest/functions/classify-documents';
 import { permitIngestDocumentChunks } from '@/lib/inngest/functions/ingest-document-chunks';
+import { sourceCheck, sourceRefreshScheduler } from '@/lib/inngest/functions/source-check';
 
 // Registers permit.extract, permit.audit, permit.generate_pdf,
 // permit.notify_on_failure, the Gate 4 (Quotes & Payments)
@@ -43,5 +44,7 @@ export const { GET, POST, PUT } = serve({
     permitNotifyFlush,
     permitClassifyDocuments,
     permitIngestDocumentChunks,
+    sourceCheck,
+    sourceRefreshScheduler,
   ],
 });

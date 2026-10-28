@@ -198,3 +198,121 @@ Each migration's header carries its rollback SQL (`drop table` / `drop type` in 
 ### Corrections
 
 - Dates in this file and `GATE_6_FINDINGS.md` had been written as 2026-10-29. Corrected to 2026-10-28, which matches the system clock and the GitHub run times.
+
+---
+
+## 6.3 — Source registry: refresh, staging, review, publication, retrieval and citations
+
+**Approval:** `APPROVED: PHASE 6.3` (Ren, 2026-10-28), together with "merge 89" (#89 merged 21:13Z).
+
+**Flag:** `PERMITFIELD_FF_SOURCE_REGISTRY` (default off, set in no environment). Check sites:
+- `isSourceRegistryEnabled()` in every page under `app/admin/sources/**` and `app/admin/rule-sets/**`, in every action in their `actions.ts`, and in the admin nav (`app/admin/layout.tsx`);
+- both Inngest functions in `lib/inngest/functions/source-check.ts` return `flag_off` before reading anything.
+
+### What changed
+
+| File | Purpose |
+|---|---|
+| `supabase/migrations/20260806000094_copilot_source_registry.sql` | **Tables** (all four append-only, no INSERT grant to any API role):<br>• `source_captures`: staged, unreviewed fetched text, admin-only RLS.<br>• `source_check_runs`: every check attempt.<br>• `source_capture_decisions`: one publish/dismiss decision per capture.<br>• `source_revision_chunks`: searchable text of published revisions.<br>**Functions:**<br>• `record_source_check`: service_role only, idempotent on a caller key.<br>• `publish_source_revision` / `dismiss_source_capture`: `is_platform_admin()`, actor = `auth.uid()`.<br>• `search_source_evidence`: exact filters, full-text search.<br>• `source_check_status`: one row per source.<br>• `publish_rule_set_version`: snapshot built from the DB.<br>• `source_revision_is_published`.<br>Rollback SQL is in the header. |
+| `lib/sources/url-guard.ts`, `fetch-source.ts` | Outbound fetch: https only, no credentials, port 443 only, every DNS answer must be public (checked inside the socket's `lookup`), each redirect re-validated (max 3), 20 s total timeout, 10 MB streamed cap, conditional `If-None-Match` / `If-Modified-Since`. Never throws: every outcome is a value. |
+| `lib/sources/loaders.ts` | HTML (`<main>` only if present; scripts, styles, forms and embeds dropped; sections located by heading path), PDF (text layer, located `p. N`), plain text. Declared type must match the bytes. Everything else is refused as `unsupported_content`. |
+| `lib/sources/capture.ts` | Normalised text, sha256 of that text, located chunks, Zod `SourceCaptureSchema`. Oversize content is refused, never truncated. |
+| `lib/sources/check-source.ts` | One check: fetch → load → capture → `record_source_check` arguments. The fetcher is injected for tests. |
+| `lib/inngest/functions/source-check.ts` | `source-check` has durable steps `load-source` → `fetch` → `record`, idempotency key `sourceId + requestKey`, per-source concurrency 1. `source-refresh-scheduler` is a daily 04:00 America/Edmonton cron that queues due sources (max 50 per run). |
+| `lib/sources/freshness.ts` | Policy: fee schedule, processing times and forms pages every 30 days; bylaw and other every 90 days; retry 24 h after a failed attempt. A failed check never counts as successful. |
+| `lib/sources/diff.ts` | Bounded line diff (LCS after prefix/suffix trim, ≤ 2000 lines). Over the bound it says "not computed" rather than showing a partial diff. |
+| `lib/sources/evidence.ts` | `buildEvidenceBundle`: official chunks from `search_source_evidence` (`S1…`) plus the org's own document chunks via `retrieveOrgDocumentChunks` (`D1…`, only when `ORG_DOCUMENT_RETRIEVAL` is on). The two kinds stay separate. |
+| `lib/sources/citations.ts` | `validateCitations`: Zod-parsed `{evidence_id, quote}`. The id must be in the bundle and the quote must appear in that evidence; only whitespace, case and typographic quote/dash differences are tolerated. Failures are rejected with a reason, never repaired. |
+| `lib/sources/rule-set-publish.ts` | Validates the admin's condition JSON with the 6.2 `ConditionSchema` and runs 6.2 `validateRuleSet` over the would-be snapshots before publishing. `diffRuleSet` uses key-order-independent comparison. |
+| `app/admin/sources/**`, `app/admin/rule-sets/**` | Console: source list (freshness, last check, items to review, Check now); per source (diff of each staged capture against the published text, publish form with effective dates and use rights, dismiss, withdraw, check history); rule sets per permit type (changes since the current version, conditions, publish). |
+| `lib/inngest/client.ts`, `app/api/inngest/route.ts` | `source/check.requested` event; both functions registered. |
+| `lib/ai/retrieve-org-document-chunks.ts` | Header corrected: ingestion exists and the caller is `buildEvidenceBundle`. |
+| `lib/requirements/rules/rule-set.ts`, `run.ts` (6.2 code) | `z.uuid()` → `z.guid()`. See finding F6. |
+
+### Requirement → code → verification
+
+| Requirement (master prompt) | Code | Verification (artefact) |
+|---|---|---|
+| §17 N.3 exit: ingestion job survives disconnect | Durable steps + `record_source_check` idempotency key | **Live local run** with the Inngest dev server v1.46.0 (cached binary) and `next dev`:<br>• event `01M6273AAVTG2RZKKVEHK926WG` checked a test source whose URL takes 8 s;<br>• the Next server was **killed during `fetch`** (21:36:54Z, `curl` → connection refused, 0 rows) and restarted;<br>• the Inngest run `01M6273AH3HT21JAVH23FJHEPH` trace shows `load-source` 21 ms (not re-run), **`fetch` "1 retry"** (53.1 s including the outage), `record` 37 ms, status **Completed**;<br>• the DB has exactly **1** `source_check_runs` row, key `source-check:01M6273AAVTG2RZKKVEHK926WG`.<br>SQL test: "a replayed step returns the first result and writes nothing (1 run, 1 capture)". |
+| §17 N.3 exit: citation validation test | `validateCitations` | `citations.test.ts` covers five cases:<br>• a valid citation resolves to its revision id and locator;<br>• fabricated quotes, unknown ids, cross-item quotes, extra keys and short quotes are each rejected with a reason;<br>• a non-list or an oversized list is refused;<br>• contractor evidence keeps its label. |
+| §7 failed fetch ≠ repeal; changed page ≠ changed rule | Failures are only a `failed`/`blocked` row; the hash is over the normalised text | SQL: "a failed fetch is recorded as failed and leaves the source untouched". Unit: "markup-only changes give the same hash". |
+| §7 conditional retrieval | ETag/Last-Modified from the last successful check | Live: a re-check of the published Hamilton page returned **`not_modified`** (304), with still 1 capture. |
+| §7 LLM/fetch output → staging only; authorized reviewers publish | Captures are not revisions; publish is admin-only and atomic | SQL: a member cannot publish; admin publication creates revision, chunks, verified review and decision with actor = `auth.uid()`; a capture can be decided once. Live: the Hamilton capture was published from the console as revision 1. |
+| §7 unknown effective dates stay unknown | Blank date fields → null | Console shows "effective unknown to open". |
+| §11 exact filters before content reaches the model | `search_source_evidence` | SQL **decoy municipality**: the same words in "Decoyville" never appear in Toronto results (control: Decoyville finds its own row). Effective dates pick the revision in force (today → rev 1, +40 days → rev 2). Staged text is never searchable. |
+| §11 revocation checked at query time | Newest revision in window, then the published filter | SQL: a withdrawn revision disappears at once **with no fallback** to older text; its chunk still exists (hidden, not deleted). |
+| §10 reject unsupported content; no binary-as-text; nothing executed | `loaders.ts` | `loaders.test.ts`: DOCX, XLS, CSV, PNG and ZIP are refused; signature mismatches are refused; scripts, styles, comments, forms, iframes and SVG are dropped. Real PDF via `pdf-lib`: pages located `p. 1`, `p. 2`. |
+| §19 SSRF | `url-guard.ts`, `guardedLookup` | `url-guard.test.ts`, 46 cases: private, loopback, link-local/metadata, CGNAT, multicast, IPv6 ULA/link-local, IPv4-mapped, NAT64, 6to4, `localhost.`, `.internal`, http/file/ftp, credentials, non-443 ports. `guardedLookup('localhost')` → `address_not_public`. |
+| §7 publication creates an immutable rule-set version | `publish_rule_set_version` | SQL covers four cases:<br>• admin-only;<br>• unverified or other-permit-type requirements → `check_violation`;<br>• a jurisdiction mismatch → `foreign_key_violation`;<br>• a forged title in the payload is ignored (the snapshot comes from the DB), the condition is kept, the newest published source revision is cited, v2 increments and supersedes, and v1 is unchanged. |
+| §1.7 append-only | Triggers + no INSERT grants | SQL: an admin cannot insert a chunk directly; service_role cannot insert a capture directly; UPDATE and DELETE are blocked by the trigger as postgres. |
+
+### Test evidence (local, 2026-10-28)
+
+- **Unit tests:** 73 files / 778 tests passing (6.2: 68 / 701). +5 new files with 76 tests, plus 1 F6 regression test in `rule-set.test.ts`.
+- **SQL suite:** `npm run test:sql` after `supabase db reset` gives **49/49 files, 553 PASS lines** (6.1a: 48 / 524). `source_registry.test.sql` has 29 PASS lines. It catches specific SQLSTATEs only; its one "when others" is in the header comment.
+- **Mutation checks (§19 vacuous test):**
+  - with `source_revision_is_published` forced to `true`, the test fails at "a member still sees chunks of a withdrawn revision";
+  - with the jurisdiction filter removed from `search_source_evidence`, it fails at the decoy control (got 2).
+  - Both ran inside the test's own rolled-back transaction.
+- **Checks:** `npx next typegen && npx tsc --noEmit` clean; `npm run lint` clean.
+- **Live local run:**
+  - The console rendered with the flag on and a local `platform_admin` test account.
+  - "Check now" on the real Hamilton page: HTTP 200, `changed`, 31,645 characters in 33 located chunks.
+  - Published from the console.
+  - `search_source_evidence` returned Hamilton passages located by heading path.
+  - A re-check returned `not_modified`.
+
+### Introduced, not yet wired (§1.13)
+
+| Object | Owner |
+|---|---|
+| `buildEvidenceBundle`, `searchOfficialSources`, `validateCitations` (and therefore the new caller of `retrieveOrgDocumentChunks`) | 6.4 (copilot tools and answer rendering). Plan deviation: the 6.3 plan said "wire `retrieveOrgDocumentChunks`". It now has a caller, but that caller has no caller until 6.4. |
+| "Affected active projects get a review-new-requirements task with a diff" (§7) | **Not built.** It needs the project-side UI. Owner 6.4. `diffRuleSet` exists for it. |
+| Rule-set prerequisites (`requires`) | The console always publishes `[]`. The engine supports them; there is no editor yet. Owner 6.4, or on request. |
+
+### Known limits (stated plainly)
+
+- **Raw snapshots are not stored.** `snapshot_storage_path` stays null; the extracted text in `source_captures` is the retained snapshot.
+- **Site chrome on pages without `<main>`.** On such pages the extracted text includes headers like Hamilton's election banner. A reviewer sees it in the diff.
+- **robots.txt is not consulted.** Checks are low-frequency (30/90 days) and identify themselves via the User-Agent. Owner 6.7 (hardening).
+- **Loaders cover HTML, PDF and text only.** DOCX, spreadsheets and images are refused explicitly. There is no manual-upload path for a source yet: only URL fetch.
+- **The daily scheduler was not run live.** Its selection logic is unit-tested (`isCheckDue`). The first real run happens when the flag is on in an environment.
+- **`writeAuditLog()` is not used.** `audit_logs` requires an `org_id` and these are platform-level actions. The actor is recorded on every append-only row instead (`created_by`, `reviewed_by`, `decided_by`, `published_by`, `requested_by`).
+
+### §19 adversarial checks
+
+| Check | Result |
+|---|---|
+| Vacuous test | Control-then-assert throughout, plus the two mutation runs above |
+| Green badge, zero tests | Counts quoted from the local runs. CI counts are to be quoted from the PR's logs |
+| Dead helper | Listed above with owners |
+| Flag that gates nothing | Check sites listed under **Flag** |
+| Model-trusted scope | No model input in 6.3. Publication actor = `auth.uid()`; the snapshot is built from DB rows; the rule-set jurisdiction comes from the permit-type row, not the form |
+| Semantic jurisdiction | Decoy-municipality SQL test plus its mutation |
+| Silent coercion | `.default([])` only on `requires` (an absent list means none). The `optionalDate` transform maps `''` to null, meaning unknown. No `.catch()` |
+| Prompt injection via evidence | Not yet reachable: no model reads evidence until 6.4. Captures are inert text, and citations must quote evidence verbatim. Fixture test owner: 6.4/6.7 |
+| SSRF | See the requirement table |
+| Orphaned finding | Inherited items are audited below |
+
+### Inherited items audit
+
+- **6.2 plan deviation, not stated at the time:**
+  - The plan (`GATE_6_FINDINGS.md` §G) said the rule engine would extend the SQL `evaluate_project_permit_requirements`. 6.2 built it in TypeScript (`lib/requirements/rules/`) instead, so the existing SQL evaluator is unchanged and unused by the engine.
+  - The plan's "readiness extension" was not done in 6.2. `summarizeEvaluation` exists but is not connected to readiness. Owner: 6.4.
+- **F3** (local `test:live`): still open, local only.
+
+### New findings (each needs Ren's call)
+
+- **F4 — no platform admin in production.**
+  - A read-only query (2026-10-28) shows `org_members` roles are `owner` × 2 and nothing else.
+  - The `/admin` panel is gated by the `ADMIN_EMAILS` allowlist, but every 6.1/6.3 write (`is_platform_admin()`) needs an `org_members` row with role `platform_admin`. With the flag on today, Publish/Dismiss/Withdraw would all fail with "the database does not recognise your account as a platform admin".
+  - `org_members.role` is one value per (org, user), so making your existing row `platform_admin` would replace `owner` in your own org.
+  - **Options:** (a) a separate internal "PermitField Platform" org where your account is `platform_admin` (needs a check that the app picks the right org when a user has two); (b) a small `platform_admins` table and an updated `is_platform_admin()`; (c) leave as is until the console is needed.
+- **F5 — iCloud duplicate files in the repo.**
+  - The repo is under `~/Desktop`, which iCloud syncs. It produced byte-identical untracked copies: `"20260806000093_public_roles_no_truncate 2.sql"` (which **broke `supabase db reset`** with a duplicate version), `"public_roles_no_truncate.test 2.sql"`, nine `lib/**/… 2.ts` copies of 6.2 files, and `ios/App/App/config 2.xml`.
+  - I moved them out (not deleted) to the session scratchpad.
+  - PlyCount had the same problem and was moved to `~/Developer`. **Recommendation:** move this repo out of iCloud as well.
+- **F6 — `z.uuid()` rejects real catalogue ids (fixed here).**
+  - Zod 4's `z.uuid()` enforces RFC 9562 version/variant bits. All 12 production `jurisdiction_sources` ids and all 12 `permit_types` ids (e.g. `00000000-0000-0000-0005-00000000000a`) fail it; read-only query 2026-10-28.
+  - Found live: "Check now" silently returned "Invalid source." Switched to `z.guid()` in 6.3 code and in 6.2's `RuleSetItemSnapshotSchema.requires` / `run.ts`, with a regression test.
+  - The rest of the codebase has 13 older `z.string().uuid()` validators, which are just as strict. They check generated ids (org, job, chunk, client) or `taxonomies` ids, and `taxonomies` has 0 rows in production (read-only, 2026-10-28). So nothing is affected today; a hand-written taxonomy id added later would be rejected. Proposed: switch them to `z.guid()` in 6.7.

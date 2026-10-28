@@ -123,4 +123,11 @@ export interface PermitEventPayloads {
   // 20260806000050_notification_pending_events.sql's header comment on why)
   // and sends one combined digest email per recipient.
   'permit/notification.queued': { applicationId: string };
+  // Gate 6.3: check one registered source (lib/inngest/functions/
+  // source-check.ts). Sent by the daily source-refresh scheduler
+  // (requestedBy null, requestKey = the UTC date) and by the admin console's
+  // "Check now" (requestedBy = the admin, requestKey = a fresh UUID).
+  // `requestKey` is the idempotency key's second half, so a scheduler retry
+  // the same day collapses while a manual re-check always runs.
+  'source/check.requested': { sourceId: string; requestKey: string; requestedBy: string | null };
 }

@@ -29,6 +29,11 @@ describe('validateRuleSet', () => {
     expect(cycles).toContainEqual({ kind: 'dependency_cycle', cycle: [D, D] });
   });
 
+  it('accepts catalogue-style ids that are valid uuids but not RFC variants', () => {
+    const catalogueId = '00000000-0000-0000-0003-000000000001';
+    expect(validateRuleSet([item(catalogueId, {}), item(A, { requires: [catalogueId] })]).problems).toEqual([]);
+  });
+
   it('accepts an acyclic prerequisite chain', () => {
     expect(validateRuleSet([item(A, { requires: [B] }), item(B, { requires: [C] }), item(C, {})]).problems).toEqual([]);
   });

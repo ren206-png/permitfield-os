@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { PRODUCT_SHORT } from '@/lib/brand';
 import { signOutAction } from '@/app/actions/auth';
+import { isSourceRegistryEnabled } from '@/lib/flags';
 
 // Standalone chrome for /admin -- deliberately not nested under
 // app/(app)/layout.tsx. That layout calls requireOrgContext(), which
@@ -29,6 +30,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Link href="/admin/requirements" className="text-sm text-zinc-300 hover:text-white">
               Requirements review
             </Link>
+            {isSourceRegistryEnabled() && (
+              <>
+                <Link href="/admin/sources" className="text-sm text-zinc-300 hover:text-white">
+                  Sources
+                </Link>
+                <Link href="/admin/rule-sets" className="text-sm text-zinc-300 hover:text-white">
+                  Rule sets
+                </Link>
+              </>
+            )}
             <Link href="/applications" className="text-sm text-zinc-300 hover:text-white">
               Back to app
             </Link>

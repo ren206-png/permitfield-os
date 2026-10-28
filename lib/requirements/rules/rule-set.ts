@@ -22,7 +22,10 @@ export const RuleSetItemSnapshotSchema = z.strictObject({
   applies_when_text: z.string().nullable().optional(),
   condition: ConditionSchema.nullable(),
   // Prerequisite requirements (permit_requirements ids) in the same set.
-  requires: z.array(z.uuid()).default([]),
+  // z.guid(), not z.uuid(): catalogue ids such as
+  // 00000000-0000-0000-0003-000000000001 are valid Postgres uuids but not
+  // RFC 9562 variants, and z.uuid() rejects them.
+  requires: z.array(z.guid()).default([]),
 });
 
 export type RuleSetItemSnapshot = z.infer<typeof RuleSetItemSnapshotSchema>;

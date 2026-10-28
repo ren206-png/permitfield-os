@@ -438,3 +438,12 @@ export function isPermitEsignEnabled(): boolean {
 export function isCopilotRulesEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_COPILOT_RULES');
 }
+
+// Gate 6.3: the source registry. Gates the admin console pages under
+// /admin/sources and /admin/rule-sets (and their actions), the daily
+// source-refresh scheduler and the per-source check job
+// (lib/inngest/functions/source-check.ts). Off: the pages 404 and both jobs
+// return without fetching anything. Default OFF.
+export function isSourceRegistryEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_SOURCE_REGISTRY');
+}

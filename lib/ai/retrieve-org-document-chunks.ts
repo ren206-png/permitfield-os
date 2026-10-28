@@ -9,13 +9,11 @@ import { ORG_DOCUMENT_MAX_RETRIEVED_CHUNKS } from './config';
  * jurisdiction_code_chunks corpus -- retrieval over an org's OWN uploaded
  * application documents, scoped by org_id AND application_id.
  *
- * ZERO CALL SITES: nothing in this repo calls retrieveOrgDocumentChunks yet.
- * There is also no ingestion pipeline that writes application_document_chunks
- * rows (see that migration's own header) -- an empty corpus, same as
- * retrieve-code-chunks.ts pre-ingestion, so this always returns [] today
- * regardless of query. Declared now so a future ingestion + call-site PR is a
- * schema/wiring-free addition, same "declared now, enforced later" discipline
- * as the rest of Gate AI-1.
+ * Rows are written by lib/inngest/functions/ingest-document-chunks.ts (behind
+ * PERMITFIELD_FF_ORG_DOCUMENT_RETRIEVAL). The caller is
+ * lib/sources/evidence.ts's buildEvidenceBundle (Gate 6.3), which labels
+ * these chunks as contractor documents, never as official requirements;
+ * that bundle's first consumer is the 6.4 copilot.
  */
 export interface RetrievedOrgDocumentChunk {
   id: string;

@@ -1,0 +1,138 @@
+'use client';
+
+import { useActionState } from 'react';
+import { useErrorToast, useSuccessToast } from '@/components/toast/use-action-toast';
+import {
+  checkSourceNowAction,
+  dismissCaptureAction,
+  publishCaptureAction,
+  withdrawRevisionAction,
+  type SourceActionState,
+} from './actions';
+
+const initialState: SourceActionState = {};
+const smallButton =
+  'rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50';
+const inputClass = 'w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm text-zinc-900';
+const labelClass = 'block text-xs font-medium text-zinc-700';
+
+function useResultToasts(state: SourceActionState) {
+  useErrorToast(state.error);
+  useSuccessToast(Boolean(state.message), state.message ?? '');
+}
+
+export function CheckNowButton({ sourceId }: { sourceId: string }) {
+  const [state, formAction, pending] = useActionState(checkSourceNowAction, initialState);
+  useResultToasts(state);
+  return (
+    <form action={formAction}>
+      <input type="hidden" name="sourceId" value={sourceId} />
+      <button type="submit" disabled={pending} className={smallButton}>
+        {pending ? 'Requesting…' : 'Check now'}
+      </button>
+    </form>
+  );
+}
+
+export function PublishCaptureForm({
+  sourceId,
+  captureId,
+  defaultTitle,
+  defaultIssuingBody,
+}: {
+  sourceId: string;
+  captureId: string;
+  defaultTitle: string;
+  defaultIssuingBody: string;
+}) {
+  const [state, formAction, pending] = useActionState(publishCaptureAction, initialState);
+  useResultToasts(state);
+  return (
+    <form action={formAction} className="space-y-3">
+      <input type="hidden" name="sourceId" value={sourceId} />
+      <input type="hidden" name="captureId" value={captureId} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={labelClass}>
+          Title
+          <input name="title" required maxLength={300} defaultValue={defaultTitle} className={inputClass} />
+        </label>
+        <label className={labelClass}>
+          Issuing body
+          <input name="issuingBody" required maxLength={300} defaultValue={defaultIssuingBody} className={inputClass} />
+        </label>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className={labelClass}>
+          Published on <span className="font-normal text-zinc-500">(if the source states it)</span>
+          <input type="date" name="publishedOn" className={inputClass} />
+        </label>
+        <label className={labelClass}>
+          Effective from <span className="font-normal text-zinc-500">(blank = unknown)</span>
+          <input type="date" name="effectiveFrom" className={inputClass} />
+        </label>
+        <label className={labelClass}>
+          Effective to <span className="font-normal text-zinc-500">(blank = open)</span>
+          <input type="date" name="effectiveTo" className={inputClass} />
+        </label>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={labelClass}>
+          Use rights
+          <select name="accessScope" defaultValue="public_no_redistribution" className={inputClass}>
+            <option value="public">Public, may be quoted and shared</option>
+            <option value="public_no_redistribution">Public, not for republishing</option>
+            <option value="licensed_internal">Licensed, internal use only</option>
+          </select>
+        </label>
+        <label className={labelClass}>
+          Licence notes
+          <input name="licenceNotes" maxLength={2000} className={inputClass} />
+        </label>
+      </div>
+      <label className={labelClass}>
+        Review notes
+        <textarea name="notes" rows={2} maxLength={2000} className={inputClass} />
+      </label>
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+      >
+        {pending ? 'Publishing…' : 'Publish as new revision'}
+      </button>
+    </form>
+  );
+}
+
+export function DismissCaptureForm({ sourceId, captureId }: { sourceId: string; captureId: string }) {
+  const [state, formAction, pending] = useActionState(dismissCaptureAction, initialState);
+  useResultToasts(state);
+  return (
+    <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <input type="hidden" name="sourceId" value={sourceId} />
+      <input type="hidden" name="captureId" value={captureId} />
+      <label className={`${labelClass} flex-1`}>
+        Dismiss reason
+        <input name="notes" required maxLength={2000} placeholder="e.g. only the page footer changed" className={inputClass} />
+      </label>
+      <button type="submit" disabled={pending} className={smallButton}>
+        {pending ? 'Saving…' : 'Dismiss'}
+      </button>
+    </form>
+  );
+}
+
+export function WithdrawRevisionForm({ sourceId, revisionId }: { sourceId: string; revisionId: string }) {
+  const [state, formAction, pending] = useActionState(withdrawRevisionAction, initialState);
+  useResultToasts(state);
+  return (
+    <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <input type="hidden" name="sourceId" value={sourceId} />
+      <input type="hidden" name="revisionId" value={revisionId} />
+      <input name="notes" required maxLength={2000} placeholder="Reason" aria-label="Withdraw reason" className={inputClass} />
+      <button type="submit" disabled={pending} className={smallButton}>
+        {pending ? 'Saving…' : 'Withdraw'}
+      </button>
+    </form>
+  );
+}
