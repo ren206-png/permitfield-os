@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useErrorToast, useSuccessToast } from '@/components/toast/use-action-toast';
 import {
   checkSourceNowAction,
@@ -29,6 +30,59 @@ export function CheckNowButton({ sourceId }: { sourceId: string }) {
       <input type="hidden" name="sourceId" value={sourceId} />
       <button type="submit" disabled={pending} className={smallButton}>
         {pending ? 'Requesting…' : 'Check now'}
+      </button>
+    </form>
+  );
+}
+
+// For sites that refuse automated checks: the admin downloads the official
+// document and uploads it here. It is staged as a capture for review, like
+// a fetch (app/api/admin/sources/[sourceId]/upload/route.ts).
+export function UploadCopyForm({ sourceId }: { sourceId: string }) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState(false);
+  const [state, setState] = useState<SourceActionState>({});
+  useResultToasts(state);
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setState({ error: 'Choose a file.' });
+      return;
+    }
+    const formData = new FormData();
+    formData.set('file', file);
+    setPending(true);
+    try {
+      const res = await fetch(`/api/admin/sources/${sourceId}/upload`, { method: 'POST', body: formData });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setState({ error: typeof body.error === 'string' ? body.error : 'Upload failed.' });
+        return;
+      }
+      setState({
+        message:
+          body.outcome === 'changed'
+            ? 'Uploaded. It is waiting for review below.'
+            : 'Uploaded. The text is the same as the latest copy, so there is nothing new to review.',
+      });
+      if (fileRef.current) fileRef.current.value = '';
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <label className={`${labelClass} flex-1`}>
+        Upload the official copy <span className="font-normal text-zinc-500">(PDF, HTML or text, up to 4 MB)</span>
+        <input ref={fileRef} type="file" name="file" accept=".pdf,.html,.htm,.txt,application/pdf,text/html,text/plain" className={inputClass} />
+      </label>
+      <button type="submit" disabled={pending} className={smallButton}>
+        {pending ? 'Uploading…' : 'Upload'}
       </button>
     </form>
   );

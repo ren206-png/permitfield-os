@@ -6,12 +6,14 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { isSourceRegistryEnabled } from '@/lib/flags';
 import { changedHunks, diffLines } from '@/lib/sources/diff';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { CheckNowButton, DismissCaptureForm, PublishCaptureForm, WithdrawRevisionForm } from '../source-controls';
+import { CheckNowButton, DismissCaptureForm, PublishCaptureForm, UploadCopyForm, WithdrawRevisionForm } from '../source-controls';
 
 // One source (Gate 6.3): fetched changes waiting for review, each diffed
 // against the text of the revision currently published (or, before any
 // publication, the previous capture); the published revisions; and the
-// check history.
+// check history. A site that refuses automated checks can be captured by
+// uploading the official copy (migration 20260806000100); uploaded captures
+// and checks say so.
 
 interface CaptureRow {
   id: string;
@@ -57,6 +59,9 @@ interface CheckRow {
   error_code: string | null;
   error_message: string | null;
   requested_by: string | null;
+  method: 'fetched' | 'uploaded';
+  uploaded_file_name: string | null;
+  capture_id: string | null;
   checked_at: string;
 }
 
@@ -133,7 +138,7 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
       .order('revision_number', { ascending: false }),
     supabase
       .from('source_check_runs')
-      .select('id, outcome, http_status, error_code, error_message, requested_by, checked_at')
+      .select('id, outcome, http_status, error_code, error_message, requested_by, method, uploaded_file_name, capture_id, checked_at')
       .eq('source_id', sourceId)
       .order('checked_at', { ascending: false })
       .limit(20),
@@ -170,6 +175,11 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
     return d?.decision === 'published' && d.source_revision_id && latestReview.get(d.source_revision_id)?.status === 'verified';
   });
   const openCaptures = captureRows.filter((c) => !decisionByCapture.has(c.id));
+  const checkRows = (checks.data ?? []) as CheckRow[];
+  // The check that created each capture ('changed'); an 'unchanged' check
+  // also points at the capture it matched, so it is not the origin.
+  const originByCapture = new Map<string, CheckRow>();
+  for (const c of checkRows) if (c.capture_id && c.outcome === 'changed') originByCapture.set(c.capture_id, c);
   const jurisdiction = Array.isArray(source.jurisdictions) ? source.jurisdictions[0] : source.jurisdictions;
   const place = jurisdiction ? `${jurisdiction.municipality ?? 'Province-wide'}, ${jurisdiction.province_code}` : '';
   const defaultIssuer = jurisdiction?.municipality ? `City of ${jurisdiction.municipality}` : '';
@@ -190,20 +200,24 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
         {!source.archived_at && <CheckNowButton sourceId={source.id} />}
       </div>
 
+      {!source.archived_at && <UploadCopyForm sourceId={source.id} />}
+
       <section className="space-y-4">
         <h2 className="text-base font-semibold text-zinc-900">Waiting for review ({openCaptures.length})</h2>
         {openCaptures.length === 0 && <p className="text-sm text-zinc-500">Nothing to review.</p>}
         {openCaptures.map((capture) => {
           const previous = publishedCapture ?? captureRows.find((c) => c.captured_at < capture.captured_at) ?? null;
+          const origin = originByCapture.get(capture.id);
           return (
             <article key={capture.id} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4">
               <div className="text-xs text-zinc-600">
-                Fetched <LocalTime value={capture.captured_at} /> · {capture.loader.toUpperCase()} · {capture.chunks.length} passages · compared with{' '}
+                {origin?.method === 'uploaded' ? `Uploaded by an admin (${origin.uploaded_file_name})` : 'Fetched'}{' '}
+                <LocalTime value={capture.captured_at} /> · {capture.loader.toUpperCase()} · {capture.chunks.length} passages · compared with{' '}
                 {publishedCapture ? 'the published text' : previous ? 'the previous fetch' : 'nothing'}
               </div>
               <DiffView before={previous?.text_content ?? null} after={capture.text_content} />
               <details>
-                <summary className="cursor-pointer text-xs text-zinc-600">Full fetched text</summary>
+                <summary className="cursor-pointer text-xs text-zinc-600">Full captured text</summary>
                 <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-50 p-2 text-xs">{capture.text_content}</pre>
               </details>
               <PublishCaptureForm
@@ -252,11 +266,11 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold text-zinc-900">Check history</h2>
-        {(checks.data ?? []).length === 0 ? (
+        {checkRows.length === 0 ? (
           <p className="text-sm text-zinc-500">Never checked.</p>
         ) : (
           <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white text-xs">
-            {((checks.data ?? []) as CheckRow[]).map((c) => (
+            {checkRows.map((c) => (
               <li key={c.id} className="flex flex-wrap gap-x-3 gap-y-1 p-2 text-zinc-700">
                 <LocalTime value={c.checked_at} />
                 <span className="font-medium">{c.outcome.replace('_', ' ')}</span>
@@ -267,7 +281,9 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
                     {c.error_message ? `: ${c.error_message}` : ''}
                   </span>
                 )}
-                <span className="text-zinc-400">{c.requested_by ? 'manual' : 'scheduled'}</span>
+                <span className="text-zinc-400">
+                  {c.method === 'uploaded' ? `uploaded: ${c.uploaded_file_name}` : c.requested_by ? 'manual' : 'scheduled'}
+                </span>
               </li>
             ))}
           </ul>

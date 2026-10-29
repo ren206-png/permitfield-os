@@ -29,6 +29,22 @@ export const FACT_KEYS = {
     unit: null,
     values: ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'C', 'D', 'E', 'F1', 'F2', 'F3'],
   },
+  // Conditions from the Calgary, Toronto and Vancouver tenant-improvement
+  // checklists (asbestos form, variance and partial-permit forms, designer
+  // form, key/ceiling/exterior plans, letter of operation).
+  'building.year_built': { label: 'Year the building was built', kind: 'number', unit: 'year', hint: 'four-digit year, e.g. 1985' },
+  'project.partial_building': { label: 'Work is in only part of the building', kind: 'boolean', unit: null },
+  'project.ceiling_or_lighting_changes': { label: 'Ceiling or lighting changes', kind: 'boolean', unit: null },
+  'project.exterior_or_roof_changes': {
+    label: 'Exterior, roof or rooftop equipment changes',
+    kind: 'boolean',
+    unit: null,
+    hint: 'new or altered windows, cladding, louvers, rooftop units or roof',
+  },
+  'project.variance_requested': { label: 'Variance or alternative solution requested', kind: 'boolean', unit: null },
+  'project.partial_permit': { label: 'Applying for a partial permit', kind: 'boolean', unit: null },
+  'project.designer_is_architect_or_engineer': { label: 'Designer is a licensed architect or engineer', kind: 'boolean', unit: null },
+  'project.childcare_or_school': { label: 'Childcare or school use', kind: 'boolean', unit: null },
 } as const satisfies Record<string, FactKeyDefinition>;
 
 export type FactKey = keyof typeof FACT_KEYS;
@@ -46,6 +62,10 @@ export function parseFactValue(key: FactKey, raw: string): ParsedFactValue {
   const def: FactKeyDefinition = FACT_KEYS[key];
   const text = raw.trim();
   if (def.kind === 'number') {
+    if (def.unit === 'year') {
+      if (!/^\d{4}$/.test(text)) return { ok: false, error: `${def.label}: enter a four-digit year.` };
+      return { ok: true, value: Number(text), unit: def.unit };
+    }
     if (!/^\d+(\.\d+)?$/.test(text)) return { ok: false, error: `${def.label}: enter a number.` };
     const value = Number(text);
     if (!Number.isFinite(value) || value <= 0) return { ok: false, error: `${def.label}: enter a number above zero.` };
@@ -62,6 +82,6 @@ export function parseFactValue(key: FactKey, raw: string): ParsedFactValue {
 
 export function describeFactValue(key: string, value: unknown, unit: string | null): string {
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  const suffix = unit === 'm2' ? ' m²' : unit ? ` ${unit}` : '';
+  const suffix = unit === 'm2' ? ' m²' : unit && unit !== 'year' ? ` ${unit}` : '';
   return `${String(value)}${suffix}`;
 }
