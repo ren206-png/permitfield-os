@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FACT_KEYS, isFactKey, parseFactValue } from '@/lib/requirements/rules/fact-keys';
-import { ConditionSchema } from '@/lib/requirements/rules/condition';
+import { describeFactValue, FACT_KEYS, isFactKey, parseFactValue } from '@/lib/requirements/rules/fact-keys';
+import { ConditionSchema, evaluateCondition } from '@/lib/requirements/rules/condition';
 import { proposalsFromExtraction } from './facts-from-extraction';
 
 const field = <T,>(value: T | null, page: number | null = 2) => ({
@@ -53,6 +53,32 @@ describe('fact keys', () => {
     expect(parseFactValue('building.strata_titled', 'true').ok).toBe(false);
     expect(parseFactValue('building.occupancy_group', 'E')).toEqual({ ok: true, value: 'E', unit: null });
     expect(parseFactValue('building.occupancy_group', 'Z9').ok).toBe(false);
+  });
+
+  it('reads a year as a four-digit whole year', () => {
+    expect(parseFactValue('building.year_built', '1985')).toEqual({ ok: true, value: 1985, unit: 'year' });
+    for (const bad of ['85', '1985.5', '19850', 'nineteen']) expect(parseFactValue('building.year_built', bad).ok).toBe(false);
+    expect(describeFactValue('building.year_built', 1985, 'year')).toBe('1985');
+  });
+
+  it('drafted checklist conditions read the new keys, and a missing fact stays unknown', () => {
+    const confirmed = (value: unknown, unit: string | null = null) => ({ status: 'confirmed' as const, factId: 'f', value, unit });
+    const asbestos = ConditionSchema.parse({ fact: 'building.year_built', op: 'lt', value: 1990, unit: 'year' });
+    expect(evaluateCondition(asbestos, new Map([['building.year_built', confirmed(1975, 'year')]])).value).toBe('true');
+    expect(evaluateCondition(asbestos, new Map([['building.year_built', confirmed(1995, 'year')]])).value).toBe('false');
+    expect(evaluateCondition(asbestos, new Map()).value).toBe('unknown');
+
+    const letterOfOperation = ConditionSchema.parse({
+      any: [
+        { fact: 'project.change_of_use', op: 'eq', value: true },
+        { fact: 'project.childcare_or_school', op: 'eq', value: true },
+      ],
+    });
+    // No change of use, childcare unanswered: unknown, never "not required".
+    expect(evaluateCondition(letterOfOperation, new Map([['project.change_of_use', confirmed(false)]])).value).toBe('unknown');
+    expect(
+      evaluateCondition(letterOfOperation, new Map([['project.change_of_use', confirmed(false)], ['project.childcare_or_school', confirmed(true)]])).value
+    ).toBe('true');
   });
 
   it('every key is usable in a rule-set condition with its unit', () => {
