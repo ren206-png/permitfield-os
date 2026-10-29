@@ -459,3 +459,11 @@ export function isSourceRegistryEnabled(): boolean {
 export function isCopilotEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_COPILOT');
 }
+
+// Gate 6.6: permit lifecycle evidence. Gates the "Permit lifecycle" panel on
+// the application page (status evidence, conditions, inspections,
+// submission packages) and every action in its lifecycle-actions.ts. Off:
+// the panel is not rendered and the actions refuse. Default OFF.
+export function isPermitLifecycleEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_PERMIT_LIFECYCLE');
+}
