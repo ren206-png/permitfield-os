@@ -32,7 +32,12 @@ export const AiTaskKindSchema = z.enum([
 export type AiTaskKind = z.infer<typeof AiTaskKindSchema>;
 
 // Kept in sync with `ai_provider` (20260806000036).
-export const AiProviderSchema = z.enum(['anthropic', 'gemini', 'voyage']);
+// The database enum ai_provider (20260806000036) also has 'voyage', from a
+// planned embeddings provider that D4 (GATE_6_STATUS.md) set aside: vector
+// retrieval is out of scope, nothing writes 'voyage', and Postgres cannot
+// drop an enum value. It is left out here so no new row can use it
+// (Gate 6.7, finding O8).
+export const AiProviderSchema = z.enum(['anthropic', 'gemini']);
 export type AiProvider = z.infer<typeof AiProviderSchema>;
 
 // Kept in sync with `ai_job_status` (20260806000036). Terminal states only

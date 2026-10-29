@@ -1,6 +1,7 @@
 import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import { request } from 'node:https';
 import type { IncomingMessage } from 'node:http';
+import { robotsVerdict } from './robots';
 import { isPublicIpAddress, validateSourceUrl } from './url-guard';
 
 // Gate 6.3: fetches one registered source for a check (master prompt §7,
@@ -19,6 +20,8 @@ export const FETCH_TIMEOUT_MS = 20_000;
 export const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 export const MAX_REDIRECTS = 3;
 export const SOURCE_CHECK_USER_AGENT = 'PermitFieldOS-SourceCheck/1.0 (+https://www.permitfieldos.com)';
+export const ROBOTS_MAX_BYTES = 512 * 1024;
+export const ROBOTS_TIMEOUT_MS = 5_000;
 
 export type FetchSourceResult =
   | {
@@ -38,6 +41,32 @@ export interface FetchSourceOptions {
   lastModified?: string | null;
   timeoutMs?: number;
   maxBytes?: number;
+  // Gate 6.7: consult robots.txt before fetching (default true).
+  respectRobots?: boolean;
+}
+
+// Reads https://<host>/robots.txt with the same guard (public addresses
+// only, https only, size and time caps). Redirects are not followed: a
+// redirected robots.txt is treated as unavailable, i.e. not fetched now.
+async function readRobots(origin: URL): Promise<{ status: number | null; body: string | null }> {
+  const robotsUrl = new URL('/robots.txt', origin);
+  const guard = validateSourceUrl(robotsUrl.toString());
+  if (!guard.ok) return { status: null, body: null };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ROBOTS_TIMEOUT_MS);
+  try {
+    const { response } = await requestOnce(guard.url, { 'user-agent': SOURCE_CHECK_USER_AGENT, accept: 'text/plain', 'accept-encoding': 'identity' }, controller.signal);
+    const status = response.statusCode ?? 0;
+    if (status < 200 || status >= 300) {
+      response.resume();
+      return { status, body: null };
+    }
+    return { status, body: (await readBody(response, ROBOTS_MAX_BYTES)).toString('utf8') };
+  } catch {
+    return { status: null, body: null };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 class BlockedAddressError extends Error {
@@ -99,10 +128,23 @@ export async function fetchSource(rawUrl: string, options: FetchSourceOptions = 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let current = rawUrl;
+  const robotsChecked = new Set<string>();
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const guard = validateSourceUrl(current);
       if (!guard.ok) return { kind: 'blocked', code: guard.code, message: guard.message, finalUrl: current };
+
+      if (options.respectRobots !== false && !robotsChecked.has(guard.url.origin)) {
+        robotsChecked.add(guard.url.origin);
+        const robots = await readRobots(guard.url);
+        const verdict = robotsVerdict(robots.status, robots.body, `${guard.url.pathname}${guard.url.search}`);
+        if (verdict === 'disallowed') {
+          return { kind: 'blocked', code: 'robots_disallowed', message: "The site's robots.txt asks automated tools not to fetch this page.", finalUrl: current };
+        }
+        if (verdict === 'unavailable') {
+          return { kind: 'failed', code: 'robots_unavailable', message: "The site's robots.txt could not be read; not fetched this time.", finalUrl: current };
+        }
+      }
 
       const headers: Record<string, string> = {
         'user-agent': SOURCE_CHECK_USER_AGENT,

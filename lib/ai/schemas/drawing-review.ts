@@ -54,7 +54,7 @@ export const DrawingFindingSchema = z
     // dynamic, per-call citation check as AuditFindingSchema's own
     // code_chunk_id field (Zod alone can only check "is this a UUID or
     // null," not "was this ID one we actually showed the model").
-    code_chunk_id: z.string().uuid().nullable(),
+    code_chunk_id: z.guid().nullable(),
     // 1-indexed page within the application_document being reviewed,
     // matching drawing_findings.source_page's own CHECK
     // (source_page is null or source_page >= 1).
@@ -89,7 +89,7 @@ export const DrawingReviewResponseSchema = z.object({
       severity: FindingSeveritySchema,
       issue: z.string().min(1),
       action_required: z.string().min(1),
-      code_chunk_id: z.string().uuid().nullable(),
+      code_chunk_id: z.guid().nullable(),
       source_page: z.number().int().min(1).nullable(),
       source_region: SourceRegionSchema.nullable(),
       confidence: z.number().min(0).max(1),

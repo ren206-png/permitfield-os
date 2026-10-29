@@ -65,7 +65,7 @@ function optionalText(schema: z.ZodString = z.string()) {
 function optionalUuid() {
   return z.preprocess(
     (val) => (typeof val === 'string' && val.trim().length === 0 ? undefined : val),
-    z.string().uuid('Must be a valid id.').optional()
+    z.guid('Must be a valid id.').optional()
   );
 }
 

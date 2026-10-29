@@ -35,7 +35,7 @@ export const AuditFindingSchema = z
     // alone can only check "is this a UUID or null," not "was this ID one we
     // actually showed the model," which is the dynamic, per-call half of the
     // citation check (same pattern as extraction's findInvalidSourceCitations).
-    code_chunk_id: z.string().uuid().nullable(),
+    code_chunk_id: z.guid().nullable(),
     confidence: z.number().min(0).max(1),
   })
   .refine((finding) => finding.kind === 'missing_document' || finding.code_chunk_id !== null, {
@@ -60,7 +60,7 @@ export const AuditResponseSchema = z.object({
       severity: FindingSeveritySchema,
       issue: z.string().min(1),
       action_required: z.string().min(1),
-      code_chunk_id: z.string().uuid().nullable(),
+      code_chunk_id: z.guid().nullable(),
       confidence: z.number().min(0).max(1),
     })
   ),

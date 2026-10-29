@@ -29,14 +29,28 @@ const PLACEHOLDER_OUTPUT_USD_PER_MILLION_TOKENS = 15;
  * value on the same ai_token_ledger row remain the full-precision source of
  * truth regardless of which rounding rule this function uses.
  */
-export function estimateCostUsdCents(inputTokenCount: number, outputTokenCount: number): number {
+// Gate 6.7: published per-million-token rates for the models PermitField
+// calls (Anthropic price list, 2026-10). A model not listed here falls back
+// to the placeholder rates above, which are higher than any listed model,
+// so an unknown model is over- rather than under-counted against the caps.
+const MODEL_USD_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-5-5': { input: 2, output: 10 },
+  'claude-sonnet-5': { input: 2, output: 10 },
+  'claude-haiku-5-5': { input: 0.1, output: 0.5 },
+};
+
+export function estimateCostUsdCents(inputTokenCount: number, outputTokenCount: number, modelId?: string): number {
   if (inputTokenCount < 0 || outputTokenCount < 0) {
     throw new Error(
       `estimateCostUsdCents requires nonnegative token counts, got input=${inputTokenCount}, output=${outputTokenCount}`
     );
   }
 
-  const inputUsd = (inputTokenCount / 1_000_000) * PLACEHOLDER_INPUT_USD_PER_MILLION_TOKENS;
-  const outputUsd = (outputTokenCount / 1_000_000) * PLACEHOLDER_OUTPUT_USD_PER_MILLION_TOKENS;
+  const rates = (modelId && MODEL_USD_PER_MILLION_TOKENS[modelId]) || {
+    input: PLACEHOLDER_INPUT_USD_PER_MILLION_TOKENS,
+    output: PLACEHOLDER_OUTPUT_USD_PER_MILLION_TOKENS,
+  };
+  const inputUsd = (inputTokenCount / 1_000_000) * rates.input;
+  const outputUsd = (outputTokenCount / 1_000_000) * rates.output;
   return Math.round((inputUsd + outputUsd) * 100);
 }
