@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { isSourceRegistryEnabled } from '@/lib/flags';
 import { diffRuleSet, type SnapshotLike } from '@/lib/sources/rule-set-publish';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { FeeScheduleForm } from '../fee-schedule-form';
 import { RuleSetForm } from '../rule-set-form';
 
 // One permit type's rule set (Gate 6.3): what changed in the verified
@@ -20,7 +21,7 @@ export default async function PermitTypeRuleSetPage({ params }: { params: Promis
 
   const supabase = createServiceClient();
   const [{ data: permitType }, requirements, current] = await Promise.all([
-    supabase.from('permit_types').select('id, title, jurisdictions ( municipality, province_code )').eq('id', permitTypeId).maybeSingle(),
+    supabase.from('permit_types').select('id, title, jurisdiction_id, jurisdictions ( municipality, province_code )').eq('id', permitTypeId).maybeSingle(),
     supabase
       .from('permit_requirements')
       .select('id, title, description, applies_when, display_order')
@@ -55,6 +56,31 @@ export default async function PermitTypeRuleSetPage({ params }: { params: Promis
   );
   const changes = current.data ? diffRuleSet(currentSnapshots, liveSnapshots) : [];
   const j = Array.isArray(permitType.jurisdictions) ? permitType.jurisdictions[0] : permitType.jurisdictions;
+
+  // Fee schedule (6.5): published source revisions in this municipality and
+  // the current fee schedule version.
+  const [{ data: revisionRows }, { data: currentFee }] = await Promise.all([
+    supabase
+      .from('source_revisions')
+      .select('id, title, revision_number, issuing_body, jurisdiction_sources!inner ( jurisdiction_id, url ), source_revision_reviews ( status, reviewed_at )')
+      .eq('jurisdiction_sources.jurisdiction_id', permitType.jurisdiction_id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('fee_schedule_versions')
+      .select('version, currency, rounding_rule, effective_from, effective_to, parameters, published_at')
+      .eq('permit_type_id', permitTypeId)
+      .is('authority_id', null)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const publishedRevisions = (revisionRows ?? [])
+    .filter((r) => {
+      const reviews = (r.source_revision_reviews ?? []) as { status: string; reviewed_at: string }[];
+      const latest = [...reviews].sort((a, b) => b.reviewed_at.localeCompare(a.reviewed_at) || (a.status === 'verified' ? 1 : -1))[0];
+      return latest?.status === 'verified';
+    })
+    .map((r) => ({ id: r.id as string, label: `${r.title} (rev ${r.revision_number}, ${r.issuing_body})` }));
 
   return (
     <div className="space-y-6">
@@ -116,6 +142,20 @@ export default async function PermitTypeRuleSetPage({ params }: { params: Promis
           })}
         />
       )}
+
+      <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="text-base font-semibold text-zinc-900">Fee schedule</h2>
+        <p className="text-sm text-zinc-600">
+          {currentFee
+            ? `Current: version ${currentFee.version}, ${currentFee.currency}, effective ${currentFee.effective_from} to ${currentFee.effective_to ?? 'open'}.`
+            : 'No fee schedule published: the copilot reports fees for this permit type as unavailable (never zero).'}
+        </p>
+        <FeeScheduleForm
+          permitTypeId={permitTypeId}
+          revisions={publishedRevisions}
+          current={currentFee ? { parameters: currentFee.parameters, currency: currentFee.currency, roundingRule: currentFee.rounding_rule } : null}
+        />
+      </section>
     </div>
   );
 }

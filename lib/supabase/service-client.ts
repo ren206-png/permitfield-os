@@ -105,6 +105,8 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // and tool-call ledger rows with the service client, taking org_id,
 // project_id and user_id from that scope, never from the browser or the
 // model. The copilot's tools themselves run on the user's session only.
+// Gate 6.5 adds fee_estimates (estimate snapshots, not user-writable) to
+// the same exception, under the same rule.
 export function createServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
