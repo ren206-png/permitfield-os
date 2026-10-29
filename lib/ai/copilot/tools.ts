@@ -337,10 +337,10 @@ export const assessPackageReadiness = tool({
 export const getPermitStatus = tool({
   name: 'get_permit_status',
   description:
-    "This application's status as recorded in PermitField, with its history and who changed it when. Not a live check with the city: it is only as current as the last update someone recorded.",
+    "This application's status as recorded in PermitField, with its history, the authority's own status wording and where each came from (authority letter, staff report, portal connection, AI suggestion -- only the first two can change the status), permit conditions and whether each is met, inspections, and the latest submission package. Not a live check with the city.",
   input: NoInput,
   async run({ supabase, scope }) {
-    const [{ data: application }, { data: history }] = await Promise.all([
+    const [{ data: application }, { data: history }, { data: observations }, { data: conditions }, { data: inspections }, { data: pkg }] = await Promise.all([
       supabase.from('permit_applications').select('status, permit_status, updated_at').eq('id', scope.applicationId).maybeSingle(),
       supabase
         .from('application_status_history')
@@ -348,8 +348,26 @@ export const getPermitStatus = tool({
         .eq('application_id', scope.applicationId)
         .order('created_at', { ascending: false })
         .limit(20),
+      supabase
+        .from('permit_status_observations')
+        .select('source, external_status, observed_status, observed_at, outcome')
+        .eq('application_id', scope.applicationId)
+        .order('observed_at', { ascending: false })
+        .limit(20),
+      supabase.from('permit_conditions').select('id, condition_text, category').eq('application_id', scope.applicationId),
+      supabase.from('inspection_records').select('inspection_type, outcome, occurred_on, provenance').eq('application_id', scope.applicationId).order('occurred_on', { ascending: false }).limit(20),
+      supabase.from('submission_packages').select('id, version, manifest, created_at').eq('application_id', scope.applicationId).order('version', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (!application) return { ok: false, error: 'Application not found.' };
+    const conditionIds = (conditions ?? []).map((c) => c.id);
+    const [{ data: events }, { data: approval }] = await Promise.all([
+      conditionIds.length
+        ? supabase.from('permit_condition_events').select('condition_id, status, recorded_at').in('condition_id', conditionIds).order('recorded_at', { ascending: false })
+        : Promise.resolve({ data: [] as { condition_id: string; status: string; recorded_at: string }[] }),
+      pkg ? supabase.from('submission_package_approvals').select('approved_at').eq('package_id', pkg.id).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    const latest = new Map<string, string>();
+    for (const e of events ?? []) if (!latest.has(e.condition_id)) latest.set(e.condition_id, e.status);
     return {
       ok: true,
       data: {
@@ -357,7 +375,18 @@ export const getPermitStatus = tool({
         permit_status: application.permit_status,
         last_updated: application.updated_at,
         history: history ?? [],
-        note: 'Recorded in PermitField; not confirmed live with the authority.',
+        authority_status_evidence: observations ?? [],
+        conditions: (conditions ?? []).map((c) => ({ condition: c.condition_text, category: c.category, status: latest.get(c.id) ?? 'open' })),
+        inspections: inspections ?? [],
+        latest_package: pkg
+          ? {
+              version: pkg.version,
+              prepared_at: pkg.created_at,
+              open_items: (pkg.manifest as { unresolved?: string[] }).unresolved ?? [],
+              internally_approved: Boolean(approval),
+            }
+          : null,
+        note: 'Recorded in PermitField; not confirmed live with the authority. An internal package approval is not a government decision.',
       },
     };
   },

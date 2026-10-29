@@ -503,3 +503,70 @@ The applicability tool also needs `PERMITFIELD_FF_COPILOT_RULES` (6.2). Without 
 | Model-trusted scope | Drafting reads only the scope's application; correction evidence is filtered server-side to this application's documents |
 | Dead helper | `loadFeeSchedule`/`estimateApplicationFees`: used by the tool and the Recalculate action. `generateDraft`: the Draft with AI action |
 | Flag that gates nothing | Check sites listed under **Flags** |
+
+**After merge (2026-10-29):** #93 squash-merged as `5670aa0` (branch kept). Migration 097 is deployed. A read-only check shows `application_draft_versions` and `publish_fee_schedule_version` exist.
+
+---
+
+## 6.6 — Permit lifecycle: status evidence, conditions, inspections, packages, connector contract
+
+**Approval:** `APPROVED: PHASE 6.6` (Ren, 2026-10-29), with "merge 93". Permit-to-work is out of scope (Q3).
+
+**Flag:** `PERMITFIELD_FF_PERMIT_LIFECYCLE` (new, default off). Check sites:
+- the "Permit lifecycle" panel on the application page (`isPermitLifecycleEnabled()` in `page.tsx`);
+- every action in `lifecycle-actions.ts` (through `context()`).
+
+The copilot's `get_permit_status` tool reads the new tables under `PERMITFIELD_FF_COPILOT`.
+
+### What changed
+
+| File | Purpose |
+|---|---|
+| `supabase/migrations/20260806000098_copilot_lifecycle.sql` | **`permit_status_observations`** (written only through functions): the authority's own wording, its mapped status, source (`authority_correspondence` / `user_reported` / `connector` / `ai_suggestion`), when it was true, and the outcome (`applied` / `already_current` / `stale` / `not_applied_invalid` / `recorded_only`).<br>**`record_status_observation`**: applies staff-recorded evidence through the existing `transition_permit_status` (same role tiers, same request-key idempotency); an observation dated before the newest known status is kept as `stale` and never changes the status.<br>**`record_connector_status_event`** (service_role): deduplicates on (connector, event id); out-of-order events are `stale`; never applied.<br>**Other tables:** `permit_conditions` plus `permit_condition_events` (satisfied / waived needs a note / reopened); `inspection_records` (a result needs an issued permit: trigger); `submission_packages` (manifest + sha256, versioned) plus `submission_package_approvals` (once; never touches `permit_status`).<br>All append-only. Rollback SQL is in the header. |
+| `lib/connectors/contract.ts` | The **connector contract** (interfaces only; nothing is implemented or enabled). The `reduceSubmissionAttempt` state machine runs prepared → attempted → acknowledged → authority_accepted / authority_rejected.<br>• A timeout is `unknown`, never failed, and no retry is allowed until reconciled.<br>• A retry must re-send the same package hash with the same key.<br>• No receipt, no acknowledged.<br>• Duplicate, out-of-order and backwards callbacks are ignored. |
+| `lib/packages/manifest.ts` | Package manifest: application, filled forms (with empty required fields), attachments with **sha256** and revision, confirmed-fact snapshot, checklist snapshot, rule-check counts, fee estimate, and every unresolved item. Status is always `draft`. The hash is over canonical JSON (stable for the same content, changes when a file changes). |
+| `app/(app)/applications/[id]/lifecycle-*` | Panel and actions: record a status in the authority's words (the outcome is explained); conditions (add, satisfied / waived / reopen); inspections; prepare package, approve internally, download the JSON (`-draft` / `-approved`, with "not a government decision"). Every write uses the caller's session. |
+| `lib/ai/copilot/tools.ts` | `get_permit_status` adds authority status evidence (with source and outcome), conditions with current status, inspections, and the latest package (open items, internally approved). |
+
+### Requirement → code → verification
+
+| Requirement | Verification (artefact) |
+|---|---|
+| N.6 exit: state-machine tests incl. offline-override rejection | `copilot_lifecycle.test.sql`, 20 PASS:<br>• a member can't record an issued permit (role tier); the owner's issuance is applied with its history row; a replay is idempotent;<br>• **an older-dated update (`expired`, a legal next step from `issued`) is kept as `stale` and doesn't change the status**;<br>• already-current, illegal (`issued → submitted`) and unmapped wording are recorded, not applied;<br>• an AI suggestion is refused on the staff path; there are no direct inserts;<br>• connector events are deduplicated, out-of-order ones are stale, none applies; the table itself refuses an applied connector/AI row;<br>• append-only; tenant isolation (B can't read or write A, including conditions under its own org id).<br>Mutation: with the date rule removed, the same test fails ("older update changed the status (outcome applied)"). |
+| §14 connector rules | `lib/connectors/contract.test.ts`, 6 tests (happy path, timeout → unknown → reconcile, same-package retry, duplicate/out-of-order/backwards callbacks, receipt required, bad hash refused). |
+| §15 issuance ≠ closure; inspections | SQL: a result before issuance is refused, a scheduled inspection is fine, a result on an issued permit is recorded. |
+| §15 conditions | SQL: a waiver needs a note; a satisfied event is recorded. |
+| §14 manifest; internal approval ≠ government status | `lib/packages/manifest.test.ts` (4: hashes, stable hash, open items listed). SQL: approval leaves `permit_status` unchanged; approve once. Browser: approval kept `intake`. |
+
+### Test evidence (local, 2026-10-29)
+
+- **Unit:** 79 files / 834 tests (6.5: 77 / 824).
+- **SQL:** after `supabase db reset`, **53/53 files, 602 PASS** (+20).
+  - The first run failed `service_role_truncate_append_only.test.sql`: an FK from `permit_status_observations.applied_history_id` to `application_status_history` blocked that test's TRUNCATE control.
+  - I removed the FK (documented in the migration) rather than weaken an existing security test.
+- **Live:** 45 passed, 1 skipped.
+- **Checks:** tsc and lint clean.
+- **Browser (local, flags on, seed org A owner, app at `intake`):**
+  - recording "Permit issued -- conditions apply" → listed as **Not applied**, with the explanation;
+  - Prepare package → v1 with 3 open items (no form, check not run, fee not estimated);
+  - Approve internally → approved, and `permit_status` still `intake` (database check).
+
+### Not built
+
+| Item | Owner |
+|---|---|
+| Any real submission or status connector | None is authorized; only the contract exists (§14: "only where a documented authorized integration exists") |
+| Deadlines with a stated basis (statutory / estimated / internal), jurisdiction calendars (§15) | Not built: the existing permit expiry date and reminders remain the only deadline. Owner 6.7 or on request |
+| Evidence documents attached to observations, conditions or inspections | Columns exist (`evidence_document_id`); the UI doesn't offer a picker yet |
+| Package export as PDF / zip of files | JSON manifest only |
+| Permit-to-work | Dropped from Gate 6 (Q3) |
+
+### §19 adversarial checks
+
+| Check | Result |
+|---|---|
+| Vacuous test | Controls on every isolation check; the stale rule is mutation-checked |
+| Model-trusted scope | The copilot tool is read-only. Status writes are staff-only through the function with role tiers; AI and connectors can't apply |
+| Silent coercion | Unmapped wording is stored as `recorded_only` with the original text, never forced into a status |
+| Dead helper | `reduceSubmissionAttempt` / `SubmissionConnector`: contract only, no caller (by design: no authorized connector). `record_connector_status_event`: no caller yet, same reason |
+| Flag that gates nothing | Check sites under **Flag** |
