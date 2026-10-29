@@ -61,7 +61,10 @@ const clientPortalServiceClientRestriction = {
 // exemption above.
 const geminiClientRestriction = {
   files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-  ignores: ["lib/ai/router.ts", "lib/ai/gemini/client.test.ts"],
+  // lib/ai/classify-document.ts: the AI-1.3 classification job (Inngest,
+  // server-only) has imported the client since it shipped; this exemption
+  // went unnoticed while the rule was not being applied (see below).
+  ignores: ["lib/ai/router.ts", "lib/ai/gemini/client.test.ts", "lib/ai/classify-document.ts"],
   rules: {
     "no-restricted-imports": [
       "error",
@@ -177,13 +180,68 @@ const resendClientRestriction = {
   },
 };
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
+// Gate 6.4 (D8): the staff copilot must have no import path to the client
+// portal -- neither the bridge module nor its service client -- so nothing
+// an external client can reach is ever wired into a copilot tool.
+const COPILOT_FILES = ["lib/ai/copilot/**", "app/(app)/applications/[[]id]/copilot/**"];
+const copilotPortalRestriction = {
+  patterns: [
+    {
+      group: ["**/bridge/client-portal", "**/bridge/client-portal.ts"],
+      message:
+        "The staff copilot (lib/ai/copilot/**, app/(app)/applications/[id]/copilot/**) may not import the client-portal bridge -- GATE_6_STATUS.md D8: the copilot is staff-only.",
+    },
+  ],
+};
+
+// Combining the restrictions above. ESLint flat config does NOT merge rule
+// options: when several config objects set "no-restricted-imports" for the
+// same file, the last one replaces the others. Listed one after another,
+// only stripeClientRestriction was ever enforced -- the client-portal,
+// Gemini and Resend boundaries were silently dead (found in Gate 6.4,
+// GATE_6_STATUS.md F7). So: every file gets ALL restrictions merged into one
+// rule; each exempted file gets every restriction except the ones that
+// exempt it; copilot files additionally get the portal restriction.
+const globalImportRestrictions = [
   clientPortalServiceClientRestriction,
   geminiClientRestriction,
   resendClientRestriction,
   stripeClientRestriction,
+];
+const restrictionOptions = (restriction) => restriction.rules["no-restricted-imports"][1];
+const mergedRule = (optionsList) => [
+  "error",
+  {
+    paths: optionsList.flatMap((options) => options.paths ?? []),
+    patterns: optionsList.flatMap((options) => options.patterns ?? []),
+  },
+];
+const exemptFiles = [...new Set(globalImportRestrictions.flatMap((r) => r.ignores))];
+const importRestrictions = [
+  {
+    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+    rules: { "no-restricted-imports": mergedRule(globalImportRestrictions.map(restrictionOptions)) },
+  },
+  ...exemptFiles.map((file) => ({
+    files: [file],
+    rules: {
+      "no-restricted-imports": mergedRule(
+        globalImportRestrictions.filter((r) => !r.ignores.includes(file)).map(restrictionOptions)
+      ),
+    },
+  })),
+  {
+    files: COPILOT_FILES,
+    rules: {
+      "no-restricted-imports": mergedRule([...globalImportRestrictions.map(restrictionOptions), copilotPortalRestriction]),
+    },
+  },
+];
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  ...importRestrictions,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

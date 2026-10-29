@@ -447,3 +447,13 @@ export function isCopilotRulesEnabled(): boolean {
 export function isSourceRegistryEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_SOURCE_REGISTRY');
 }
+
+// Gate 6.4: the staff copilot (lib/ai/copilot/). Gates the copilot page
+// under /applications/[id]/copilot, its link on the application page, and
+// every action in its actions.ts (questions and fact review). Off: the page
+// 404s and no model is called. The copilot's applicability tool also needs
+// PERMITFIELD_FF_COPILOT_RULES; without it, the tool reports it is off.
+// Default OFF.
+export function isCopilotEnabled(): boolean {
+  return isEnabled('PERMITFIELD_FF_COPILOT');
+}

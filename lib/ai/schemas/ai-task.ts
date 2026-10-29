@@ -25,6 +25,9 @@ export const AiTaskKindSchema = z.enum([
   'assistant',
   'classification',
   'checklist_generation',
+  // Gate 6.4 (20260806000096): the staff copilot. Not routed through
+  // lib/ai/router.ts (Gemini-only); see lib/ai/copilot/provider.ts.
+  'copilot',
 ]);
 export type AiTaskKind = z.infer<typeof AiTaskKindSchema>;
 
@@ -47,7 +50,7 @@ export type AiHumanReviewStatus = z.infer<typeof AiHumanReviewStatusSchema>;
 // not a full row.
 export const AiJobInsertSchema = z
   .object({
-    org_id: z.string().uuid(),
+    org_id: z.guid(),
     kind: AiTaskKindSchema,
     provider: AiProviderSchema,
     model_id: z.string().min(1),
@@ -56,8 +59,8 @@ export const AiJobInsertSchema = z
     output_token_count: z.number().int().nonnegative(),
     error_message: z.string().min(1).nullable(),
     related_entity_type: z.string().min(1).nullable(),
-    related_entity_id: z.string().uuid().nullable(),
-    requested_by_user_id: z.string().uuid().nullable(),
+    related_entity_id: z.guid().nullable(),
+    requested_by_user_id: z.guid().nullable(),
   })
   // Mirrors the table's `check ((status = 'failed') = (error_message is not
   // null))` constraint -- a caller that gets this wrong should see a Zod
@@ -71,8 +74,8 @@ export type AiJobInsert = z.infer<typeof AiJobInsertSchema>;
 
 // Mirrors ai_token_ledger's column shape.
 export const AiTokenLedgerInsertSchema = z.object({
-  org_id: z.string().uuid(),
-  job_id: z.string().uuid(),
+  org_id: z.guid(),
+  job_id: z.guid(),
   provider: AiProviderSchema,
   model_id: z.string().min(1),
   input_token_count: z.number().int().nonnegative(),
@@ -87,7 +90,7 @@ export type AiTokenLedgerInsert = z.infer<typeof AiTokenLedgerInsertSchema>;
 // notes/decided_at are set at decision time via UPDATE, not at insert --
 // see the migration's restricted-update trigger).
 export const AiHumanReviewInsertSchema = z.object({
-  org_id: z.string().uuid(),
-  job_id: z.string().uuid(),
+  org_id: z.guid(),
+  job_id: z.guid(),
 });
 export type AiHumanReviewInsert = z.infer<typeof AiHumanReviewInsertSchema>;

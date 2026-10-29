@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { isCopilotRulesEnabled } from '@/lib/flags';
 import { createClient } from '@/lib/supabase/server';
@@ -23,13 +24,24 @@ export type EvaluateApplicationResult =
 
 export async function evaluateApplicationRequirements(applicationId: string): Promise<EvaluateApplicationResult> {
   if (!isCopilotRulesEnabled()) return { ok: false, error: 'disabled' };
-  if (!z.guid().safeParse(applicationId).success) return { ok: false, error: 'not_found' };
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: 'not_signed_in' };
+  return evaluateApplicationRequirementsWith(supabase, user.id, applicationId);
+}
+
+// Same evaluation with the caller's own session client passed in (the 6.4
+// copilot tool). `supabase` must be a user-session client: every read below
+// relies on its RLS, and `userId` must be that session's user.
+export async function evaluateApplicationRequirementsWith(
+  supabase: SupabaseClient,
+  userId: string,
+  applicationId: string
+): Promise<EvaluateApplicationResult> {
+  if (!isCopilotRulesEnabled()) return { ok: false, error: 'disabled' };
+  if (!z.guid().safeParse(applicationId).success) return { ok: false, error: 'not_found' };
 
   const { data: application, error: applicationError } = await supabase
     .from('permit_applications')
@@ -103,7 +115,7 @@ export async function evaluateApplicationRequirements(applicationId: string): Pr
       warnings: o.warnings,
       ...(evaluation.coverage === 'rule_set_invalid' ? { evaluated_rule_set_version_id: evaluation.ruleSetVersionId } : {}),
     },
-    evaluated_by: user.id,
+    evaluated_by: userId,
     evaluated_at: evaluatedAt,
   }));
 

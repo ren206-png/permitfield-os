@@ -23,6 +23,10 @@ describe('routeAiTask()', () => {
     });
   });
 
+  it('routes copilot to Anthropic using the configured copilot model', () => {
+    expect(routeAiTask('copilot')).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-5-5' });
+  });
+
   it('routes checklist_generation to Gemini', () => {
     const route = routeAiTask('checklist_generation');
     expect(route.provider).toBe('gemini');

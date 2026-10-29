@@ -28,6 +28,9 @@ export function resolveFacts(rows: readonly ProjectFactRow[]): ResolvedFacts {
   const supersededByConfirmed = new Set(
     rows.filter((r) => r.state === 'confirmed' && r.supersedes_fact_id).map((r) => r.supersedes_fact_id as string)
   );
+  // A proposal that any later row points at has been decided (confirmed or
+  // rejected) and is no longer waiting for review.
+  const decided = new Set(rows.filter((r) => r.supersedes_fact_id).map((r) => r.supersedes_fact_id as string));
   const byKey = new Map<string, ProjectFactRow[]>();
   for (const row of rows) {
     const list = byKey.get(row.fact_key) ?? [];
@@ -44,7 +47,7 @@ export function resolveFacts(rows: readonly ProjectFactRow[]): ResolvedFacts {
     const confirmed = list
       .filter((r) => r.state === 'confirmed' && !supersededByConfirmed.has(r.id))
       .sort(newestFirst)[0];
-    const newestProposal = list.filter((r) => r.state === 'proposed').sort(newestFirst)[0];
+    const newestProposal = list.filter((r) => r.state === 'proposed' && !decided.has(r.id)).sort(newestFirst)[0];
 
     if (confirmed) {
       facts.set(key, { status: 'confirmed', factId: confirmed.id, value: confirmed.value, unit: confirmed.unit });

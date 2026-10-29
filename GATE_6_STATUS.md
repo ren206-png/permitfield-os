@@ -333,3 +333,104 @@ Each migration's header carries its rollback SQL (`drop table` / `drop type` in 
   - Launch configs and the nightly health task were repointed.
   - The old `~/Desktop/Renco Technologies/permitfield-os` is left in place, untouched and stale, until Ren says whether to delete it.
   - It had 4,982 iCloud cloud-only placeholder files (mostly `node_modules`/`.next`), which is why this was a clone rather than a move.
+
+**Production follow-up (2026-10-28, after #91 merged and deployed):**
+- Read-only checks: `platform_admins` exists, and `is_platform_admin()` reads it.
+- One row was then inserted for Ren's active account (the org owner, last sign-in 2026-10-17); it is still `owner` of its org.
+- A rolled-back simulation of each session: Ren's account is a platform admin (`true`); the other org's owner is not (`false`).
+- Correction to "grants unchanged (authenticated yes, anon no)": that holds locally. In production `anon` also has EXECUTE on `is_platform_admin()`, which predates 095 (`create or replace` keeps grants). It is harmless, because an anonymous caller has no `auth.uid()` and always gets `false`. It is probably one of the 8 `anon_security_definer_function_executable` items in the nightly advisor baseline.
+
+---
+
+## 6.4 — Staff copilot: provider, tools, orchestrator, UI, fact review
+
+**Approval:** `APPROVED: PHASE 6.4` (Ren, 2026-10-28), together with "merge 90, then 91".
+
+**Flag:** `PERMITFIELD_FF_COPILOT` (default off, set in no environment). Check sites:
+- `isCopilotEnabled()` at the top of `app/(app)/applications/[id]/copilot/page.tsx`;
+- in `sessionScope()`, which every action in `copilot/actions.ts` goes through;
+- the "Ask the copilot" link on the application page.
+
+The applicability tool also needs `PERMITFIELD_FF_COPILOT_RULES` (6.2). Without it, the tool reports that evaluation is off.
+
+### What changed
+
+| File | Purpose |
+|---|---|
+| `lib/ai/copilot/provider.ts` | Anthropic adapter behind `CopilotProvider`. The model comes from `routeAiTask('copilot')` → `claude-sonnet-5-5` (Q1). Adaptive thinking, effort `medium`, server-side refusal fallback (`fallbacks: "default"`), `tool_choice: auto` (this model rejects forced tool use), a cache breakpoint on the fixed system prompt, a 60 s per-call timeout plus the SDK's 2 retries. Every SDK failure becomes a typed `ProviderError`. |
+| `lib/ai/copilot/tools.ts` | **7 tools** (`resolve_project_authorities`, `get_permit_requirements`, `evaluate_permit_applicability`, `search_permit_sources`, `explain_requirement`, `assess_package_readiness`, `get_permit_status`).<br>• Strict Zod inputs; none accepts an org, project or application id.<br>• Each runs on the user's own session client.<br>• `EvidenceRegistry` keeps evidence ids unique within a question.<br>• Deferred to 6.5 per the plan: `propose_application_fields`, `estimate_permit_fees`, `draft_correction_response`. |
+| `lib/ai/copilot/orchestrator.ts` | The bounded loop. Limits are enforced by code (6 model calls, 12 tool calls, 3 invalid calls of one tool, 120 s deadline, 24k-character tool results); each limit ends the turn with a stated reason.<br>• The answer arrives through a `give_answer` pseudo-tool; its citations are validated against this question's evidence (`validateCitations`).<br>• A cut-off (`max_tokens`) reply never runs its tool calls; a refusal and a provider error end the turn without an answer.<br>• The assistant's content goes back unchanged (thinking blocks included).<br>• Strict-mode-unsupported JSON Schema keywords are stripped from what the API sees; Zod still enforces them. |
+| `lib/ai/copilot/scope.ts` | `resolveCopilotScope`: the application, read with the user's session (RLS), gives org, project, permit type and jurisdiction. |
+| `lib/ai/copilot/prompt.ts` | A fixed system prompt. Tool output is data; unknown ≠ not required; contractor documents ≠ requirements; no approvals or compliance claims; ask instead of guessing a nearby city; answer through `give_answer` with exact quotes. |
+| `lib/ai/copilot/facts-from-extraction.ts` | The existing 6-field extraction proposes `project.floor_area` (m²) and `electrical.service_amps` (A) as **proposed** facts with document and page. Nothing is guessed from a null field. |
+| `lib/requirements/rules/fact-keys.ts` | 8 known fact keys with type and unit. Strict form parsing. |
+| `app/(app)/applications/[id]/copilot/*` | Page (facts panel and chat), actions (ask, propose from documents, confirm, reject, enter or correct a fact), client components. Cards under an answer render the **tools' own output** (counts, statuses, outcomes), not the model's wording. The conversation is held in the browser only; no transcript is stored. |
+| `supabase/migrations/20260806000096_copilot_task_kind.sql` | `ai_task_kind` + `'copilot'`. Unique partial index `project_facts_superseded_once`: a fact is decided or corrected once, which gives optimistic concurrency for fact review (production `project_facts` had 0 rows, read-only, 2026-10-28). |
+| `eslint.config.mjs` | **F7 fix** (below) plus the D8 copilot boundary: `lib/ai/copilot/**` and `app/(app)/applications/[id]/copilot/**` may not import the client-portal bridge or its service client. |
+| `lib/ai/router.ts`, `config.ts`, `schemas/ai-task.ts` | Copilot route and limits. AI ledger schemas `z.string().uuid()` → `z.guid()` (F6, found live). |
+| `lib/requirements/rules/run.ts`, `facts.ts` (6.2) | `evaluateApplicationRequirementsWith(supabase, userId, id)` for the tool. **Fix:** a proposal closed by a *rejection* was still reported "awaiting confirmation"; now any decision closes it (with a test). |
+| `lib/supabase/service-client.ts` | Exception 9: ledger writes (`ai_jobs`, `ai_token_ledger`, `copilot_tool_invocations`) with ids from the resolved scope. |
+| `.github/workflows/ci.yml` | `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the public local demo key) for the new live test. |
+
+### Requirement → code → verification
+
+| Requirement | Code | Verification (artefact) |
+|---|---|---|
+| N.4 exit: mocked provider tests | `orchestrator.test.ts` (17 tests, scripted provider) | Covers:<br>• tool → answer with a valid citation;<br>• fabricated, unretrieved and cross-item quotes dropped and reported;<br>• a forged `application_id` argument rejected without the tool running;<br>• 3 invalid calls stop; an unknown tool (`run_sql`) is an error, not a crash; a throwing tool is "failed";<br>• model-call, tool-call and deadline limits;<br>• refusal, `max_tokens` (no tool run), provider error;<br>• plain-text ending flagged uncited; hooks record every call; thinking blocks passed back unchanged;<br>• injected tool text only ever travels in a `tool_result`. |
+| N.4 exit: one live-provider test, separated | `provider.live.test.ts` (opt-in, `COPILOT_LIVE_PROVIDER=1`) | **Written, NOT yet run.** The local `.env.local` has an empty `ANTHROPIC_API_KEY`; I don't handle keys. Run it once after adding the key (command in the PR). |
+| N.4 exit: tool authz direct tests | `tools.live.test.ts`, real local Supabase, real signed-in sessions | 8/8 locally, twice in a row:<br>• org B can't resolve org A's application (control: A can);<br>• with a **forged scope** (A's ids, B's session), status, readiness and evaluate return nothing of A's, each against an A control;<br>• `explain_requirement` refuses another permit type's requirement;<br>• evaluate writes snapshots to A only for A (control: count rises) and nothing for B. |
+| §1.8 / §12 scope never from the model | No tool schema has an org, project, application or user property | Unit test over every tool schema, plus the forged-argument test. |
+| §12 strict tool contracts | `strict: true`, `additionalProperties: false` on every tool | Unit test. |
+| §13 human review before a fact is used | Proposals are `proposed`; only confirmed facts reach the engine | `facts.test.ts`, the 6.2 `facts.test.ts` fix, `copilot_facts_review.test.sql` (decided once; correction still works). |
+| §12 optimistic concurrency | `project_facts_superseded_once` | SQL: a second decision gets `unique_violation`; the ledger keeps exactly one. |
+| §12 no model-generated SQL, fetch, rule publication, signatures, payments | Tools are fixed, read-only or snapshot-only; no write tool exists | Code review plus the unknown-tool test. |
+| D8 portal boundary (lint) | `eslint.config.mjs` | Probe files in `lib/ai/copilot/` and `app/(app)/applications/[id]/copilot/` importing the bridge both fail lint ("The staff copilot … may not import the client-portal bridge"). |
+| Usage and cost accounting | Every model call → `ai_jobs` (kind `copilot`) + `ai_token_ledger`; every tool call → `copilot_tool_invocations`; per-user hourly and existing daily/monthly cost caps | Code review; an hourly model-call cap of 120. |
+
+### Test evidence (local, 2026-10-28)
+
+- **Unit:** 75 files / 802 tests (6.3: 73 / 778).
+- **SQL:** after `supabase db reset`, **51/51 files, 565 PASS** (6.3a: 50 / 560; +`copilot_facts_review.test.sql`, 5).
+- **Live:** `npm run test:live` with both stacks reset: **5 files, 45 passed, 1 skipped** (the opt-in provider test). This includes the 9 client-portal bridge tests that were failing locally as F3.
+- **Checks:** `tsc` and `npm run lint` clean.
+- **Browser (local, flags on, seed org A owner):**
+  - The copilot page renders, and the "Ask the copilot" link shows on the application page.
+  - Entering "Building is strata-titled: Yes" saved and listed it.
+  - A question with no API key configured shows "The copilot is not set up on this site yet (no AI service key)".
+  - At 375 px, no horizontal scroll.
+  - First attempt found the F6 ledger crash (fixed above).
+
+### Introduced, not yet wired / not built (§1.13)
+
+| Item | Owner |
+|---|---|
+| Live-provider test run | Ren adds `ANTHROPIC_API_KEY` to `~/Developer/permitfield-os/.env.local`, then the command in the PR |
+| `propose_application_fields`, `estimate_permit_fees`, `draft_correction_response` | 6.5 (per the gate plan) |
+| Streaming replies and a cancel button | Not built: one server action per question, with a "Working…" state. Owner 6.7 if wanted |
+| Drawing-review facts with page and region, contradiction detection, revisions invalidating facts (§13) | Not built. Only the extraction's floor area and service size are proposed. Owner 6.5/6.6 |
+| "Readiness extension" inherited from 6.2 | Partly: `assess_package_readiness` and `evaluate_permit_applicability` are both available to the copilot; the readiness *panel* does not show rule outcomes yet. Owner 6.5 |
+| Prompt-injection fixture against the real model | Unit-tested at the loop (injected text stays a `tool_result`), not against a live model. Owner 6.7 |
+
+### §19 adversarial checks
+
+| Check | Result |
+|---|---|
+| Vacuous test | Every live authz assertion has a control on the same tool; the snapshot test has a count-rises control |
+| Green badge, zero tests | Counts quoted from the runs above |
+| Dead helper | Listed above |
+| Flag that gates nothing | Check sites listed under **Flag** |
+| Model-trusted scope | Tools take no scope ids; forged-scope live tests; `explain_requirement` re-checks the permit type |
+| Silent coercion | `fact-keys.ts` refuses `1e3`, `true`, `12 m2` and similar. `HistorySchema`/question are bounded. No `.catch()` |
+| Float money | No fee tool in 6.4 |
+| Prompt injection via evidence | See the not-built table: loop-level only |
+| Portal reach | Lint boundary plus probes |
+| Squash merge | Per D9 |
+
+### New findings
+
+- **F7 — three of four import boundaries were never enforced (fixed here).**
+  - `eslint.config.mjs` listed four `no-restricted-imports` configs for all files. ESLint flat config does not merge rule options, so the last one (Stripe) replaced the others. The client-portal service-client boundary (documented as "the ENTIRE enforced boundary" for the second project), the Gemini-key and the Resend restrictions were dead.
+  - Proof: a probe importing all four restricted modules produced 1 error (Stripe) before the change and 4 after.
+  - One existing violation surfaced: `lib/ai/classify-document.ts` imports the Gemini client. It's the server-only Inngest classification job, so I added it to the allow list (stated in the config). Nothing else broke.
+- **F3 — resolved.** The 9 local client-portal bridge failures were stale local state; after the clean rebuild in `~/Developer` they pass.
+- **F6 — extended.** The AI ledger schemas (`lib/ai/schemas/ai-task.ts`) used `z.string().uuid()`, which crashed the copilot's usage recording on catalogue/fixture ids. They are now `z.guid()`. Remaining `z.string().uuid()` uses: extraction, audit and drawing-review schemas (`source_document_id`, `code_chunk_id`), all generated ids. Proposed for 6.7.

@@ -183,3 +183,28 @@ export const CLASSIFICATION_MAX_VALIDATION_ATTEMPTS = 2;
 // ahead of its consumer" pattern as isAiAssistantEnabled() itself.
 export const AI_ORG_MONTHLY_COST_CAP_USD_CENTS = 5_000;
 export const AI_USER_DAILY_COST_CAP_USD_CENTS = 500;
+
+// Gate 6.4: the staff copilot (lib/ai/copilot/). Model per Ren's decision Q1
+// (GATE_6_STATUS.md). Every limit below is enforced by the orchestrator, not
+// left to the model: a turn that hits one ends with a stated limit, never a
+// silent cut.
+export const COPILOT_MODEL_ID = 'claude-sonnet-5-5';
+// Output cap per model call (non-streaming; the SDK's guidance is ~16k).
+export const COPILOT_MAX_TOKENS = 16_000;
+// Model calls per user question (each tool round-trip is one call).
+export const COPILOT_MAX_MODEL_CALLS = 6;
+// Tool calls per user question, across all model calls.
+export const COPILOT_MAX_TOOL_CALLS = 12;
+// The same tool failing validation this many times in one question ends it.
+export const COPILOT_MAX_INVALID_TOOL_CALLS = 3;
+// Wall-clock budget per question, and per model call.
+export const COPILOT_DEADLINE_MS = 120_000;
+export const COPILOT_CALL_TIMEOUT_MS = 60_000;
+// Tool result size sent back to the model, in characters.
+export const COPILOT_MAX_TOOL_RESULT_CHARS = 24_000;
+// Model calls per user per hour (a question is 1 to COPILOT_MAX_MODEL_CALLS
+// calls), on top of AI_USER_DAILY_COST_CAP_USD_CENTS.
+export const COPILOT_HOURLY_MODEL_CALL_LIMIT = 120;
+// Conversation length accepted from the browser.
+export const COPILOT_MAX_TURNS = 20;
+export const COPILOT_MAX_MESSAGE_CHARS = 4_000;
