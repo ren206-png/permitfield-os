@@ -4,7 +4,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { createClient } from '@/lib/supabase/server';
 import { centsToDollarsString } from '@/lib/money/cents';
 import { UPLOADS_BUCKET, GENERATED_BUCKET } from '@/lib/storage/documents';
-import { isCitySubmissionEnabled, isCopilotEnabled, isDrawingReviewEnabled, isPermitEsignEnabled, isReadinessEnabled } from '@/lib/flags';
+import { isCitySubmissionEnabled, isCopilotEnabled, isCopilotRulesEnabled, isDrawingReviewEnabled, isPermitEsignEnabled, isReadinessEnabled } from '@/lib/flags';
 import { StatusBadge } from '@/components/status-badge';
 import { CoverageBadge } from '@/components/coverage-badge';
 import { DocumentUpload } from './document-upload';
@@ -13,6 +13,7 @@ import { ReviewActions } from './review-actions';
 import { SubmissionPanel } from './submission-panel';
 import { SignaturePanel } from './signature-panel';
 import { ReadinessPanel } from './readiness-panel';
+import { RuleCheckSection } from './rule-check-section';
 import type { PermitStatus } from '@/lib/permit-status/transitions';
 import { fieldLabel, generatedDocumentLabel } from '@/lib/pdf/document-labels';
 import { DrawingTriggerButton } from './drawing-trigger-button';
@@ -355,6 +356,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           }
         />
       )}
+
+      {isCopilotRulesEnabled() && <RuleCheckSection applicationId={applicationId} />}
 
       {isPermitEsignEnabled() && (application.status === 'documents_generated' || application.status === 'submitted') && (
         <SignaturePanel

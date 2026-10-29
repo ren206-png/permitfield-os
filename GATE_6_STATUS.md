@@ -434,3 +434,72 @@ The applicability tool also needs `PERMITFIELD_FF_COPILOT_RULES` (6.2). Without 
   - One existing violation surfaced: `lib/ai/classify-document.ts` imports the Gemini client. It's the server-only Inngest classification job, so I added it to the allow list (stated in the config). Nothing else broke.
 - **F3 — resolved.** The 9 local client-portal bridge failures were stale local state; after the clean rebuild in `~/Developer` they pass.
 - **F6 — extended.** The AI ledger schemas (`lib/ai/schemas/ai-task.ts`) used `z.string().uuid()`, which crashed the copilot's usage recording on catalogue/fixture ids. They are now `z.guid()`. Remaining `z.string().uuid()` uses: extraction, audit and drawing-review schemas (`source_document_id`, `code_chunk_id`), all generated ids. Proposed for 6.7.
+
+**After merge (2026-10-29):** #92 squash-merged as `6282f10` (branch kept). Migration 096 is deployed. A read-only check shows `ai_task_kind` includes `copilot` and `project_facts_superseded_once` exists.
+
+---
+
+## 6.5 — Drafts, correction responses, fee estimates
+
+**Approval:** `APPROVED: PHASE 6.5` (Ren, 2026-10-29). His message read "APPROVE: PHASE 6.5"; I asked, and he confirmed the exact token. He also chose "engine now, content later": no city fee schedules are entered in this phase.
+
+**Flags:** no new flag.
+- Drafts, correction requests and fees live on the copilot page and its actions, behind `PERMITFIELD_FF_COPILOT` (through `sessionScope()` in `copilot/server.ts`).
+- The fee-schedule admin form sits behind `PERMITFIELD_FF_SOURCE_REGISTRY` with the rest of `/admin/rule-sets`.
+- The "Requirements check" panel on the application page renders only when `PERMITFIELD_FF_COPILOT_RULES` is on.
+
+### What changed
+
+| File | Purpose |
+|---|---|
+| `supabase/migrations/20260806000097_copilot_drafts_fees.sql` | **Tables** (all append-only, RLS by `is_org_member`, actor = `auth.uid()`):<br>• `application_draft_versions`: versioned; `unique (thread_id, version)`; lineage check `based_on = version - 1`; an AI version must name its model; a correction response must reference its request.<br>• `correction_requests`.<br>• `fee_estimates`: server-written only; a total only when `estimated`.<br>**Function:** `publish_fee_schedule_version`: admin only, source revision must be published and in the same jurisdiction, versions increment and supersede.<br>Rollback SQL is in the header. |
+| `lib/fees/money.ts`, `schedule.ts`, `estimate.ts`, `load.ts` | **Fee engine.**<br>• Integer cents (`MinorUnits` brand); decimal inputs become exact BigInt fractions; the schedule's stored rounding rule is applied once per line.<br>• Components: flat, rate, tiered (flat-per-tier or marginal), percent of job value; min/max per component; deposits and surcharges kept separate; exclusions listed; no tax logic.<br>• Status: `estimated` / `missing_inputs` / `stale_schedule` (outside the effective window, or the source is overdue for a re-check) / `authority_quote_required` / `unavailable` (never zero). |
+| `lib/drafts/versions.ts` | Human-edit preservation and optimistic concurrency:<br>• a person saves on top of the version they viewed (stale → refused);<br>• AI writes a version only when none exists or the latest is AI; over a human edit it returns a suggestion and saves nothing. |
+| `lib/drafts/correction.ts`, `lib/ai/copilot/drafting.ts` | One strict-tool model call drafts a cover letter, or per-item correction responses with supporting document ids. The **server** assembles the letter and marks every item whose support isn't a document of this application uploaded since the request. |
+| `lib/ai/copilot/tools.ts` | +3 tools, all read-only:<br>• `estimate_permit_fees` (records its snapshot through a server hook);<br>• `draft_correction_response` (requests, items, documents since, latest draft);<br>• `propose_application_fields` (form value vs confirmed fact, per field: matches / differs / missing). |
+| `app/(app)/applications/[id]/copilot/*` | **Panels:** Permit fees (latest estimate, Recalculate); Letters and responses (cover letter plus one thread per correction request: editor, versions, Draft with AI / Suggest an AI version, download with a DRAFT header); Record a correction request.<br>**Helpers:** shared helpers moved to `server.ts`, a plain module, so none is exposed as an action. |
+| `app/(app)/applications/[id]/rule-check-*` | The "Requirements check" panel (carried from 6.2's "readiness extension"): latest snapshot batch, unknowns with reasons, Run/Check again. |
+| `app/admin/rule-sets/*` | Fee schedule section per permit type: current version; publish form (published source revision, currency, rounding, effective window, JSON schedule validated by Zod). |
+
+### Requirement → code → verification
+
+| Requirement | Verification (artefact) |
+|---|---|
+| N.5 exit: fee tier/rounding tests in minor units | `lib/fees/estimate.test.ts`, 15 tests:<br>• the half-up, half-even, up-to-dollar and down-to-dollar rules;<br>• exact decimals (118.5 m² × 1585 c = 187,822.5 → 187,823);<br>• marginal tiers including the exact boundary and a 0.25 c remainder;<br>• flat-per-tier inclusive bounds;<br>• percent with a cap; minimums; deposits separate;<br>• unavailable ≠ zero, while a real $0 schedule is a real zero;<br>• missing, unconfirmed and wrong-unit inputs; stale window or source; authority quote; malformed schedules refused. |
+| N.5 exit: human-edit preservation + concurrency | `lib/drafts/drafts.test.ts` (AI never writes over a human edit; a stale base is refused) and `copilot_drafts_fees.test.sql` (two saves of the same version → `unique_violation`; lineage; append-only). |
+| §12 "cannot claim work completed without evidence" | Draft tests: items without a real later document are marked whatever the wording says; invented document ids are discarded; skipped items are shown, not dropped. |
+| §16 no schedule = unavailable, not zero; estimates kept for reconciliation | Engine tests plus the SQL check that a non-estimated row cannot carry a total; `fee_estimates` is append-only and server-written. |
+| Tenant isolation | `copilot_drafts_fees.test.sql`: org B sees 0 of A's drafts and requests (control: A sees its 2) and cannot write into A; forged `recorded_by` is refused. |
+| Fee schedule publication | SQL: owner refused; unpublished source refused; admin publishes; v2 supersedes v1; publisher = `auth.uid()`. |
+
+### Test evidence (local, 2026-10-29)
+
+- **Unit:** 77 files / 824 tests (6.4: 75 / 802).
+- **SQL:** after `supabase db reset`, **52/52 files, 582 PASS** (+`copilot_drafts_fees.test.sql`, 17).
+- **Live:** 45 passed, 1 skipped (opt-in provider test).
+- **Checks:** `tsc` and lint clean.
+- **Browser (local, flags on, seed org A owner):**
+  - Recalculate fees → "No fee schedule yet. … not the same as no fee".
+  - Recording a correction request (2 items) created its response thread.
+  - Saving the cover letter → "Draft v1 · edited by your team", and the AI button changed to "Suggest an AI version".
+  - The Requirements check panel showed 2 unknown ("no published rules for this permit type yet"); "Check again" → "Checked 2 requirements" and a new snapshot batch in the database.
+
+### Not built / not run
+
+| Item | Owner |
+|---|---|
+| AI drafting against the live model | Not run: no local `ANTHROPIC_API_KEY` (same as 6.4's live-provider test). Mocked paths are covered by the draft rules and assembly tests; the model call itself is not. |
+| Real fee schedules (Calgary, Vancouver, Toronto first, per B1) | Content task: Ren chose "engine now, content later". Every permit type reports `unavailable` until a schedule is published from a published source. |
+| Fillable form output from confirmed facts; package manifests; exports beyond text (§14) | `propose_application_fields` only compares; it never writes the form. Package manifest and PDF/DOCX exports belong to 6.6 (lifecycle/packages) |
+| Model restatement of figures | Fee figures in the panel and the tool card come from the engine; the copilot's prose is told to quote them exactly, but is not machine-checked. Owner 6.7 |
+
+### §19 adversarial checks
+
+| Check | Result |
+|---|---|
+| Float money | All fee arithmetic is BigInt fractions; integers only at the edges (`minor()` refuses non-integers). Schedule amounts are `int` in Zod; a `1.5` rate is refused (test). The line sum uses BigInt. |
+| Vacuous test | Every isolation assertion has a control; the concurrency test has a control save first |
+| Silent coercion | `exactDecimal` refuses exponents and negatives; a malformed stored schedule → `unavailable`, not a guess |
+| Model-trusted scope | Drafting reads only the scope's application; correction evidence is filtered server-side to this application's documents |
+| Dead helper | `loadFeeSchedule`/`estimateApplicationFees`: used by the tool and the Recalculate action. `generateDraft`: the Draft with AI action |
+| Flag that gates nothing | Check sites listed under **Flags** |

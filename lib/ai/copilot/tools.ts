@@ -5,6 +5,11 @@ import { evaluateApplicationRequirementsWith } from '@/lib/requirements/rules/ru
 import { RuleSetItemSnapshotSchema } from '@/lib/requirements/rules/rule-set';
 import { FACT_KEYS } from '@/lib/requirements/rules/fact-keys';
 import { buildEvidenceBundle, type EvidenceItem } from '@/lib/sources/evidence';
+import { candidateDocuments } from '@/lib/drafts/correction';
+import { estimateApplicationFees } from '@/lib/fees/load';
+import type { FeeEstimate } from '@/lib/fees/estimate';
+import { PermitExtractionSchema } from '@/lib/ai/schemas/extraction';
+import { resolveFacts, type ProjectFactRow } from '@/lib/requirements/rules/facts';
 import type { CopilotScope } from './scope';
 
 // Gate 6.4: the copilot's tools (master prompt §12). Every tool is
@@ -14,14 +19,18 @@ import type { CopilotScope } from './scope';
 // tool arguments never carry an org, project or application id, and any id
 // a tool does accept (a requirement id) is checked to belong to the scope.
 //
-// Tools not built in 6.4, per the gate plan: propose_application_fields,
-// estimate_permit_fees and draft_correction_response (6.5).
+// 6.5 added estimate_permit_fees, draft_correction_response and
+// propose_application_fields -- all read-only (the fee tool also records
+// its estimate snapshot through the server-supplied hook).
 
 export interface ToolContext {
   supabase: SupabaseClient;
   scope: CopilotScope;
   evidence: EvidenceRegistry;
   now: Date;
+  // Keeps each computed fee estimate for reconciliation (fee_estimates).
+  // Supplied by the server action; estimates are never user-writable.
+  recordFeeEstimate?: (estimate: FeeEstimate) => Promise<void>;
 }
 
 export type ToolOutcome = { ok: true; data: unknown } | { ok: false; error: string };
@@ -354,6 +363,130 @@ export const getPermitStatus = tool({
   },
 });
 
+export const estimatePermitFees = tool({
+  name: 'estimate_permit_fees',
+  description:
+    "Fee estimate for this application from the published fee schedule, in exact cents, itemized, with status: estimated, missing_inputs, stale_schedule, authority_quote_required or unavailable. Unavailable means no schedule is published -- never that the fee is zero. Taxes and anything listed in exclusions are not included. Quote the figures exactly as returned.",
+  input: NoInput,
+  async run({ supabase, scope, now, recordFeeEstimate }) {
+    const estimate = await estimateApplicationFees(supabase, scope, now);
+    await recordFeeEstimate?.(estimate);
+    return {
+      ok: true,
+      data: {
+        status: estimate.status,
+        currency: estimate.currency,
+        total_cents: estimate.totalMinor,
+        deposits_cents: estimate.depositsMinor,
+        lines: estimate.lines.map((l) => ({ label: l.label, category: l.category, amount_cents: l.amountMinor, calculation: l.calculation })),
+        missing_inputs: estimate.missingInputs,
+        exclusions: estimate.exclusions,
+        assumptions: estimate.assumptions,
+        reasons: estimate.reasons,
+        schedule_version: estimate.scheduleVersion,
+        note: 'An estimate from the published schedule, not the amount the authority will assess.',
+      },
+    };
+  },
+});
+
+export const draftCorrectionResponse = tool({
+  name: 'draft_correction_response',
+  description:
+    "The correction requests recorded for this application: each item the authority asked for, the documents uploaded since that request (the only ones that can support a response), and the latest saved response draft. Read-only: drafts are written on the Drafts panel, where every item without a supporting document is marked.",
+  input: NoInput,
+  async run({ supabase, scope }) {
+    const [{ data: requests, error }, { data: documents }, { data: drafts }] = await Promise.all([
+      supabase
+        .from('correction_requests')
+        .select('id, received_on, reference, items')
+        .eq('org_id', scope.orgId)
+        .eq('application_id', scope.applicationId)
+        .order('received_on', { ascending: false }),
+      supabase.from('application_documents').select('id, original_filename, doc_kind, uploaded_at').eq('application_id', scope.applicationId),
+      supabase
+        .from('application_draft_versions')
+        .select('correction_request_id, version, origin, body')
+        .eq('org_id', scope.orgId)
+        .eq('application_id', scope.applicationId)
+        .eq('kind', 'correction_response')
+        .order('version', { ascending: false }),
+    ]);
+    if (error) return { ok: false, error: 'Could not read correction requests.' };
+    const docs = (documents ?? []).map((d) => ({ id: d.id, filename: d.original_filename, kind: d.doc_kind, uploadedAt: d.uploaded_at }));
+    return {
+      ok: true,
+      data: {
+        correction_requests: (requests ?? []).map((r) => {
+          const latest = (drafts ?? []).find((d) => d.correction_request_id === r.id) ?? null;
+          return {
+            received_on: r.received_on,
+            reference: r.reference,
+            items: r.items,
+            documents_since_request: candidateDocuments(docs, r.received_on).map((d) => ({ filename: d.filename, kind: d.kind, uploaded_at: d.uploadedAt })),
+            latest_draft: latest ? { version: latest.version, origin: latest.origin, text: latest.body } : null,
+          };
+        }),
+        note: 'A response may say a change was made only where a document uploaded since the request supports it.',
+      },
+    };
+  },
+});
+
+// Form fields the existing extraction fills (lib/ai/schemas/extraction.ts)
+// that correspond to a project fact.
+const FIELD_TO_FACT = [
+  { field: 'square_footage', label: 'Floor area (m²) on the form', factKey: 'project.floor_area' },
+  { field: 'electrical_amps', label: 'Electrical service (A) on the form', factKey: 'electrical.service_amps' },
+] as const;
+
+export const proposeApplicationFields = tool({
+  name: 'propose_application_fields',
+  description:
+    "Compares the values PermitField read from the documents for the city's form with the project's CONFIRMED facts, field by field, and lists where they differ or one is missing. Read-only: it never changes the form or a fact.",
+  input: NoInput,
+  async run({ supabase, scope }) {
+    const [{ data: extraction }, { data: factRows }] = await Promise.all([
+      supabase
+        .from('extractions')
+        .select('parsed_data, created_at')
+        .eq('application_id', scope.applicationId)
+        .eq('zod_valid', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      scope.projectId
+        ? supabase.from('project_facts').select('id, fact_key, value, unit, state, supersedes_fact_id, created_at').eq('org_id', scope.orgId).eq('project_id', scope.projectId)
+        : Promise.resolve({ data: [] as ProjectFactRow[] }),
+    ]);
+    const parsed = extraction ? PermitExtractionSchema.safeParse(extraction.parsed_data) : null;
+    const { facts } = resolveFacts((factRows ?? []) as ProjectFactRow[]);
+    return {
+      ok: true,
+      data: {
+        extraction_date: extraction?.created_at ?? null,
+        fields: FIELD_TO_FACT.map(({ field, label, factKey }) => {
+          const formValue = parsed?.success ? parsed.data[field].value : null;
+          const fact = facts.get(factKey);
+          const factValue = fact?.status === 'confirmed' ? fact.value : null;
+          const status =
+            formValue === null && factValue === null
+              ? 'both_missing'
+              : formValue === null
+                ? 'form_missing'
+                : factValue === null
+                  ? 'fact_not_confirmed'
+                  : formValue === factValue
+                    ? 'matches'
+                    : 'differs';
+          return { field: label, form_value: formValue, confirmed_fact: factValue, status };
+        }),
+        note: 'Proposals only. Where they differ, the person decides which is right; nothing is overwritten.',
+      },
+    };
+  },
+});
+
 export const COPILOT_TOOLS: readonly CopilotTool[] = [
   resolveProjectAuthorities,
   getPermitRequirements,
@@ -362,4 +495,7 @@ export const COPILOT_TOOLS: readonly CopilotTool[] = [
   explainRequirement,
   assessPackageReadiness,
   getPermitStatus,
+  estimatePermitFees,
+  draftCorrectionResponse,
+  proposeApplicationFields,
 ] as CopilotTool[];

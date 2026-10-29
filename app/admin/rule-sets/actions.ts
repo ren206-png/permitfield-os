@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/admin';
 import { isSourceRegistryEnabled } from '@/lib/flags';
+import { FeeScheduleParametersSchema } from '@/lib/fees/schedule';
 import { buildPublishItems, type LiveRequirement } from '@/lib/sources/rule-set-publish';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service-client';
@@ -81,4 +82,72 @@ export async function publishRuleSetAction(_prev: RuleSetActionState, formData: 
   }
   revalidatePath('/admin/rule-sets', 'layout');
   return { message: `Published (${built.items.length} requirements). Version id ${String(data).slice(0, 8)}.` };
+}
+
+// Gate 6.5: publish a fee schedule version for the permit type. The
+// parameters are validated here (lib/fees/schedule.ts); the database
+// function checks the admin, the jurisdiction and that the source revision
+// is published (publish_fee_schedule_version, 20260806000097).
+const FeeFormSchema = z
+  .object({
+    permitTypeId: z.guid(),
+    sourceRevisionId: z.guid(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    roundingRule: z.enum(['half_up_to_cent', 'half_even_to_cent', 'up_to_dollar', 'down_to_dollar']),
+    effectiveFrom: z.iso.date(),
+    effectiveTo: z.union([z.iso.date(), z.literal('')]),
+  })
+  .refine((v) => !v.effectiveTo || v.effectiveFrom <= v.effectiveTo, { message: 'Effective from must be on or before effective to.' });
+
+export async function publishFeeScheduleAction(_prev: RuleSetActionState, formData: FormData): Promise<RuleSetActionState> {
+  await requireAdmin();
+  if (!isSourceRegistryEnabled()) notFound();
+  const form = FeeFormSchema.safeParse({
+    permitTypeId: String(formData.get('permitTypeId') ?? ''),
+    sourceRevisionId: String(formData.get('sourceRevisionId') ?? ''),
+    currency: String(formData.get('currency') ?? '').trim().toUpperCase(),
+    roundingRule: String(formData.get('roundingRule') ?? ''),
+    effectiveFrom: String(formData.get('effectiveFrom') ?? ''),
+    effectiveTo: String(formData.get('effectiveTo') ?? ''),
+  });
+  if (!form.success) return { error: form.error.issues[0]?.message ?? 'Check the form.' };
+
+  let json: unknown;
+  try {
+    json = JSON.parse(String(formData.get('parameters') ?? ''));
+  } catch {
+    return { error: 'The schedule is not valid JSON.' };
+  }
+  const params = FeeScheduleParametersSchema.safeParse(json);
+  if (!params.success) {
+    return {
+      error: 'The schedule is not valid.',
+      details: params.error.issues.map((i) => `${i.path.join('.') || '(schedule)'}: ${i.message}`),
+    };
+  }
+
+  const { data: permitType } = await createServiceClient().from('permit_types').select('jurisdiction_id').eq('id', form.data.permitTypeId).maybeSingle();
+  if (!permitType) return { error: 'Permit type not found.' };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('publish_fee_schedule_version', {
+    p_jurisdiction_id: permitType.jurisdiction_id,
+    p_permit_type_id: form.data.permitTypeId,
+    p_currency: form.data.currency,
+    p_rounding_rule: form.data.roundingRule,
+    p_effective_from: form.data.effectiveFrom,
+    p_effective_to: form.data.effectiveTo || null,
+    p_parameters: params.data,
+    p_source_revision_id: form.data.sourceRevisionId,
+  });
+  if (error) {
+    return {
+      error:
+        error.code === '42501'
+          ? 'Not published: the database does not recognise your account as a platform admin.'
+          : `Not published: ${error.message}`,
+    };
+  }
+  revalidatePath('/admin/rule-sets', 'layout');
+  return { message: 'Fee schedule published.' };
 }

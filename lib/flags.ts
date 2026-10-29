@@ -433,8 +433,10 @@ export function isPermitEsignEnabled(): boolean {
 
 // Gate 6.2: the copilot rule engine (lib/requirements/rules/). Gates
 // evaluateApplicationRequirements(), which reads published rule sets and
-// confirmed project facts and records project_requirement_snapshots.
-// Nothing user-facing calls it yet (the staff UI is 6.4). Default OFF.
+// confirmed project facts and records project_requirement_snapshots. Its
+// callers: the copilot's evaluate_permit_applicability tool (6.4) and the
+// "Requirements check" panel on the application page (6.5), which is only
+// rendered when this is on. Default OFF.
 export function isCopilotRulesEnabled(): boolean {
   return isEnabled('PERMITFIELD_FF_COPILOT_RULES');
 }

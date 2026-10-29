@@ -113,6 +113,9 @@ describe('tool definitions sent to the model', () => {
       'explain_requirement',
       'assess_package_readiness',
       'get_permit_status',
+      'estimate_permit_fees',
+      'draft_correction_response',
+      'propose_application_fields',
       GIVE_ANSWER,
     ]);
   });

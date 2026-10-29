@@ -3,25 +3,14 @@
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import {
-  COPILOT_HOURLY_MODEL_CALL_LIMIT,
-  COPILOT_MAX_MESSAGE_CHARS,
-  COPILOT_MAX_TURNS,
-} from '@/lib/ai/config';
-import { checkOrgMonthlyCostCap, checkUserDailyCostCap } from '@/lib/ai/cost-caps';
-import { estimateCostUsdCents } from '@/lib/ai/estimate-cost';
-import { AiJobInsertSchema, AiTokenLedgerInsertSchema } from '@/lib/ai/schemas/ai-task';
+import { COPILOT_MAX_MESSAGE_CHARS, COPILOT_MAX_TURNS } from '@/lib/ai/config';
 import { proposalsFromExtraction } from '@/lib/ai/copilot/facts-from-extraction';
 import { runCopilotTurn, type StopReason, type ToolCallRecord } from '@/lib/ai/copilot/orchestrator';
 import { anthropicCopilotProvider } from '@/lib/ai/copilot/provider';
-import { resolveCopilotScope, type CopilotScope } from '@/lib/ai/copilot/scope';
 import { COPILOT_TOOLS, EvidenceRegistry } from '@/lib/ai/copilot/tools';
-import { requireOrgContext } from '@/lib/auth/org-context';
-import { SUPPORT_EMAIL } from '@/lib/brand';
-import { isCopilotEnabled } from '@/lib/flags';
 import { isFactKey, parseFactValue } from '@/lib/requirements/rules/fact-keys';
-import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { checkCopilotBudget, recordFeeEstimate, recordModelCall, recordToolCall, sessionScope } from './server';
 
 // Gate 6.4: the staff copilot's server actions. Every action checks the
 // flag, signs the caller in (requireOrgContext), and resolves the
@@ -31,16 +20,6 @@ import { createServiceClient } from '@/lib/supabase/service-client';
 // Exception 9), with ids taken from the resolved scope.
 
 const NOT_AVAILABLE = 'The copilot is not available.';
-
-async function sessionScope(applicationId: unknown) {
-  if (!isCopilotEnabled()) return null;
-  const { userId } = await requireOrgContext();
-  const parsed = z.guid().safeParse(applicationId);
-  if (!parsed.success) return null;
-  const supabase = await createClient();
-  const scope = await resolveCopilotScope(supabase, userId, parsed.data);
-  return scope ? { supabase, scope } : null;
-}
 
 // ---------------------------------------------------------------------------
 // Questions
@@ -80,72 +59,6 @@ export type CopilotReply =
     }
   | { ok: false; error: string };
 
-async function recordModelCall(
-  service: ReturnType<typeof createServiceClient>,
-  scope: CopilotScope,
-  modelId: string,
-  usage: { inputTokens: number; outputTokens: number },
-  error: string | null
-) {
-  const { data: job } = await service
-    .from('ai_jobs')
-    .insert(
-      AiJobInsertSchema.parse({
-        org_id: scope.orgId,
-        kind: 'copilot',
-        provider: 'anthropic',
-        model_id: modelId,
-        status: error ? 'failed' : 'succeeded',
-        input_token_count: usage.inputTokens,
-        output_token_count: usage.outputTokens,
-        error_message: error,
-        related_entity_type: 'permit_application',
-        related_entity_id: scope.applicationId,
-        requested_by_user_id: scope.userId,
-      })
-    )
-    .select('id')
-    .single();
-  if (!job || (usage.inputTokens === 0 && usage.outputTokens === 0)) return;
-  await service.from('ai_token_ledger').insert(
-    AiTokenLedgerInsertSchema.parse({
-      org_id: scope.orgId,
-      job_id: job.id,
-      provider: 'anthropic',
-      model_id: modelId,
-      input_token_count: usage.inputTokens,
-      output_token_count: usage.outputTokens,
-      cost_usd_cents: estimateCostUsdCents(usage.inputTokens, usage.outputTokens),
-    })
-  );
-}
-
-const MAX_LEDGER_RESULT_CHARS = 20_000;
-
-async function recordToolCall(
-  service: ReturnType<typeof createServiceClient>,
-  scope: CopilotScope,
-  traceId: string,
-  modelId: string,
-  call: ToolCallRecord
-) {
-  const serialized = call.data === null ? null : JSON.stringify(call.data);
-  await service.from('copilot_tool_invocations').insert({
-    org_id: scope.orgId,
-    project_id: scope.projectId,
-    user_id: scope.userId,
-    trace_id: traceId,
-    // A name the model invented may not fit the column's pattern; keep the row.
-    tool_name: `x_${call.name.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`.slice(call.name.match(/^[a-z][a-z0-9_]{2,63}$/) ? 2 : 0, 66).slice(0, 64),
-    arguments: call.arguments ?? {},
-    result: serialized === null ? null : serialized.length > MAX_LEDGER_RESULT_CHARS ? { truncated: true, chars: serialized.length } : call.data,
-    status: call.status,
-    error_message: call.status === 'succeeded' ? null : (call.error ?? 'failed').slice(0, 1000),
-    model_id: modelId,
-    duration_ms: call.durationMs,
-  });
-}
-
 export async function askCopilotAction(input: { applicationId: unknown; history: unknown; question: unknown }): Promise<CopilotReply> {
   const session = await sessionScope(input.applicationId);
   if (!session) return { ok: false, error: NOT_AVAILABLE };
@@ -158,29 +71,16 @@ export async function askCopilotAction(input: { applicationId: unknown; history:
   }
 
   const service = createServiceClient();
-  const { count, error: countError } = await service
-    .from('ai_jobs')
-    .select('id', { count: 'exact', head: true })
-    .eq('requested_by_user_id', scope.userId)
-    .eq('kind', 'copilot')
-    .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
-  if (countError) return { ok: false, error: 'The copilot could not start. Try again in a minute.' };
-  if ((count ?? 0) >= COPILOT_HOURLY_MODEL_CALL_LIMIT) {
-    return { ok: false, error: "You've used the copilot a lot in the last hour. Try again later." };
-  }
-  const [userCap, orgCap] = await Promise.all([checkUserDailyCostCap(service, scope.userId), checkOrgMonthlyCostCap(service, scope.orgId)]);
-  if (!userCap.withinCap || !orgCap.withinCap) {
-    return { ok: false, error: `The copilot has reached its spending limit for now. Email ${SUPPORT_EMAIL} if you need it raised.` };
-  }
+  const blocked = await checkCopilotBudget(service, scope);
+  if (blocked) return { ok: false, error: blocked };
 
-  if (!process.env.ANTHROPIC_API_KEY) return { ok: false, error: 'The copilot is not set up on this site yet (no AI service key).' };
   const provider = anthropicCopilotProvider();
   const traceId = randomUUID();
   const evidence = new EvidenceRegistry();
   const turn = await runCopilotTurn({
     provider,
     tools: COPILOT_TOOLS,
-    ctx: { supabase, scope, evidence, now: new Date() },
+    ctx: { supabase, scope, evidence, now: new Date(), recordFeeEstimate: (estimate) => recordFeeEstimate(service, scope, estimate) },
     history: history.data,
     question: question.data,
     hooks: {
