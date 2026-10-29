@@ -13,9 +13,10 @@
 // NEXT_PUBLIC_SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY (the CLI's
 // local demo keys; see .github/workflows/ci.yml).
 import { randomUUID } from 'node:crypto';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createServiceClient } from '@/lib/supabase/service-client';
+import { SEED_OWNERS, signInSeedOwner } from '@/lib/test-support/seed-session';
 import { resolveCopilotScope, type CopilotScope } from './scope';
 import {
   assessPackageReadiness,
@@ -33,25 +34,9 @@ const APP_A = '40000000-0000-0000-0000-00000000000a';
 
 const service = createServiceClient();
 
-// The two seed owners (supabase/seed.sql PART 2, local/CI only) get a fresh
-// random password for this run; service_role has no INSERT on org_members,
-// so new staff users can't be added here.
-const SEED_USERS: Record<string, string> = {
-  [ORG_A]: '10000000-0000-0000-0000-00000000000a',
-  [ORG_B]: '10000000-0000-0000-0000-00000000000b',
-};
-
 async function staffSession(orgId: string): Promise<{ client: SupabaseClient; userId: string }> {
-  const userId = SEED_USERS[orgId];
-  const password = randomUUID();
-  const { data: updated, error } = await service.auth.admin.updateUserById(userId, { password });
-  if (error || !updated.user?.email) throw new Error(`updateUserById failed: ${error?.message}`);
-  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { error: signInError } = await client.auth.signInWithPassword({ email: updated.user.email, password });
-  if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
-  return { client, userId };
+  const owner = orgId === ORG_A ? SEED_OWNERS.orgA : SEED_OWNERS.orgB;
+  return { client: await signInSeedOwner(owner.userId), userId: owner.userId };
 }
 
 const ctx = (supabase: SupabaseClient, scope: CopilotScope): ToolContext => ({

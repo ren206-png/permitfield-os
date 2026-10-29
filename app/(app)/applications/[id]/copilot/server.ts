@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { COPILOT_HOURLY_MODEL_CALL_LIMIT } from '@/lib/ai/config';
+import { COPILOT_HOURLY_MODEL_CALL_LIMIT, COPILOT_ORG_HOURLY_MODEL_CALL_LIMIT } from '@/lib/ai/config';
 import { checkOrgMonthlyCostCap, checkUserDailyCostCap } from '@/lib/ai/cost-caps';
 import { estimateCostUsdCents } from '@/lib/ai/estimate-cost';
 import { AiJobInsertSchema, AiTokenLedgerInsertSchema } from '@/lib/ai/schemas/ai-task';
@@ -40,6 +40,14 @@ export async function checkCopilotBudget(service: ServiceClient, scope: CopilotS
     .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
   if (error) return 'The copilot could not start. Try again in a minute.';
   if ((count ?? 0) >= COPILOT_HOURLY_MODEL_CALL_LIMIT) return "You've used the copilot a lot in the last hour. Try again later.";
+  const { count: orgCount, error: orgError } = await service
+    .from('ai_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', scope.orgId)
+    .eq('kind', 'copilot')
+    .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString());
+  if (orgError) return 'The copilot could not start. Try again in a minute.';
+  if ((orgCount ?? 0) >= COPILOT_ORG_HOURLY_MODEL_CALL_LIMIT) return 'Your company has used the copilot a lot in the last hour. Try again later.';
   const [userCap, orgCap] = await Promise.all([checkUserDailyCostCap(service, scope.userId), checkOrgMonthlyCostCap(service, scope.orgId)]);
   if (!userCap.withinCap || !orgCap.withinCap) return `The copilot has reached its spending limit for now. Email ${SUPPORT_EMAIL} if you need it raised.`;
   if (!process.env.ANTHROPIC_API_KEY) return 'The copilot is not set up on this site yet (no AI service key).';
@@ -81,7 +89,7 @@ export async function recordModelCall(
       model_id: modelId,
       input_token_count: usage.inputTokens,
       output_token_count: usage.outputTokens,
-      cost_usd_cents: estimateCostUsdCents(usage.inputTokens, usage.outputTokens),
+      cost_usd_cents: estimateCostUsdCents(usage.inputTokens, usage.outputTokens, modelId),
     })
   );
 }

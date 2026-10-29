@@ -208,3 +208,7 @@ export const COPILOT_HOURLY_MODEL_CALL_LIMIT = 120;
 // Conversation length accepted from the browser.
 export const COPILOT_MAX_TURNS = 20;
 export const COPILOT_MAX_MESSAGE_CHARS = 4_000;
+// Gate 6.7: per-organization hourly cap on copilot model calls, so many
+// users in one org cannot together run unbounded spend inside an hour
+// (the monthly org cost cap only catches it afterwards).
+export const COPILOT_ORG_HOURLY_MODEL_CALL_LIMIT = 600;

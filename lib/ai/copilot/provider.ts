@@ -23,6 +23,13 @@ export type ProviderMessage = Anthropic.Beta.Messages.BetaMessage;
 export type ProviderMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 export type ProviderTool = Anthropic.Beta.Messages.BetaTool;
 
+// Input tokens for cost accounting: uncached input plus cache writes and
+// reads, all counted at the full input rate. Over-counts cached tokens
+// (cheaper in reality), so the caps err on the safe side.
+export function inputTokensOf(usage: ProviderMessage['usage']): number {
+  return usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+}
+
 export interface ProviderRequest {
   system: string;
   tools: ProviderTool[];

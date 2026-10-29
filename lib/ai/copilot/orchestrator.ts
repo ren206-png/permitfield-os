@@ -9,7 +9,7 @@ import {
 } from '@/lib/ai/config';
 import { CitationSchema, MAX_CITATIONS, validateCitations, type CitationValidation, type ValidCitation } from '@/lib/sources/citations';
 import { COPILOT_SYSTEM_PROMPT } from './prompt';
-import { ProviderError, type CopilotProvider, type ProviderMessageParam, type ProviderTool } from './provider';
+import { inputTokensOf, ProviderError, type CopilotProvider, type ProviderMessageParam, type ProviderTool } from './provider';
 import type { CopilotTool, ToolContext } from './tools';
 
 // Gate 6.4: one copilot question, as a bounded tool loop (master prompt
@@ -203,10 +203,10 @@ export async function runCopilotTurn(input: TurnInput): Promise<TurnResult> {
       return stop(detail === 'cancelled' || detail === 'timeout' ? 'deadline' : 'provider_error', detail);
     }
     result.usage.modelCalls += 1;
-    result.usage.inputTokens += response.usage.input_tokens;
+    result.usage.inputTokens += inputTokensOf(response.usage);
     result.usage.outputTokens += response.usage.output_tokens;
     await input.hooks?.onModelCall?.(
-      { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+      { inputTokens: inputTokensOf(response.usage), outputTokens: response.usage.output_tokens },
       response.stop_reason === 'refusal' ? 'refusal' : null
     );
 

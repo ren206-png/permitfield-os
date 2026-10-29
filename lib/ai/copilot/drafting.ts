@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { assembleCorrectionResponse, ItemResponseSchema, type CandidateDocument } from '@/lib/drafts/correction';
 import { jsonSchemaFor } from './orchestrator';
-import { ProviderError, type CopilotProvider } from './provider';
+import { inputTokensOf, ProviderError, type CopilotProvider } from './provider';
 
 // Gate 6.5: one model call that drafts a cover letter or a correction
 // response (master prompt §14, §15). The model must answer through a single
@@ -87,7 +87,7 @@ export async function generateDraft(provider: CopilotProvider, request: DraftReq
     if (error instanceof ProviderError) return { ok: false, error: 'provider', usage: { inputTokens: 0, outputTokens: 0 } };
     throw error;
   }
-  const usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
+  const usage = { inputTokens: inputTokensOf(response.usage), outputTokens: response.usage.output_tokens };
   if (response.stop_reason === 'refusal') return { ok: false, error: 'refusal', usage };
   if (response.stop_reason === 'max_tokens') return { ok: false, error: 'invalid_draft', usage };
   const call = response.content.find((b) => b.type === 'tool_use' && b.name === tool.name);

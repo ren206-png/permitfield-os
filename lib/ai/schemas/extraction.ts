@@ -18,7 +18,7 @@ function extractedField<T extends z.ZodTypeAny>(valueSchema: T) {
   return z.object({
     value: valueSchema.nullable(),
     confidence: z.number().min(0).max(1),
-    source_document_id: z.string().uuid().nullable(),
+    source_document_id: z.guid().nullable(),
     source_page: z.number().int().positive().nullable(),
   });
 }
