@@ -63,6 +63,33 @@ describe('checkSource', () => {
   });
 });
 
+describe('sites that block automated checks', () => {
+  const incapsula =
+    '<html>\n<head>\n<META NAME="robots" CONTENT="noindex,nofollow">\n<script src="/_Incapsula_Resource?SWJIYLWA=5074a744">\n</script>\n<body>\n</body></html>';
+
+  it('an anti-bot challenge page is blocked with upload advice, not "no readable text"', async () => {
+    const result = await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(ok(incapsula)));
+    expect(result).toMatchObject({ result: 'blocked', errorCode: 'bot_challenge', httpStatus: 200 });
+    if (result.result === 'blocked') expect(result.errorMessage).toContain('Upload the official copy');
+    const cloudflare = '<html><head><title>Just a moment...</title></head><body><script src="/cdn-cgi/challenge-platform/h/b/orchestrate/x"></script></body></html>';
+    expect(await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(ok(cloudflare)))).toMatchObject({ errorCode: 'bot_challenge' });
+  });
+
+  it('a real page that merely mentions the words is still captured', async () => {
+    const page = '<h1>Fees</h1><p>Our site uses a "Just a moment" banner and _Incapsula_Resource is a word here.</p>';
+    expect((await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(ok(page)))).result).toBe('fetched');
+  });
+
+  it('a 403 or 429 suggests an upload; other HTTP errors do not', async () => {
+    const http = (status: number): FetchSourceResult => ({ kind: 'failed', code: 'http_error', message: `HTTP ${status}.`, status, finalUrl: 'u' });
+    const refused = await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(http(403)));
+    expect(refused).toMatchObject({ result: 'failed', errorCode: 'http_error', httpStatus: 403 });
+    if (refused.result === 'failed') expect(refused.errorMessage).toMatch(/^HTTP 403\. The site may block automated checks\./);
+    const missing = await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(http(404)));
+    if (missing.result === 'failed') expect(missing.errorMessage).toBe('HTTP 404.');
+  });
+});
+
 describe('buildCapture', () => {
   it('refuses oversize content instead of truncating it', () => {
     const sections = Array.from({ length: MAX_CAPTURE_CHUNKS + 1 }, (_, i) => ({ locator: `p. ${i + 1}`, text: `Page ${i + 1} text.` }));

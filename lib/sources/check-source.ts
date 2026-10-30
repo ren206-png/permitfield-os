@@ -31,6 +31,25 @@ export type CheckResult =
 
 export type Fetcher = (url: string, options: FetchSourceOptions) => Promise<FetchSourceResult>;
 
+// Some city sites sit behind anti-bot services that refuse automated
+// requests or answer them with a script challenge instead of the page
+// (vancouver.ca: Cloudflare 403; ottawa.ca: an Imperva/Incapsula page, 2026-10-30).
+// Retrying never helps; an admin uploads the official copy instead
+// (record_source_upload, migration 20260806000100), so the message says so.
+export const UPLOAD_INSTEAD = "If the page opens in a browser, download it and use \"Upload the official copy\" on this source's page.";
+// The challenge scripts themselves, not words a real page could contain.
+const CHALLENGE_MARKERS = [
+  /<script[^>]+src=["'][^"']*_Incapsula_Resource/i,
+  /<script[^>]+src=["'][^"']*\/cdn-cgi\/challenge-platform\//i,
+];
+const MAX_CHALLENGE_PAGE_BYTES = 64 * 1024;
+
+export function looksLikeBotChallenge(bytes: Buffer, contentType: string): boolean {
+  if (bytes.length > MAX_CHALLENGE_PAGE_BYTES || !/html/i.test(contentType)) return false;
+  const text = bytes.toString('utf8');
+  return CHALLENGE_MARKERS.some((m) => m.test(text));
+}
+
 export async function checkSource(
   url: string,
   previous: { etag: string | null; lastModified: string | null },
@@ -42,10 +61,11 @@ export async function checkSource(
     return { result: 'not_modified', httpStatus: 304, finalUrl: fetched.finalUrl, etag: fetched.etag, lastModified: fetched.lastModified };
   }
   if (fetched.kind !== 'ok') {
+    const refused = fetched.status === 403 || fetched.status === 429;
     return {
       result: fetched.kind,
       errorCode: fetched.code,
-      errorMessage: fetched.message,
+      errorMessage: refused ? `${fetched.message} The site may block automated checks. ${UPLOAD_INSTEAD}` : fetched.message,
       httpStatus: fetched.status ?? null,
       finalUrl: fetched.finalUrl ?? null,
       contentType: null,
@@ -54,6 +74,14 @@ export async function checkSource(
   }
 
   const base = { httpStatus: fetched.status, finalUrl: fetched.finalUrl, contentType: fetched.contentType, byteLength: fetched.bytes.length };
+  if (looksLikeBotChallenge(fetched.bytes, fetched.contentType)) {
+    return {
+      result: 'blocked',
+      errorCode: 'bot_challenge',
+      errorMessage: `The site answered with an anti-bot challenge instead of the page. ${UPLOAD_INSTEAD}`,
+      ...base,
+    };
+  }
   const loaded = await loadSourceDocument(fetched.bytes, fetched.contentType);
   if (!loaded.ok) {
     // Unsupported or mismatched content is refused (blocked); unreadable
