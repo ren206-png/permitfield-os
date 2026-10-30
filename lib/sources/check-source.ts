@@ -38,16 +38,28 @@ export type Fetcher = (url: string, options: FetchSourceOptions) => Promise<Fetc
 // (record_source_upload, migration 20260806000100), so the message says so.
 export const UPLOAD_INSTEAD = "If the page opens in a browser, download it and use \"Upload the official copy\" on this source's page.";
 // The challenge scripts themselves, not words a real page could contain.
+// Cloudflare also injects a challenge-platform script into ordinary pages
+// (JavaScript Detections), so a marker alone is not enough: a challenge
+// page also has almost no readable text of its own.
 const CHALLENGE_MARKERS = [
   /<script[^>]+src=["'][^"']*_Incapsula_Resource/i,
   /<script[^>]+src=["'][^"']*\/cdn-cgi\/challenge-platform\//i,
 ];
 const MAX_CHALLENGE_PAGE_BYTES = 64 * 1024;
+const MAX_CHALLENGE_TEXT_CHARS = 500;
+
+function visibleTextLength(html: string): number {
+  return html
+    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim().length;
+}
 
 export function looksLikeBotChallenge(bytes: Buffer, contentType: string): boolean {
   if (bytes.length > MAX_CHALLENGE_PAGE_BYTES || !/html/i.test(contentType)) return false;
-  const text = bytes.toString('utf8');
-  return CHALLENGE_MARKERS.some((m) => m.test(text));
+  const html = bytes.toString('utf8');
+  return CHALLENGE_MARKERS.some((m) => m.test(html)) && visibleTextLength(html) <= MAX_CHALLENGE_TEXT_CHARS;
 }
 
 export async function checkSource(

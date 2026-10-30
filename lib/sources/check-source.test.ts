@@ -80,6 +80,14 @@ describe('sites that block automated checks', () => {
     expect((await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(ok(page)))).result).toBe('fetched');
   });
 
+  it('a readable page carrying Cloudflare JavaScript Detections is still captured', async () => {
+    const fees = Array.from({ length: 12 }, (_, i) => `<li>Permit category ${i + 1}: $${(i + 1) * 13}.45 per square metre of floor area.</li>`).join('');
+    const page = `<html><head><title>Building permit fees</title></head><body><h1>Building permit fees</h1><ul>${fees}</ul><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body></html>`;
+    expect(Buffer.byteLength(page)).toBeLessThan(64 * 1024);
+    const result = await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(ok(page)));
+    expect(result.result).toBe('fetched');
+  });
+
   it('a 403 or 429 suggests an upload; other HTTP errors do not', async () => {
     const http = (status: number): FetchSourceResult => ({ kind: 'failed', code: 'http_error', message: `HTTP ${status}.`, status, finalUrl: 'u' });
     const refused = await checkSource('u', { etag: null, lastModified: null }, fetcherReturning(http(403)));
