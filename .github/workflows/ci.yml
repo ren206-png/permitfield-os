@@ -94,6 +94,12 @@ jobs:
 
       - run: npm run build
 
+      # PDF-reading routes must ship @napi-rs/canvas and its linux binary,
+      # or every PDF fails on Vercel with "DOMMatrix is not defined"
+      # (lib/pdf/pdf-parse.ts). Checks the build's file traces on this
+      # runner's platform, the same one Vercel builds on.
+      - run: node scripts/check-pdf-trace.mjs
+
       - run: npm test
 
   sql-tests:

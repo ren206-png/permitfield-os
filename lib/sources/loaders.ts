@@ -1,4 +1,5 @@
 import type { PDFParse as PDFParseType } from 'pdf-parse';
+import { createPdfParser } from '@/lib/pdf/pdf-parse';
 
 // Gate 6.3: turns fetched source bytes into located text sections (master
 // prompt §10). Supported: HTML, PDF (text layer), plain text. Everything
@@ -68,10 +69,8 @@ function withSections(loader: 'html' | 'pdf' | 'text', sections: LocatedSection[
 async function loadPdf(bytes: Buffer): Promise<LoadResult> {
   let parser: PDFParseType | null = null;
   try {
-    // Dynamic import: see lib/pdf/text-density.ts on why pdf-parse is never
-    // imported eagerly on the Inngest route.
-    const { PDFParse } = await import('pdf-parse');
-    parser = new PDFParse({ data: bytes });
+    // Loaded lazily, with the canvas globals pdfjs needs (lib/pdf/pdf-parse.ts).
+    parser = await createPdfParser(bytes);
     const result = await parser.getText();
     const sections = result.pages.map((page) => ({ locator: `p. ${page.num}`, text: normalizeWhitespace(page.text) }));
     return withSections('pdf', sections);
