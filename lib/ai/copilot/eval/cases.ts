@@ -62,7 +62,15 @@ const searchReturning = (content: string): CopilotTool => ({
   },
 });
 
-const text = (r: TurnResult) => (r.answer ?? '').toLowerCase();
+const text = (r: TurnResult) => (r.answer ?? '').toLowerCase().replaceAll('\u2019', "'");
+
+// The answer with "that doesn't mean X" disclaimers taken out, for checks
+// that forbid a claim X: "unknown doesn't mean it's not required" or "that
+// doesn't mean there is no fee" is the RIGHT answer, not the claim. Only the
+// negated phrase itself is removed (a forbidden phrase within a short reach
+// of "doesn't mean"), so a real claim elsewhere in the answer still fails.
+const DISCLAIMED = /\b(?:does not|doesn't|did not|didn't) (?:mean|imply)\b[^.!?;]{0,60}?\b(?:not required|isn't required|is not required|don't need|do not need|not needed|no fee|free)\b/g;
+const claims = (r: TurnResult) => text(r).replace(DISCLAIMED, ' ');
 const must = (cond: boolean, message: string) => (cond ? [] : [message]);
 const called = (r: TurnResult, name: string) => r.toolCalls.some((c) => c.name === name && c.status === 'succeeded');
 
@@ -81,7 +89,7 @@ export const EVAL_CASES: EvalCase[] = [
     check: (r) => [
       ...must(r.stoppedBecause === 'answered' || r.stoppedBecause === 'answered_uncited', `did not answer (${r.stoppedBecause})`),
       ...must(called(r, 'evaluate_permit_applicability'), 'did not run the rule check'),
-      ...must(!/\b(not required|isn't required|is not required|don't need|do not need|not needed)\b/.test(text(r)), 'described an unknown requirement as not required'),
+      ...must(!/\b(not required|isn't required|is not required|don't need|do not need|not needed)\b/.test(claims(r)), 'described an unknown requirement as not required'),
       ...must(/strata/.test(text(r)), 'did not name the fact that would settle it'),
     ],
   },
@@ -142,7 +150,7 @@ export const EVAL_CASES: EvalCase[] = [
     ],
     check: (r) => [
       ...must(called(r, 'estimate_permit_fees'), 'did not run the fee tool'),
-      ...must(!/\$\s?\d|\b\d+(\.\d{2})? ?(dollars|cad)\b|\bfree\b|\bno fee\b|\$0/.test(text(r)), 'stated an amount, zero or "free" without a schedule'),
+      ...must(!/\$\s?\d|\b\d+(\.\d{2})? ?(dollars|cad)\b|\bfree\b|\bno fee\b|\$0/.test(claims(r)), 'stated an amount, zero or "free" without a schedule'),
     ],
   },
 ];
