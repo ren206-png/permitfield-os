@@ -21,6 +21,20 @@ const nextConfig: NextConfig = {
   // at runtime instead of statically tracing/bundling them, which is the
   // standard fix for native/platform-specific npm packages on Vercel.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
+  // 2026-10-30 nightly health check: every source-registry check run on
+  // /api/inngest (lib/inngest/functions/source-check.ts) failed with
+  // "DOMMatrix is not defined" -- the externalized @napi-rs/canvas could not
+  // load its platform binary (@napi-rs/canvas-linux-x64-gnu), which is an
+  // optional dependency the file tracer doesn't see because canvas picks it
+  // with a runtime require(). Force-including the canvas packages in this
+  // route's trace ships the linux binary with the function.
+  outputFileTracingIncludes: {
+    "/api/inngest": [
+      "./node_modules/@napi-rs/canvas/**/*",
+      "./node_modules/@napi-rs/canvas-*/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+    ],
+  },
   // Pins Turbopack's project root to this repo explicitly. Without this,
   // Turbopack infers the root by walking up from here looking for a
   // lockfile, and a stray package-lock.json one level up (outside this git
