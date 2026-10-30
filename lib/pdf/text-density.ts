@@ -1,4 +1,5 @@
 import type { PDFParse as PDFParseType } from 'pdf-parse';
+import { createPdfParser } from './pdf-parse';
 
 // SS7 adversarial self-check #2 ("the scanned blueprint"): a 40 MB flat scan
 // run through a text extractor doesn't throw -- it returns a handful of
@@ -43,8 +44,7 @@ export interface TextDensityResult {
 export async function computeTextDensity(bytes: Buffer): Promise<TextDensityResult> {
   let parser: PDFParseType | null = null;
   try {
-    const { PDFParse } = await import('pdf-parse');
-    parser = new PDFParse({ data: bytes });
+    parser = await createPdfParser(bytes);
     const result = await parser.getText();
     const pageCount = Math.max(result.total, 1);
     // Whitespace-only "text" (common in flattened form exports -- see
