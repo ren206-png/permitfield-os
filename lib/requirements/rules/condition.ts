@@ -166,3 +166,17 @@ export function evaluateCondition(condition: Condition, facts: ReadonlyMap<strin
   const value = walk(condition);
   return { value, trace, factIds: [...factIds] };
 }
+
+// Every fact key a condition reads, in first-use order without repeats (the
+// application page asks only the questions its published rules use).
+export function factKeysIn(condition: Condition): string[] {
+  const keys: string[] = [];
+  const walk = (c: Condition) => {
+    if ('all' in c) c.all.forEach(walk);
+    else if ('any' in c) c.any.forEach(walk);
+    else if ('not' in c) walk(c.not);
+    else if (!keys.includes(c.fact)) keys.push(c.fact);
+  };
+  walk(condition);
+  return keys;
+}

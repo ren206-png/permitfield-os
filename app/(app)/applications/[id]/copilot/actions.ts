@@ -8,7 +8,7 @@ import { proposalsFromExtraction } from '@/lib/ai/copilot/facts-from-extraction'
 import { runCopilotTurn, type StopReason, type ToolCallRecord } from '@/lib/ai/copilot/orchestrator';
 import { anthropicCopilotProvider } from '@/lib/ai/copilot/provider';
 import { COPILOT_TOOLS, EvidenceRegistry } from '@/lib/ai/copilot/tools';
-import { isFactKey, parseFactValue } from '@/lib/requirements/rules/fact-keys';
+import { recordEnteredFact } from '@/lib/requirements/rules/enter-fact';
 import { createServiceClient } from '@/lib/supabase/service-client';
 import { checkCopilotBudget, recordFeeEstimate, recordModelCall, recordToolCall, sessionScope } from './server';
 
@@ -214,46 +214,21 @@ export async function rejectFactAction(_prev: FactActionState, formData: FormDat
   return decide(formData, 'rejected');
 }
 
-// A fact typed in by staff is confirmed by the person entering it. If the
-// key already has a confirmed value, the new row supersedes it (a
-// correction), leaving the old one in the ledger.
+// A fact typed in by staff is confirmed by the person entering it
+// (lib/requirements/rules/enter-fact.ts).
 export async function enterFactAction(_prev: FactActionState, formData: FormData): Promise<FactActionState> {
   const session = await sessionScope(formValue(formData, 'applicationId'));
   if (!session) return { error: NOT_AVAILABLE };
   const { supabase, scope } = session;
   if (!scope.projectId) return { error: 'This application is not linked to a project, so facts cannot be recorded for it.' };
 
-  const key = formValue(formData, 'factKey');
-  if (!isFactKey(key)) return { error: 'Choose a fact.' };
-  const parsed = parseFactValue(key, formValue(formData, 'value'));
-  if (!parsed.ok) return { error: parsed.error };
-
-  const { data: current } = await supabase
-    .from('project_facts')
-    .select('id, state, supersedes_fact_id, created_at')
-    .eq('org_id', scope.orgId)
-    .eq('project_id', scope.projectId)
-    .eq('fact_key', key)
-    .eq('state', 'confirmed')
-    .order('created_at', { ascending: false });
-  const supersededIds = new Set((current ?? []).map((r) => r.supersedes_fact_id).filter(Boolean));
-  const latest = (current ?? []).find((r) => !supersededIds.has(r.id)) ?? null;
-
-  const now = new Date().toISOString();
-  const { error } = await supabase.from('project_facts').insert({
-    org_id: scope.orgId,
-    project_id: scope.projectId,
-    fact_key: key,
-    value: parsed.value,
-    unit: parsed.unit,
-    provenance: 'user_entered',
-    state: 'confirmed',
-    reviewed_by: scope.userId,
-    reviewed_at: now,
-    supersedes_fact_id: latest?.id ?? null,
-    created_by: scope.userId,
-  });
-  if (error) return { error: error.code === '23505' ? 'Someone changed this fact at the same time. Refresh and try again.' : 'Could not save the fact.' };
+  const result = await recordEnteredFact(
+    supabase,
+    { orgId: scope.orgId, projectId: scope.projectId, userId: scope.userId },
+    formValue(formData, 'factKey'),
+    formValue(formData, 'value')
+  );
+  if (!result.ok) return { error: result.error };
   refresh(scope.applicationId);
   return { message: 'Saved.' };
 }
