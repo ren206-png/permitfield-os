@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useErrorToast, useSuccessToast } from '@/components/toast/use-action-toast';
 import {
   checkSourceNowAction,
+  correctRevisionAction,
   dismissCaptureAction,
   publishCaptureAction,
   withdrawRevisionAction,
@@ -173,6 +174,81 @@ export function DismissCaptureForm({ sourceId, captureId }: { sourceId: string; 
         {pending ? 'Saving…' : 'Dismiss'}
       </button>
     </form>
+  );
+}
+
+// For a typo in a published revision's details (dates, title...): publishes
+// a corrected revision of the same text. Collapsed by default.
+export function CorrectRevisionForm({
+  sourceId,
+  revision,
+}: {
+  sourceId: string;
+  revision: {
+    id: string;
+    title: string;
+    issuing_body: string;
+    published_on: string | null;
+    effective_from: string | null;
+    effective_to: string | null;
+    access_scope: string;
+  };
+}) {
+  const [state, formAction, pending] = useActionState(correctRevisionAction, initialState);
+  useResultToasts(state);
+  return (
+    <details className="rounded-md border border-zinc-200 p-2">
+      <summary className="cursor-pointer text-xs font-medium text-zinc-700">Correct details (dates, title…)</summary>
+      <form action={formAction} className="mt-3 space-y-3">
+        <input type="hidden" name="sourceId" value={sourceId} />
+        <input type="hidden" name="revisionId" value={revision.id} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={labelClass}>
+            Title
+            <input name="title" required maxLength={300} defaultValue={revision.title} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Issuing body
+            <input name="issuingBody" required maxLength={300} defaultValue={revision.issuing_body} className={inputClass} />
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className={labelClass}>
+            Published on
+            <input type="date" name="publishedOn" defaultValue={revision.published_on ?? ''} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Effective from
+            <input type="date" name="effectiveFrom" defaultValue={revision.effective_from ?? ''} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Effective to
+            <input type="date" name="effectiveTo" defaultValue={revision.effective_to ?? ''} className={inputClass} />
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={labelClass}>
+            Use rights
+            <select name="accessScope" defaultValue={revision.access_scope} className={inputClass}>
+              <option value="public">Public, may be quoted and shared</option>
+              <option value="public_no_redistribution">Public, not for republishing</option>
+              <option value="licensed_internal">Licensed, internal use only</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Licence notes
+            <input name="licenceNotes" maxLength={2000} className={inputClass} />
+          </label>
+        </div>
+        <label className={labelClass}>
+          What are you correcting?
+          <input name="notes" required maxLength={1900} placeholder="e.g. effective date typo (2926 → 2026)" className={inputClass} />
+        </label>
+        <button type="submit" disabled={pending} className={smallButton}>
+          {pending ? 'Correcting…' : 'Publish corrected revision'}
+        </button>
+      </form>
+    </details>
   );
 }
 

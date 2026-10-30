@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/auth/admin';
 import { isSourceRegistryEnabled } from '@/lib/flags';
 import { changedHunks, diffLines } from '@/lib/sources/diff';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { CheckNowButton, DismissCaptureForm, PublishCaptureForm, UploadCopyForm, WithdrawRevisionForm } from '../source-controls';
+import { CheckNowButton, CorrectRevisionForm, DismissCaptureForm, PublishCaptureForm, UploadCopyForm, WithdrawRevisionForm } from '../source-controls';
 
 // One source (Gate 6.3): fetched changes waiting for review, each diffed
 // against the text of the revision currently published (or, before any
@@ -34,6 +34,7 @@ interface RevisionRow {
   effective_from: string | null;
   effective_to: string | null;
   access_scope: string;
+  corrects_revision_id: string | null;
   created_at: string;
 }
 
@@ -133,7 +134,7 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
       .limit(20),
     supabase
       .from('source_revisions')
-      .select('id, revision_number, title, issuing_body, published_on, effective_from, effective_to, access_scope, created_at')
+      .select('id, revision_number, title, issuing_body, published_on, effective_from, effective_to, access_scope, corrects_revision_id, created_at')
       .eq('source_id', sourceId)
       .order('revision_number', { ascending: false }),
     supabase
@@ -238,9 +239,10 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
           <p className="text-sm text-zinc-500">None published. Nothing from this source is used as evidence yet.</p>
         ) : (
           <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white">
-            {revisionRows.map((r) => {
+            {revisionRows.map((r, i) => {
               const review = latestReview.get(r.id);
               const live = review?.status === 'verified';
+              const corrected = r.corrects_revision_id ? revisionRows.find((x) => x.id === r.corrects_revision_id) : null;
               return (
                 <li key={r.id} className="space-y-2 p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
@@ -250,6 +252,7 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${live ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}`}>
                       {live ? 'Published' : review ? `Withdrawn (${review.status})` : 'Not reviewed'}
                     </span>
+                    {corrected && <span className="text-xs text-zinc-500">correction of revision {corrected.revision_number}</span>}
                   </div>
                   <div className="text-xs text-zinc-600">
                     {r.issuing_body} · effective {r.effective_from ?? 'unknown'} to {r.effective_to ?? 'open'} · {r.access_scope.replaceAll('_', ' ')} · added{' '}
@@ -257,6 +260,7 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
                     {review?.notes ? ` · “${review.notes}”` : ''}
                   </div>
                   {live && <WithdrawRevisionForm sourceId={source.id} revisionId={r.id} />}
+                  {live && i === 0 && <CorrectRevisionForm sourceId={source.id} revision={r} />}
                 </li>
               );
             })}
