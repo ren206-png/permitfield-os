@@ -192,6 +192,7 @@ export function CorrectRevisionForm({
     effective_from: string | null;
     effective_to: string | null;
     access_scope: string;
+    licence_notes: string | null;
   };
 }) {
   const [state, formAction, pending] = useActionState(correctRevisionAction, initialState);
@@ -237,7 +238,7 @@ export function CorrectRevisionForm({
           </label>
           <label className={labelClass}>
             Licence notes
-            <input name="licenceNotes" maxLength={2000} className={inputClass} />
+            <input name="licenceNotes" maxLength={2000} defaultValue={revision.licence_notes ?? ''} className={inputClass} />
           </label>
         </div>
         <label className={labelClass}>

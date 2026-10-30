@@ -9,9 +9,11 @@
 -- the corrected details, linked by corrects_revision_id and
 -- supersedes_revision_id, with a 'verified' review whose notes say what was
 -- corrected. search_source_evidence already takes the newest revision whose
--- window covers the date, so the correction takes over; the original stays
--- in the ledger untouched. Anything that cites the original (a fee schedule
--- version) keeps citing it -- the text is identical.
+-- window covers the date, so the correction takes over. The original row is
+-- untouched but retired: it gets a 'stale' review ("superseded by the
+-- correction"), so where a correction narrows the window the original can't
+-- answer for the dates it got wrong. Anything that cites the original (a
+-- fee schedule version) keeps citing it -- the text is identical.
 --
 -- unique (source_id, content_sha256) stays for ordinary revisions (one
 -- revision per distinct text); only corrections may repeat a text.
@@ -85,6 +87,10 @@ begin
 
   insert into source_revision_reviews (source_revision_id, status, notes, reviewed_by, reviewed_at)
   values (v_new_id, 'verified', left('Correction of revision ' || v_old.revision_number || ': ' || btrim(p_notes), 2000), v_actor, clock_timestamp());
+
+  -- Retire the original: its details are known to be wrong.
+  insert into source_revision_reviews (source_revision_id, status, notes, reviewed_by, reviewed_at)
+  values (v_old.id, 'stale', 'Superseded by correction (revision ' || (v_old.revision_number + 1) || ')', v_actor, clock_timestamp());
 
   return v_new_id;
 end;

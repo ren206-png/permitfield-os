@@ -2,7 +2,9 @@
 --   1. A platform admin corrects the newest published revision: a new
 --      revision with the same text (hash + chunks copied), corrected dates,
 --      linked by corrects/supersedes, with a 'verified' review; the original
---      is untouched.
+--      row is unchanged but retired ('stale', superseded).
+--   2b. When the correction narrows the window, a date only the original
+--      covered finds nothing -- not the original's wrong details.
 --   2. search_source_evidence then returns the correction for a date the
 --      original's typo excluded.
 --   3. A member is refused; nothing is written.
@@ -111,17 +113,24 @@ begin
      or v_new.supersedes_revision_id <> v_old.id or v_new.effective_from <> '2026-01-01' or v_new.effective_to <> '2026-12-31'
      or v_new.title <> 'Fee schedule (R2026-02)' or v_new.created_by <> auth.uid() or v_new.retrieved_at <> v_old.retrieved_at
      or n_new <> n_old or n_new <> 2 or not source_revision_is_published(v_new.id)
-     or v_old.effective_from <> '2926-01-01' or not source_revision_is_published(v_old.id) then
+     or v_old.effective_from <> '2926-01-01' or source_revision_is_published(v_old.id)
+     or (select status from source_revision_reviews where source_revision_id = v_old.id order by reviewed_at desc limit 1) <> 'stale' then
     raise exception 'FAIL: correction recorded wrongly (new %, chunks % / %)', row_to_json(v_new), n_new, n_old;
   end if;
   if (select notes from source_revision_reviews where source_revision_id = v_id) not like 'Correction of revision 1: effective date typo%' then
     raise exception 'FAIL: the review should say what was corrected';
   end if;
-  raise notice 'PASS: the admin corrects: same text and chunks, new dates, linked, verified; the original is untouched';
+  raise notice 'PASS: the admin corrects: same text and chunks, new dates, linked, verified; the original is unchanged and retired';
 
   select source_revision_id into hit from search_source_evidence('00000000-0000-0000-0001-000000000002', 'Correctfixture', '2026-06-01') limit 1;
   if hit is distinct from v_id then raise exception 'FAIL: evidence for 2026 should come from the correction (got %)', hit; end if;
   raise notice 'PASS: search_source_evidence returns the correction for 2026';
+
+  -- 2b. The correction ends 2026-12-31; the original (2926 -> open) covered
+  -- 2930. It is retired, so 2930 finds nothing rather than its wrong details.
+  select source_revision_id into hit from search_source_evidence('00000000-0000-0000-0001-000000000002', 'Correctfixture', '2930-06-01') limit 1;
+  if hit is not null then raise exception 'FAIL: the retired original answered for a date outside the correction (got %)', hit; end if;
+  raise notice 'PASS: a narrowed correction leaves no stale answer outside its window';
 
   begin
     perform correct_source_revision((select id from correct_ids where name = 'rev1'), 'Fee schedule', 'City of Calgary',

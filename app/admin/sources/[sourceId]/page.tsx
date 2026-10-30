@@ -34,6 +34,7 @@ interface RevisionRow {
   effective_from: string | null;
   effective_to: string | null;
   access_scope: string;
+  licence_notes: string | null;
   corrects_revision_id: string | null;
   created_at: string;
 }
@@ -134,7 +135,7 @@ export default async function SourcePage({ params }: { params: Promise<{ sourceI
       .limit(20),
     supabase
       .from('source_revisions')
-      .select('id, revision_number, title, issuing_body, published_on, effective_from, effective_to, access_scope, corrects_revision_id, created_at')
+      .select('id, revision_number, title, issuing_body, published_on, effective_from, effective_to, access_scope, licence_notes, corrects_revision_id, created_at')
       .eq('source_id', sourceId)
       .order('revision_number', { ascending: false }),
     supabase
