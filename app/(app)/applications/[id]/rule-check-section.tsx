@@ -9,7 +9,9 @@ import { RuleCheckPanel, type RuleCheckView, type RuleQuestion } from './rule-ch
 // The "latest" check is the newest batch of snapshots (one evaluated_at).
 // Also lists the project questions the latest published rule set's
 // conditions read, with the current confirmed answers, so staff can answer
-// them here without the copilot.
+// them here without the copilot. An application without a project still
+// shows the panel; the first check or answer creates its project
+// (rule-check-actions.ts).
 
 export async function RuleCheckSection({ applicationId }: { applicationId: string }) {
   const supabase = await createClient();
@@ -18,18 +20,22 @@ export async function RuleCheckSection({ applicationId }: { applicationId: strin
     .select('org_id, project_id, permit_type_id, permit_types ( jurisdiction_id )')
     .eq('id', applicationId)
     .maybeSingle();
-  if (!application?.project_id) return null;
+  if (!application) return null;
+  const projectId = application.project_id as string | null;
   const permitType = Array.isArray(application.permit_types) ? application.permit_types[0] : application.permit_types;
   const jurisdictionId = (permitType as { jurisdiction_id?: string } | null)?.jurisdiction_id ?? null;
 
+  const none = Promise.resolve({ data: [] as never[] });
   const [{ data: snapshots }, { data: ruleSet }, { data: factRows }] = await Promise.all([
-    supabase
-      .from('project_requirement_snapshots')
-      .select('permit_requirement_id, outcome, explanation, evaluated_at')
-      .eq('org_id', application.org_id)
-      .eq('project_id', application.project_id)
-      .order('evaluated_at', { ascending: false })
-      .limit(500),
+    projectId
+      ? supabase
+          .from('project_requirement_snapshots')
+          .select('permit_requirement_id, outcome, explanation, evaluated_at')
+          .eq('org_id', application.org_id)
+          .eq('project_id', projectId)
+          .order('evaluated_at', { ascending: false })
+          .limit(500)
+      : none,
     jurisdictionId
       ? supabase
           .from('rule_set_versions')
@@ -40,11 +46,13 @@ export async function RuleCheckSection({ applicationId }: { applicationId: strin
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase
-      .from('project_facts')
-      .select('id, fact_key, value, unit, state, supersedes_fact_id, created_at')
-      .eq('org_id', application.org_id)
-      .eq('project_id', application.project_id),
+    projectId
+      ? supabase
+          .from('project_facts')
+          .select('id, fact_key, value, unit, state, supersedes_fact_id, created_at')
+          .eq('org_id', application.org_id)
+          .eq('project_id', projectId)
+      : none,
   ]);
   const latestAt = snapshots?.[0]?.evaluated_at ?? null;
   const batch = (snapshots ?? []).filter((s) => s.evaluated_at === latestAt);
