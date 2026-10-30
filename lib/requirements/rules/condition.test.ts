@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConditionSchema, evaluateCondition, MAX_CONDITION_DEPTH, type Condition, type ResolvedFact } from './condition';
+import { ConditionSchema, evaluateCondition, factKeysIn, MAX_CONDITION_DEPTH, type Condition, type ResolvedFact } from './condition';
 
 const confirmed = (factId: string, value: unknown, unit: string | null = null): ResolvedFact => ({
   status: 'confirmed',
@@ -91,5 +91,19 @@ describe('evaluateCondition: three-valued, unknown never becomes false', () => {
     expect(evaluateCondition(group, facts({ 'use.group': confirmed('g', 'E') })).value).toBe('true');
     expect(evaluateCondition(group, facts({ 'use.group': confirmed('g', 'A2') })).value).toBe('false');
     expect(evaluateCondition(group, facts({ 'use.group': confirmed('g', 3) })).value).toBe('unknown');
+  });
+});
+
+describe('factKeysIn', () => {
+  it('lists each fact a condition reads once, in order, through all / any / not', () => {
+    const condition: Condition = {
+      all: [
+        { any: [{ fact: 'project.change_of_use', op: 'eq', value: true }, { fact: 'project.childcare_or_school', op: 'eq', value: true }] },
+        { not: { fact: 'building.year_built', op: 'lt', value: 1990, unit: 'year' } },
+        { fact: 'project.change_of_use', op: 'neq', value: false },
+      ],
+    };
+    expect(factKeysIn(condition)).toEqual(['project.change_of_use', 'project.childcare_or_school', 'building.year_built']);
+    expect(factKeysIn({ fact: 'building.strata_titled', op: 'eq', value: true })).toEqual(['building.strata_titled']);
   });
 });
