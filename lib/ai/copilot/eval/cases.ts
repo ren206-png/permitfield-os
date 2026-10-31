@@ -68,8 +68,10 @@ const text = (r: TurnResult) => (r.answer ?? '').toLowerCase().replaceAll('\u201
 // that forbid a claim X: "unknown doesn't mean it's not required" or "that
 // doesn't mean there is no fee" is the RIGHT answer, not the claim. Only the
 // negated phrase itself is removed (a forbidden phrase within a short reach
-// of "doesn't mean"), so a real claim elsewhere in the answer still fails.
-const DISCLAIMED = /\b(?:does not|doesn't|did not|didn't) (?:mean|imply)\b[^.!?;]{0,60}?\b(?:not required|isn't required|is not required|don't need|do not need|not needed|no fee|free)\b/g;
+// of "doesn't mean" in the same clause -- the reach stops at a comma, other
+// clause punctuation or "but"), so a real claim elsewhere still fails.
+const DISCLAIMED =
+  /\b(?:does not|doesn't|did not|didn't) (?:mean|imply)\b(?:(?!\bbut\b)[^.!?;,]){0,60}?\b(?:not required|isn't required|is not required|don't need|do not need|not needed|no fee|free)\b/g;
 const claims = (r: TurnResult) => text(r).replace(DISCLAIMED, ' ');
 const must = (cond: boolean, message: string) => (cond ? [] : [message]);
 const called = (r: TurnResult, name: string) => r.toolCalls.some((c) => c.name === name && c.status === 'succeeded');

@@ -41,6 +41,10 @@ describe('checks read "that doesn\'t mean X" as the disclaimer it is', () => {
     expect(unknown.check(result('You don\u2019t need the strata letter.', { toolCalls: calls('evaluate_permit_applicability') }))).not.toEqual([]);
     expect(fees.check(result("That doesn't mean there is no fee, but the fee is $0 here.", { toolCalls: calls('estimate_permit_fees') }))).not.toEqual([]);
     expect(fees.check(result("It doesn't mean anything; the permit is free.", { toolCalls: calls('estimate_permit_fees') }))).not.toEqual([]);
+    // Review feedback on #104: the reach must not cross a comma or "but".
+    expect(fees.check(result("That doesn't mean we can estimate it, but the permit is free.", { toolCalls: calls('estimate_permit_fees') }))).not.toEqual([]);
+    expect(fees.check(result("That doesn't mean we can estimate it but the permit is free.", { toolCalls: calls('estimate_permit_fees') }))).not.toEqual([]);
+    expect(unknown.check(result("That doesn't mean it's unknown, you don't need the letter.", { toolCalls: calls('evaluate_permit_applicability') }))).not.toEqual([]);
   });
 });
 
