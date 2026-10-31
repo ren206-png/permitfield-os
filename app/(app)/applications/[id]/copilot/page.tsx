@@ -115,48 +115,43 @@ export default async function CopilotPage({ params }: { params: Promise<{ id: st
           <div className="rounded-lg border border-zinc-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-zinc-900">Project facts</h2>
             <p className="mt-1 text-xs text-zinc-600">Only confirmed facts are used to decide which requirements apply.</p>
-            {!scope.projectId ? (
-              <p className="mt-3 text-sm text-amber-800">This application is not linked to a project, so facts can&apos;t be recorded.</p>
-            ) : (
-              <>
-                <ul className="mt-3 divide-y divide-zinc-100 text-sm">
-                  {[...facts.entries()]
-                    .filter(([, f]) => f.status === 'confirmed')
-                    .map(([key, f]) => (
-                      <li key={key} className="flex justify-between gap-3 py-1.5">
-                        <span className="text-zinc-600">{label(key)}</span>
-                        <span className="font-medium text-zinc-900">{f.status === 'confirmed' ? describeFactValue(key, f.value, f.unit) : ''}</span>
-                      </li>
-                    ))}
-                  {![...facts.values()].some((f) => f.status === 'confirmed') && <li className="py-1.5 text-zinc-500">No confirmed facts yet.</li>}
+            {/* No project yet: the first fact saved creates it (factSessionScope). */}
+            <ul className="mt-3 divide-y divide-zinc-100 text-sm">
+              {[...facts.entries()]
+                .filter(([, f]) => f.status === 'confirmed')
+                .map(([key, f]) => (
+                  <li key={key} className="flex justify-between gap-3 py-1.5">
+                    <span className="text-zinc-600">{label(key)}</span>
+                    <span className="font-medium text-zinc-900">{f.status === 'confirmed' ? describeFactValue(key, f.value, f.unit) : ''}</span>
+                  </li>
+                ))}
+              {![...facts.values()].some((f) => f.status === 'confirmed') && <li className="py-1.5 text-zinc-500">No confirmed facts yet.</li>}
+            </ul>
+
+            {proposals.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Waiting for your check</h3>
+                <ul className="mt-2 space-y-2">
+                  {proposals.map((p) => (
+                    <li key={p.id} className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-zinc-700">{label(p.fact_key)}</span>
+                        <span className="font-medium text-zinc-900">{describeFactValue(p.fact_key, p.value, p.unit)}</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-zinc-600">
+                        Read from your documents{p.source_locator ? `, ${p.source_locator}` : ''}. Check it against the drawings.
+                      </div>
+                      <ReviewFactButtons applicationId={scope.applicationId} factId={p.id} />
+                    </li>
+                  ))}
                 </ul>
-
-                {proposals.length > 0 && (
-                  <div className="mt-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Waiting for your check</h3>
-                    <ul className="mt-2 space-y-2">
-                      {proposals.map((p) => (
-                        <li key={p.id} className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm">
-                          <div className="flex justify-between gap-2">
-                            <span className="text-zinc-700">{label(p.fact_key)}</span>
-                            <span className="font-medium text-zinc-900">{describeFactValue(p.fact_key, p.value, p.unit)}</span>
-                          </div>
-                          <div className="mt-0.5 text-xs text-zinc-600">
-                            Read from your documents{p.source_locator ? `, ${p.source_locator}` : ''}. Check it against the drawings.
-                          </div>
-                          <ReviewFactButtons applicationId={scope.applicationId} factId={p.id} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="mt-4 flex flex-col gap-3">
-                  <ProposeFromDocumentsButton applicationId={scope.applicationId} />
-                  <EnterFactForm applicationId={scope.applicationId} />
-                </div>
-              </>
+              </div>
             )}
+
+            <div className="mt-4 flex flex-col gap-3">
+              <ProposeFromDocumentsButton applicationId={scope.applicationId} />
+              <EnterFactForm applicationId={scope.applicationId} />
+            </div>
           </div>
         </section>
 

@@ -9,6 +9,7 @@ import { requireOrgContext } from '@/lib/auth/org-context';
 import { SUPPORT_EMAIL } from '@/lib/brand';
 import { FEE_ENGINE_VERSION, type FeeEstimate } from '@/lib/fees/estimate';
 import { isCopilotEnabled } from '@/lib/flags';
+import { ensureApplicationProject } from '@/lib/requirements/rules/ensure-project';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service-client';
 
@@ -28,6 +29,16 @@ export async function sessionScope(applicationId: unknown) {
   const supabase = await createClient();
   const scope = await resolveCopilotScope(supabase, userId, parsed.data);
   return scope ? { supabase, scope } : null;
+}
+
+// sessionScope for actions that record project facts: an application with
+// no project gets one first (lib/requirements/rules/ensure-project.ts), so
+// facts can be recorded on any application.
+export async function factSessionScope(applicationId: unknown) {
+  const session = await sessionScope(applicationId);
+  if (!session || session.scope.projectId) return session;
+  const projectId = await ensureApplicationProject(session.supabase, session.scope.applicationId);
+  return projectId ? { supabase: session.supabase, scope: { ...session.scope, projectId } } : null;
 }
 
 // Rate limit + cost caps before any model call.

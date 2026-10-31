@@ -10,7 +10,7 @@ import { anthropicCopilotProvider } from '@/lib/ai/copilot/provider';
 import { COPILOT_TOOLS, EvidenceRegistry } from '@/lib/ai/copilot/tools';
 import { recordEnteredFact } from '@/lib/requirements/rules/enter-fact';
 import { createServiceClient } from '@/lib/supabase/service-client';
-import { checkCopilotBudget, recordFeeEstimate, recordModelCall, recordToolCall, sessionScope } from './server';
+import { checkCopilotBudget, factSessionScope, recordFeeEstimate, recordModelCall, recordToolCall, sessionScope } from './server';
 
 // Gate 6.4: the staff copilot's server actions. Every action checks the
 // flag, signs the caller in (requireOrgContext), and resolves the
@@ -125,7 +125,7 @@ function refresh(applicationId: string) {
 }
 
 export async function proposeFactsFromDocumentsAction(_prev: FactActionState, formData: FormData): Promise<FactActionState> {
-  const session = await sessionScope(formValue(formData, 'applicationId'));
+  const session = await factSessionScope(formValue(formData, 'applicationId'));
   if (!session) return { error: NOT_AVAILABLE };
   const { supabase, scope } = session;
   if (!scope.projectId) return { error: 'This application is not linked to a project, so facts cannot be recorded for it.' };
@@ -217,7 +217,7 @@ export async function rejectFactAction(_prev: FactActionState, formData: FormDat
 // A fact typed in by staff is confirmed by the person entering it
 // (lib/requirements/rules/enter-fact.ts).
 export async function enterFactAction(_prev: FactActionState, formData: FormData): Promise<FactActionState> {
-  const session = await sessionScope(formValue(formData, 'applicationId'));
+  const session = await factSessionScope(formValue(formData, 'applicationId'));
   if (!session) return { error: NOT_AVAILABLE };
   const { supabase, scope } = session;
   if (!scope.projectId) return { error: 'This application is not linked to a project, so facts cannot be recorded for it.' };
