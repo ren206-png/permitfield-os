@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireOrgContext } from '@/lib/auth/org-context';
 import { isCopilotRulesEnabled } from '@/lib/flags';
 import { recordEnteredFact } from '@/lib/requirements/rules/enter-fact';
+import { ensureApplicationProject } from '@/lib/requirements/rules/ensure-project';
 import { evaluateApplicationRequirements } from '@/lib/requirements/rules/run';
 import { createClient } from '@/lib/supabase/server';
 
@@ -23,20 +24,12 @@ const CHECK_ERRORS: Record<string, string> = {
   no_project: 'This application is not linked to a project, so it has no facts to check.',
 };
 
-// Facts and checks are kept per project; an application without one gets
-// it here on first use (ensure_application_project, migration
-// 20260806000102, which checks org membership itself).
-async function ensureProject(supabase: Awaited<ReturnType<typeof createClient>>, applicationId: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc('ensure_application_project', { p_application_id: applicationId });
-  return error ? null : (data as string);
-}
-
 export async function runRuleCheckAction(_prev: RuleCheckState, formData: FormData): Promise<RuleCheckState> {
   if (!isCopilotRulesEnabled()) return { error: CHECK_ERRORS.disabled };
   await requireOrgContext();
   const applicationId = z.guid().safeParse(String(formData.get('applicationId') ?? ''));
   if (!applicationId.success) return { error: 'Invalid application.' };
-  if (!(await ensureProject(await createClient(), applicationId.data))) return { error: 'Invalid application.' };
+  if (!(await ensureApplicationProject(await createClient(), applicationId.data))) return { error: 'Invalid application.' };
   const result = await evaluateApplicationRequirements(applicationId.data);
   if (!result.ok) return { error: CHECK_ERRORS[result.error] ?? 'The check could not run.' };
   revalidatePath(`/applications/${applicationId.data}`);
@@ -61,7 +54,7 @@ export async function answerRuleQuestionAction(_prev: RuleCheckState, formData: 
     .eq('id', applicationId.data)
     .maybeSingle();
   if (!application) return { error: 'Invalid application.' };
-  const projectId = application.project_id ?? (await ensureProject(supabase, applicationId.data));
+  const projectId = application.project_id ?? (await ensureApplicationProject(supabase, applicationId.data));
   if (!projectId) return { error: 'Invalid application.' };
 
   const saved = await recordEnteredFact(
