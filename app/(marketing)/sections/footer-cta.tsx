@@ -18,10 +18,10 @@ export function FooterCta({ signedIn }: { signedIn: boolean }) {
           {signedIn ? 'Open the app' : 'Create your account'}
           <span aria-hidden="true" className="transition group-hover:translate-x-0.5">→</span>
         </Link>
-        <p className="mt-16 max-w-2xl border-t border-paper/10 pt-8 text-xs leading-relaxed text-paper/50">{LEGAL_DISCLAIMER}</p>
+        <p className="mt-16 max-w-2xl border-t border-paper/10 pt-8 text-xs leading-relaxed text-paper/65">{LEGAL_DISCLAIMER}</p>
       </div>
       <div className="border-t border-paper/10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-6 text-xs text-paper/50 sm:px-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-6 text-xs text-paper/65 sm:px-6">
           <span className="font-display text-base text-paper/80">{PRODUCT_NAME}</span>
           <Link href={signedIn ? '/applications' : '/login'} className="transition hover:text-paper">
             {signedIn ? 'Open the app' : 'Sign in'}

@@ -38,7 +38,7 @@ export function HowItWorks() {
           {STEPS.map((step, index) => (
             <li key={step.title} className="grid items-center gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
               <div className={index % 2 === 1 ? 'lg:order-2' : ''}>
-                <span className="font-display text-6xl italic leading-none text-clay/80">
+                <span className="font-display text-6xl italic leading-none text-clay">
                   {String(index + 1).padStart(2, '0')}
                 </span>
                 <h3 className="mt-6 border-t border-line pt-6 font-display text-3xl tracking-tight sm:text-4xl">{step.title}</h3>
@@ -57,7 +57,7 @@ export function HowItWorks() {
             </li>
           ))}
         </ol>
-        <p className="mt-16 text-xs text-ink/45">Screens show sample data.</p>
+        <p className="mt-16 text-xs text-ink/65">Screens show sample data.</p>
       </div>
     </section>
   );

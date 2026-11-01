@@ -57,7 +57,7 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
               See how it works
             </a>
           </div>
-          <ul className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-sm text-ink/60">
+          <ul className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-sm text-ink/65">
             {NOTES.map((note) => (
               <li key={note} className="flex items-center gap-2">
                 <span aria-hidden="true" className="h-1 w-1 rounded-full bg-clay" />
