@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 // COPY_DECK.md §2. Headline/subhead ground in MARKETING_CAPABILITY_LEDGER.md
@@ -7,106 +8,97 @@ import Link from 'next/link';
 // completeness the model doesn't assert).
 //
 // PHASE 1 (LP workstream, see LP_PHASE_0_FINDINGS.md §0.2): subhead no
-// longer names cities in prose. It states the jurisdiction count (verified
-// against the coverage registry -- supabase/seed.sql:14-27, read live by
-// sections/coverage.tsx via lib/jurisdictions/public-directory.ts as of the
-// jurisdiction-expansion scoping follow-up, no longer a hardcoded array) and
-// links to #coverage, where tiers are disclosed.
+// longer names cities in prose. It links to #coverage, where tiers are
+// disclosed. No jurisdiction count in this sentence either: a literal number
+// here would drift from the coverage registry, which sections/coverage.tsx
+// and sections/city-strip.tsx read live.
 //
-// No jurisdiction count in this sentence either, for the same reason: a
-// literal "4" here would be exactly the same kind of drift risk the
-// JURISDICTIONS array was, just smaller -- cheaper to drop the number than
-// to make this component async just to fetch a count for one word.
+// The three notes under the buttons are approved claims 2, 3 and 4 of the
+// ledger (extraction with human review; official forms pre-filled; data
+// isolated per organization), worded no stronger than the ledger allows.
+const NOTES = ['AI extraction you review', 'Official city forms, pre-filled', 'Data isolated per organization'];
+
 export function Hero({ signedIn }: { signedIn: boolean }) {
   return (
     <section className="relative overflow-hidden">
-      {/* Decorative glow -- purely visual, no content. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(234,88,12,0.28),transparent_60%)]" />
-      <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-40 -z-10 h-[30rem] w-[44rem] max-w-full -translate-x-1/2 rounded-full bg-amber-600/20 blur-3xl" />
+      {/* Blueprint grid, fading out toward the edges -- purely visual. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgb(21_23_28/0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgb(21_23_28/0.05)_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_70%_60%_at_60%_40%,black,transparent)]"
+      />
 
-      <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <div className="mb-6 flex items-center justify-center gap-4 text-sm font-medium text-orange-300">
-          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-r from-transparent to-orange-400 sm:block" />
-          Built for Canadian trade contractors
-          <span aria-hidden="true" className="hidden h-px w-16 bg-gradient-to-l from-transparent to-orange-400 sm:block" />
-        </div>
-        <h1 className="mx-auto max-w-4xl text-4xl font-semibold tracking-tight text-white sm:text-6xl sm:leading-[1.05]">
-          Permit applications,{' '}
-          <span className="bg-gradient-to-r from-orange-300 via-amber-300 to-yellow-200 bg-clip-text text-transparent">
-            organized from intake to filing.
-          </span>
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400">
-          PermitField OS keeps your permit applications, documents, and filing
-          status in one place — with AI-assisted extraction to cut down manual
-          data entry. Built for contractors in the Canadian jurisdictions we{' '}
-          <a href="#coverage" className="underline decoration-slate-500 underline-offset-2 hover:text-white">
-            cover today
-          </a>
-          .
-        </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href={signedIn ? '/applications' : '/login?mode=sign-up'}
-            className="rounded-full bg-gradient-to-r from-orange-600 to-amber-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-950/50 transition hover:brightness-110"
-          >
-            {signedIn ? 'Open the app' : 'Create your account'}
-          </Link>
-          <a href="#how-it-works" className="rounded-full border border-white/20 px-7 py-3 text-sm font-medium text-white transition hover:bg-white/5">
-            See how it works
-          </a>
+      <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[1fr_1.05fr] lg:gap-10 lg:pb-28">
+        <div>
+          <p className="flex items-center gap-3 text-xs font-medium uppercase tracking-[0.2em] text-clay">
+            <span aria-hidden="true" className="h-px w-8 bg-clay" />
+            Built for Canadian trade contractors
+          </p>
+          <h1 className="mt-6 font-display text-[3.25rem] leading-[1.02] tracking-tight sm:text-7xl">
+            Permit applications, organized <em className="text-clay">from intake to filing.</em>
+          </h1>
+          <p className="mt-7 max-w-xl text-lg leading-relaxed text-ink/65">
+            PermitField OS keeps your permit applications, documents, and filing
+            status in one place — with AI-assisted extraction to cut down manual
+            data entry. Built for contractors in the Canadian jurisdictions we{' '}
+            <a href="#coverage" className="text-ink underline decoration-ink/25 underline-offset-4 transition hover:decoration-ink">
+              cover today
+            </a>
+            .
+          </p>
+          <div className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-4">
+            <Link
+              href={signedIn ? '/applications' : '/login?mode=sign-up'}
+              className="group inline-flex items-center gap-2 rounded-full bg-ink px-7 py-3.5 text-sm font-medium text-paper shadow-sm transition hover:bg-ink/85"
+            >
+              {signedIn ? 'Open the app' : 'Create your account'}
+              <span aria-hidden="true" className="transition group-hover:translate-x-0.5">→</span>
+            </Link>
+            <a href="#how-it-works" className="text-sm font-medium text-ink/70 underline decoration-ink/20 underline-offset-4 transition hover:text-ink hover:decoration-ink">
+              See how it works
+            </a>
+          </div>
+          <ul className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-sm text-ink/60">
+            {NOTES.map((note) => (
+              <li key={note} className="flex items-center gap-2">
+                <span aria-hidden="true" className="h-1 w-1 rounded-full bg-clay" />
+                {note}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <HeroIllustration />
+        <HeroShots />
       </div>
     </section>
   );
 }
 
-// An illustration of the tracking view, not a screenshot: the three statuses
-// are the real application states, and no customer data or figures appear.
-function HeroIllustration() {
-  const rows = [
-    { name: 'Tenant improvement', status: 'Draft', tone: 'bg-slate-500/20 text-slate-300' },
-    { name: 'Electrical service upgrade', status: 'Documents ready', tone: 'bg-orange-500/20 text-orange-200' },
-    { name: 'Commercial renovation', status: 'Submitted', tone: 'bg-emerald-500/20 text-emerald-300' },
-  ];
+// Two real captures of the running app (the same files How it works uses,
+// MARKETING_CAPABILITY_LEDGER.md's screenshot rule), laid over each other
+// like documents on a desk. Sample data only.
+function HeroShots() {
   return (
-    <div
-      role="img"
-      aria-label="Illustration of the PermitField OS application tracker showing applications in draft, documents-ready and submitted states"
-      className="relative mx-auto mt-16 max-w-4xl rounded-3xl border border-orange-400/20 bg-gradient-to-b from-orange-500/10 to-transparent p-3 shadow-2xl shadow-orange-950/60 sm:p-4"
-    >
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0a0f2c] text-left">
-        <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-3">
-          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/15" />
-          <span className="ml-3 text-xs text-slate-500">Applications</span>
-        </div>
-        <div className="grid sm:grid-cols-[11rem_1fr]">
-          <div className="hidden space-y-2 border-r border-white/5 p-4 text-xs text-slate-500 sm:block">
-            <div className="rounded-md bg-orange-500/15 px-3 py-2 text-orange-200">Applications</div>
-            <div className="px-3 py-2">Documents</div>
-            <div className="px-3 py-2">Coverage</div>
-            <div className="px-3 py-2">Team</div>
-          </div>
-          <div className="space-y-3 p-4 sm:p-5">
-            {rows.map((row) => (
-              <div key={row.name} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500/40 to-amber-500/40" />
-                  <span className="text-sm font-medium text-white">{row.name}</span>
-                </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-medium ${row.tone}`}>{row.status}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-3 rounded-xl border border-dashed border-orange-400/30 px-4 py-3 text-xs text-orange-200">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-orange-400" />
-              Key fields extracted from your uploads, ready for your review
-            </div>
-          </div>
-        </div>
+    <div className="relative mx-auto w-full max-w-xl pb-16 lg:max-w-none lg:pb-20">
+      <div className="rounded-2xl bg-white p-2 shadow-[0_1px_2px_rgb(21_23_28/0.06),0_24px_60px_-20px_rgb(21_23_28/0.25)] ring-1 ring-line sm:p-2.5">
+        <Image
+          src="/showcase/tracker.jpg"
+          width={1832}
+          height={1080}
+          alt="The applications list showing each permit application with its status and coverage level"
+          sizes="(min-width: 1024px) 560px, 100vw"
+          priority
+          className="h-auto w-full rounded-xl"
+        />
+      </div>
+      <div className="absolute -bottom-2 -left-3 w-[78%] rounded-xl bg-white p-1.5 shadow-[0_1px_2px_rgb(21_23_28/0.06),0_20px_50px_-16px_rgb(21_23_28/0.3)] ring-1 ring-line sm:-left-8 lg:-left-12">
+        <Image
+          src="/showcase/extraction.jpg"
+          width={1824}
+          height={588}
+          alt="The extraction summary: applicant, licence number, project area, amps, job value and scope, each with a confidence score"
+          sizes="(min-width: 1024px) 440px, 78vw"
+          className="h-auto w-full rounded-lg"
+        />
       </div>
     </div>
   );
