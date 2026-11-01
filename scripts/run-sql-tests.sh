@@ -43,11 +43,15 @@ if ! command -v supabase >/dev/null 2>&1; then
   exit 1
 fi
 
-DB_URL="$(supabase status -o env 2>/dev/null | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')"
+# Set DB_URL in the environment to skip the CLI lookup entirely. See
+# scripts/lib/resolve-db-url.sh for the fallback order.
+# shellcheck source=lib/resolve-db-url.sh
+source "$REPO_ROOT/scripts/lib/resolve-db-url.sh"
+DB_URL="$(resolve_db_url DB_URL)"
 
 if [ -z "$DB_URL" ]; then
   echo "error: could not determine DB_URL. Is the local Supabase stack running?" >&2
-  echo "       Run 'supabase start' first." >&2
+  echo "       Run 'supabase start' first, or set DB_URL explicitly." >&2
   exit 1
 fi
 
