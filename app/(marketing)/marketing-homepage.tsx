@@ -5,6 +5,7 @@ import { PRODUCT_NAME } from '@/lib/brand';
 import { Hero } from './sections/hero';
 import { CityStrip } from './sections/city-strip';
 import { HowItWorks } from './sections/how-it-works';
+import { BeforeYouFile } from './sections/before-you-file';
 import { Capabilities } from './sections/capabilities';
 import { Coverage } from './sections/coverage';
 import { FooterCta } from './sections/footer-cta';
@@ -101,6 +102,7 @@ export function MarketingHomepage({ signedIn }: { signedIn: boolean }) {
         <Hero signedIn={signedIn} />
         <CityStrip />
         <HowItWorks />
+        <BeforeYouFile />
         <Capabilities />
         <Coverage />
       </main>

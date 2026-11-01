@@ -78,6 +78,39 @@ Followed by the municipality names, read live from the coverage registry
 wording -- tiers are disclosed in §5, which the label links to. No count,
 no "and more", no province-wide claim.
 
+## 3a. Before you file (added 2026-11-01; after §3)
+
+**Eyebrow:** Before you file
+**Headline:** Know what the city will ask for, *and what it will charge.*
+
+**Which requirements apply** (ledger §20, screenshot `requirements-check.jpg`):
+> Each item on the city's published checklist is checked against the
+> project facts you confirm. Anything it can't decide stays unknown, never
+> "not required".
+
+**What the permit will cost** (ledger §21, screenshot `fee-estimate.jpg`):
+> A line-by-line estimate from the city's own published fee schedule, with
+> what isn't included spelled out.
+
+**Ask about an application** (ledger §22):
+> Answers come from the application's records and the official sources
+> we've reviewed, quoted. It drafts cover letters and correction responses
+> for you to edit; it can't submit or sign.
+
+**Track it after filing** (ledger §23):
+> Record the city's status updates in its own words, permit conditions and
+> inspections, all on the application.
+
+**Footnote:**
+> Requirement checks and fee estimates cover commercial tenant
+> improvements in every city we list. A fee estimate comes from the
+> published schedule; it is not the amount the city will charge. Screens
+> show sample data.
+
+Both screenshots are real captures of a local build with fictional sample
+data (Westgate Office Fit-Out, Calgary; the Calgary rule set and fee
+schedule as published in production), taken 2026-11-01.
+
 ## 3. How it works (3 steps — every verb maps to a SHIPPED capability)
 
 1. **Start an application.** Add project and jurisdiction details to create
