@@ -58,6 +58,26 @@ one word smaller — see that file's own header comment.
 
 No "free," "trial," or price mentioned (§15).
 
+**Notes under the CTAs (added with the 2026-11 light redesign):**
+> AI extraction you review · Official city forms, pre-filled · Data
+> isolated per organization
+
+Grounding: approved claims 2 (extraction with human review), 3 (official
+forms pre-filled -- "pre-filled", not "auto-filled", and the Calgary
+exception is spelled out in §4) and 4 (data isolation, §10).
+
+**Hero visual:** the real tracker and extraction captures from
+`public/showcase/` (the same files §3 uses), sample data only.
+
+## 2a. City strip (added with the 2026-11 light redesign)
+
+**Label:** Working today in (links to #coverage)
+
+Followed by the municipality names, read live from the coverage registry
+(`lib/jurisdictions/public-directory.ts`, same source as §5), with no tier
+wording -- tiers are disclosed in §5, which the label links to. No count,
+no "and more", no province-wide claim.
+
 ## 3. How it works (3 steps — every verb maps to a SHIPPED capability)
 
 1. **Start an application.** Add project and jurisdiction details to create

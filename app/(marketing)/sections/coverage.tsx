@@ -29,64 +29,80 @@ import {
 // covered. Async Server Component: Next.js resolves this independently of
 // whether its parent (MarketingHomepage) is itself async -- no other file
 // needs to change for this to render correctly.
+const PROVINCE_NAMES: Record<string, string> = {
+  AB: 'Alberta',
+  BC: 'British Columbia',
+  ON: 'Ontario',
+};
+
 export async function Coverage() {
   const jurisdictions = await getPublicJurisdictionsForIndex();
   const jurisdictionPagesEnabled = isJurisdictionPagesEnabled();
 
+  // Grouped by province, in the registry's own order within each group.
+  const byProvince = new Map<string, typeof jurisdictions>();
+  for (const jurisdiction of jurisdictions) {
+    const code = jurisdiction.provinceCode.toUpperCase();
+    byProvince.set(code, [...(byProvince.get(code) ?? []), jurisdiction]);
+  }
+  const provinces = [...byProvince.keys()].sort((a, b) =>
+    (PROVINCE_NAMES[a] ?? a).localeCompare(PROVINCE_NAMES[b] ?? b)
+  );
+
   return (
-    <section
-      id="coverage"
-      className="border-t border-white/5"
-    >
-      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6">
-        <p className="text-center text-sm font-medium text-orange-300">Coverage</p>
-        <h2 className="mt-2 text-center text-3xl font-semibold tracking-tight text-white">
-          What&apos;s covered today
-        </h2>
+    <section id="coverage" className="scroll-mt-20 border-t border-line">
+      <div className="mx-auto max-w-6xl px-5 py-24 sm:px-6 lg:py-32">
+        <div className="max-w-2xl">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-clay">Coverage</p>
+          <h2 className="mt-4 font-display text-5xl tracking-tight sm:text-6xl">What&apos;s covered today</h2>
+        </div>
         {/*
           CoverageBadge itself (imported above) is intentionally left
-          untouched -- see its own header comment. Its pastel
-          bg-*-100/text-*-700 chips carry their own background, so they
-          stay legible as light pills on a dark card without any dark:
-          variant of their own.
+          untouched -- see its own header comment.
         */}
-        <ul className="mt-12 grid gap-4 sm:grid-cols-2">
-          {jurisdictions.map((jurisdiction) => {
-            const place = `${jurisdiction.municipality}, ${jurisdiction.provinceCode.toUpperCase()}`;
-            const rowClassName =
-              'flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 transition hover:border-orange-400/40 hover:bg-white/[0.05]';
-            const row = (
-              <>
-                <span className="text-sm font-medium text-white">
-                  {place}
-                </span>
-                <CoverageBadge coverageLevel={jurisdiction.coverageLevel} />
-              </>
-            );
+        <div className="mt-14 grid gap-12 md:grid-cols-3 md:gap-10">
+          {provinces.map((code) => (
+            <div key={code}>
+              <h3 className="border-b border-ink pb-3 font-display text-2xl tracking-tight">
+                {PROVINCE_NAMES[code] ?? code}
+              </h3>
+              <ul>
+                {(byProvince.get(code) ?? []).map((jurisdiction) => {
+                  const rowClassName =
+                    'flex items-center justify-between gap-3 border-b border-line py-3.5 text-[15px] transition';
+                  const row = (
+                    <>
+                      <span>{jurisdiction.municipality}</span>
+                      <CoverageBadge coverageLevel={jurisdiction.coverageLevel} />
+                    </>
+                  );
 
-            return (
-              <li key={jurisdiction.id}>
-                {/* Same thin-content discipline as app/coverage/page.tsx:
-                    only link to a detail page that will actually render
-                    (real permit_types content) and only when that route is
-                    itself enabled -- this section's own flag
-                    (isMarketingV2Enabled) is unrelated to
-                    isJurisdictionPagesEnabled, so both must be true. */}
-                {jurisdictionPagesEnabled && jurisdiction.hasDetailPage ? (
-                  <Link
-                    href={`/permits/ca/${provinceSlug(jurisdiction.provinceCode)}/${municipalitySlug(jurisdiction.municipality)}`}
-                    className={rowClassName}
-                  >
-                    {row}
-                  </Link>
-                ) : (
-                  <div className={rowClassName}>{row}</div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-slate-400">
+                  return (
+                    <li key={jurisdiction.id}>
+                      {/* Same thin-content discipline as app/coverage/page.tsx:
+                          only link to a detail page that will actually render
+                          (real permit_types content) and only when that route is
+                          itself enabled -- this section's own flag
+                          (isMarketingV2Enabled) is unrelated to
+                          isJurisdictionPagesEnabled, so both must be true. */}
+                      {jurisdictionPagesEnabled && jurisdiction.hasDetailPage ? (
+                        <Link
+                          href={`/permits/ca/${provinceSlug(jurisdiction.provinceCode)}/${municipalitySlug(jurisdiction.municipality)}`}
+                          className={`${rowClassName} hover:text-clay`}
+                        >
+                          {row}
+                        </Link>
+                      ) : (
+                        <div className={rowClassName}>{row}</div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className="mt-12 max-w-2xl text-sm leading-relaxed text-ink/65">
           PermitField OS is expanding jurisdiction by jurisdiction.
           &quot;Verified&quot; means we&apos;ve reviewed the applicable code
           and requirements directly; &quot;Assisted&quot; and
