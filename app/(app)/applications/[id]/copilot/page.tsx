@@ -171,7 +171,7 @@ export default async function CopilotPage({ params }: { params: Promise<{ id: st
               <div className="flex justify-between gap-2">
                 <span className="text-zinc-600">{ESTIMATE_LABEL[latestEstimate.status] ?? latestEstimate.status}</span>
                 {latestEstimate.status === 'estimated' && latestEstimate.total_minor !== null && (
-                  <span className="font-semibold text-zinc-900">{formatMinor(minor(Number(latestEstimate.total_minor)), latestEstimate.currency ?? 'CAD')}</span>
+                  <span className="whitespace-nowrap font-semibold tabular-nums text-zinc-900">{formatMinor(minor(Number(latestEstimate.total_minor)), latestEstimate.currency ?? 'CAD')}</span>
                 )}
               </div>
               {(estimateCalc?.lines ?? []).length > 0 && (
@@ -182,7 +182,7 @@ export default async function CopilotPage({ params }: { params: Promise<{ id: st
                         {l.label}
                         {l.category !== 'fee' ? ` (${l.category})` : ''}
                       </span>
-                      <span className="text-zinc-900">{formatMinor(minor(l.amountMinor), latestEstimate.currency ?? 'CAD')}</span>
+                      <span className="shrink-0 whitespace-nowrap tabular-nums text-zinc-900">{formatMinor(minor(l.amountMinor), latestEstimate.currency ?? 'CAD')}</span>
                     </li>
                   ))}
                 </ul>
@@ -193,7 +193,16 @@ export default async function CopilotPage({ params }: { params: Promise<{ id: st
                   {r}
                 </p>
               ))}
-              {(estimateCalc?.exclusions ?? []).length > 0 && <p className="text-xs text-zinc-500">Not included: {estimateCalc!.exclusions!.join('; ')}</p>}
+              {(estimateCalc?.exclusions ?? []).length > 0 && (
+                <div className="text-xs text-zinc-500">
+                  <p>Not included:</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {estimateCalc!.exclusions!.map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <p className="text-xs text-zinc-500">An estimate from the published schedule, not the amount the city will charge.</p>
             </div>
           )}
