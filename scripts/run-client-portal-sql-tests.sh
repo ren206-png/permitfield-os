@@ -51,11 +51,17 @@ if ! command -v supabase >/dev/null 2>&1; then
   exit 1
 fi
 
-DB_URL="$(supabase --workdir "$WORKDIR" status -o env 2>/dev/null | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')"
+# Set CLIENT_PORTAL_DB_URL in the environment to skip the CLI lookup. It is
+# deliberately not DB_URL: a DB_URL exported for run-sql-tests.sh must not
+# silently point this suite at the root project's database. See
+# scripts/lib/resolve-db-url.sh for the fallback order.
+# shellcheck source=lib/resolve-db-url.sh
+source "$REPO_ROOT/scripts/lib/resolve-db-url.sh"
+DB_URL="$(resolve_db_url CLIENT_PORTAL_DB_URL --workdir "$WORKDIR")"
 
 if [ -z "$DB_URL" ]; then
   echo "error: could not determine DB_URL for $WORKDIR. Is its local Supabase stack running?" >&2
-  echo "       Run 'supabase --workdir $WORKDIR start' first." >&2
+  echo "       Run 'supabase --workdir $WORKDIR start' first, or set CLIENT_PORTAL_DB_URL explicitly." >&2
   exit 1
 fi
 
