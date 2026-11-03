@@ -102,6 +102,22 @@ describe('suggestedChecklistItems()', () => {
       });
     });
 
+    it('follows the requirements check where it has run: leaves off items that do not apply, requires the rest', () => {
+      const items = suggestedChecklistItems({
+        filings: [],
+        cityRequirements: [
+          { ...cityRequirements[0], outcome: 'applicable' as const },
+          { ...cityRequirements[1], outcome: 'unknown' as const },
+          { title: 'Structural drawings', description: null, appliesWhen: 'As necessary.', sourceUrl: source, outcome: 'not_applicable' as const },
+        ],
+        existingTitles: [],
+      });
+      expect(items.map((i) => [i.title, i.isRequired])).toEqual([
+        ['Building Permit Data Sheet', true],
+        ['K1 Restaurant or Kitchen Exhaust Systems form', true],
+      ]);
+    });
+
     it('skips city items already on the checklist, and repeats within the city list', () => {
       const titles = suggestedChecklistItems({
         filings: [],

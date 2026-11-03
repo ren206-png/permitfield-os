@@ -84,8 +84,13 @@ export async function addSuggestedItemsAction(_prev: ReadinessActionState, formD
     permitTypeId: application.permit_type_id,
   });
   if ('error' in result) return { error: `Could not add the suggested items: ${result.error}` };
-  if (result.added === 0) return { message: 'The suggested items are already on the checklist.' };
-  return done(applicationId, { message: `Added ${result.added} item${result.added === 1 ? '' : 's'}.` });
+  const updatedNote = result.updated > 0 ? ` Updated ${result.updated} to match the latest requirements check.` : '';
+  if (result.added === 0) {
+    return result.updated > 0
+      ? done(applicationId, { message: updatedNote.trim() })
+      : { message: 'The suggested items are already on the checklist.' };
+  }
+  return done(applicationId, { message: `Added ${result.added} item${result.added === 1 ? '' : 's'}.${updatedNote}` });
 }
 
 export async function setChecklistItemStatusAction(_prev: ReadinessActionState, formData: FormData): Promise<ReadinessActionState> {

@@ -31,14 +31,13 @@ export function OnboardingForm() {
         <div className="flex flex-col gap-3">
           <div>
             <label htmlFor="companyName" className={labelClass}>
-              Company name
+              Company name (optional)
             </label>
             <input
               id="companyName"
               name="companyName"
-              required
               className={inputClass}
-              placeholder="Same as organization name, or a licensed subsidiary"
+              placeholder="Leave blank to use the organization name"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">

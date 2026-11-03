@@ -153,9 +153,15 @@ export async function ReadinessPanel({
           <div>
             <p className="text-xs text-zinc-500">Readiness</p>
             <p className="mt-0.5 text-sm font-medium text-zinc-900">
-              {scoreValue === null ? '—' : `${Math.round(scoreValue)}%`}
+              {/* An empty checklist scores 100 in the database (compute_readiness_score's vacuous case), which
+                  read as "all done" on a brand-new application -- say there's no checklist yet instead. */}
+              {checklist.length === 0 || scoreValue === null ? '—' : `${Math.round(scoreValue)}%`}
               <span className="ml-2 text-xs font-normal text-zinc-600">
-                {requiredOpen === 0 ? 'All required items complete' : `${requiredOpen} required item${requiredOpen === 1 ? '' : 's'} left`}
+                {checklist.length === 0
+                  ? 'No checklist yet'
+                  : requiredOpen === 0
+                    ? 'All required items complete'
+                    : `${requiredOpen} required item${requiredOpen === 1 ? '' : 's'} left`}
               </span>
             </p>
           </div>

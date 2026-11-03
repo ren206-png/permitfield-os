@@ -327,6 +327,13 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               {application.estimated_job_value_cents != null
                 ? `${centsToDollarsString(BigInt(application.estimated_job_value_cents))} ${application.currency_code}`
                 : 'Not provided'}
+              {/* The permit fee estimate lives on the copilot page; without this link a first-time user had no
+                  way to know it exists. */}
+              {isCopilotEnabled() && (
+                <Link href={`/applications/${application.id}/copilot`} className="ml-2 text-xs text-zinc-600 underline hover:text-zinc-900">
+                  See the permit fee estimate
+                </Link>
+              )}
             </dd>
           </div>
         </dl>

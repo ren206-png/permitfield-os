@@ -60,6 +60,8 @@ interface CityRequirement {
   /** The checklist's own condition; null when the city always requires it. */
   appliesWhen: string | null;
   sourceUrl: string | null;
+  /** The latest requirements check outcome for this item, when one has run. */
+  outcome?: 'applicable' | 'not_applicable' | 'unknown' | null;
 }
 
 export interface SuggestedItemInput {
@@ -82,9 +84,13 @@ export interface SuggestedItem {
  * A starter checklist from what the application already has: one check per
  * filled form, a signature step where the form is signed, then the city's own
  * submission checklist -- or, for a city without one on file, a generic
- * supporting-documents item. Conditional city items are optional, since only
- * the contractor knows whether their scope triggers them. Titles already on
- * the checklist are skipped, so it can be run again safely.
+ * supporting-documents item. Where the requirements check has run, it
+ * decides: items that don't apply under the published rules are left off, and
+ * items that apply or are still unknown are required (unknown never means not
+ * required, MARKETING_CAPABILITY_LEDGER.md §20). Otherwise conditional city
+ * items are optional, since only the contractor knows whether their scope
+ * triggers them. Titles already on the checklist are skipped, so it can be
+ * run again safely.
  */
 export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedItem[] {
   const items: SuggestedItem[] = [];
@@ -118,10 +124,11 @@ export function suggestedChecklistItems(input: SuggestedItemInput): SuggestedIte
     });
   }
   for (const requirement of cityRequirements) {
+    if (requirement.outcome === 'not_applicable') continue;
     items.push({
       title: requirement.title,
       description: [requirement.appliesWhen, requirement.description].filter(Boolean).join(' '),
-      isRequired: requirement.appliesWhen === null,
+      isRequired: requirement.outcome ? true : requirement.appliesWhen === null,
       sourceRequirement: requirement.sourceUrl,
       catalogRequirementId: requirement.id ?? null,
     });
