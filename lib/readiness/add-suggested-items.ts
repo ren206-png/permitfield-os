@@ -13,7 +13,7 @@ import { suggestedChecklistItems } from './readiness';
 export async function addSuggestedChecklistItems(
   supabase: SupabaseClient,
   input: { orgId: string; applicationId: string; permitTypeId: string }
-): Promise<{ added: number } | { error: string }> {
+): Promise<{ added: number; updated: number } | { error: string }> {
   const [
     { data: filings },
     { data: generated },
@@ -33,7 +33,11 @@ export async function addSuggestedChecklistItems(
         .eq('permit_type_id', input.permitTypeId)
         .is('archived_at', null)
         .order('display_order', { ascending: true, nullsFirst: false }),
-      supabase.from('readiness_checklist_items').select('title').eq('application_id', input.applicationId).eq('org_id', input.orgId),
+      supabase
+        .from('readiness_checklist_items')
+        .select('id, title, status, is_required, catalog_requirement_id')
+        .eq('application_id', input.applicationId)
+        .eq('org_id', input.orgId),
       latestCheckOutcomes(supabase, input),
     ]);
   if (existingError) return { error: existingError.message };
@@ -63,7 +67,28 @@ export async function addSuggestedChecklistItems(
     }),
     existingTitles: (existing ?? []).map((row) => row.title),
   });
-  if (items.length === 0) return { added: 0 };
+
+  // City items already on the checklist follow a newer check too: a later
+  // answer can rule one out (not_applicable makes it optional) or bring it
+  // back (applicable/unknown makes it required). Completed items are left
+  // alone, and nothing is deleted -- an item that no longer applies stays
+  // visible as optional.
+  const resync = (existing ?? []).filter((row) => {
+    const outcome = row.catalog_requirement_id ? outcomes.get(row.catalog_requirement_id as string) : undefined;
+    if (!outcome || row.status === 'complete') return false;
+    return row.is_required !== (outcome !== 'not_applicable');
+  });
+  for (const row of resync) {
+    const { error } = await supabase
+      .from('readiness_checklist_items')
+      .update({ is_required: !row.is_required })
+      .eq('id', row.id)
+      .eq('org_id', input.orgId);
+    if (error) return { error: error.message };
+  }
+  const updated = resync.length;
+
+  if (items.length === 0) return { added: 0, updated };
 
   // One insert gives every row the same now(); the panel lists by created_at,
   // so step it by a millisecond per item to keep the city checklist's order.
@@ -80,7 +105,7 @@ export async function addSuggestedChecklistItems(
       catalog_requirement_id: item.catalogRequirementId ?? null,
     }))
   );
-  return error ? { error: error.message } : { added: items.length };
+  return error ? { error: error.message } : { added: items.length, updated };
 }
 
 type Outcome = 'applicable' | 'not_applicable' | 'unknown';
