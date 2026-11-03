@@ -126,7 +126,7 @@ schedule as published in production), taken 2026-11-01.
 
 ## 4. What PermitField OS does today (capability highlights)
 
-Four cards, each one sentence, each with a ledger citation in the
+Six cards, each one or two sentences, each with a ledger citation in the
 implementation as a code comment (not shown to visitors):
 
 - **Centralized intake & tracking** — every application's documents,
@@ -139,12 +139,19 @@ implementation as a code comment (not shown to visitors):
   (§3 — worded as current + narrow, per ledger's qualified-claim language,
   not "fills any permit form"; updated by the jurisdiction-expansion
   follow-up, which added the Surrey and Vancouver field maps)
+- **Filed by email where it’s accepted** — Richmond, Surrey and ESA
+  take applications by email, so the finished package goes straight from
+  the app. Elsewhere, you record where and when you filed. (§5, approved
+  claim 14; added 2026-11-03)
+- **Email updates for your team** — everyone in your organization hears
+  when documents are read, the review is done, or the filled form is
+  ready. (§12, approved claim 15; added 2026-11-03)
 - **Organization-level data isolation** — your applications are scoped to
   your organization, enforced at the database layer. (§10)
 
 Explicitly excluded from this section (would require ledger rows that don't
-exist as SHIPPED/approved-claim): notifications, deadline alerts, team
-invites, analytics/reporting, e-signature, third-party API/integrations.
+exist as SHIPPED/approved-claim): deadline alerts, team invites,
+analytics/reporting, e-signature, third-party API/integrations.
 
 ## 5. What's covered today (coverage section)
 

@@ -1,9 +1,9 @@
 // COPY_DECK.md §4. Each card cites its MARKETING_CAPABILITY_LEDGER.md row
 // so an editor can't drift the claim away from its evidence without also
-// touching this comment. Notifications, deadline alerts, team invites,
-// analytics/reporting, e-signature, and third-party API/integrations are
-// deliberately absent from this list -- none has an approved-claim row in
-// the ledger (all are NOT BUILT or DB-only-with-no-UI).
+// touching this comment. Deadline alerts, team invites, analytics/
+// reporting, e-signature, and third-party API/integrations are deliberately
+// absent from this list -- none has an approved-claim row in the ledger
+// (all are NOT BUILT or DB-only-with-no-UI).
 // Icons are simple line drawings (24px viewBox, stroked), not product art.
 const CAPABILITIES = [
   {
@@ -26,6 +26,23 @@ const CAPABILITIES = [
       'online only, so you get every answer ready to paste.',
     ledgerRef: '§3',
     icon: 'M5 4h14v16H5zM9 9l2 2 4-4M9 15h6',
+  },
+  {
+    title: 'Filed by email where it’s accepted',
+    body:
+      'Richmond, Surrey and ESA take applications by email, so the finished ' +
+      'package goes straight from the app. Elsewhere, you record where and ' +
+      'when you filed.',
+    ledgerRef: '§5',
+    icon: 'M3 6h18v12H3zM3 6l9 7 9-7',
+  },
+  {
+    title: 'Email updates for your team',
+    body:
+      'Everyone in your organization hears when documents are read, the ' +
+      'review is done, or the filled form is ready.',
+    ledgerRef: '§12',
+    icon: 'M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 19a2 2 0 0 0 4 0',
   },
   {
     title: 'Organization-level data isolation',
