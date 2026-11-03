@@ -28,7 +28,9 @@ export async function createOrganizationAction(
   }
 
   const orgName = String(formData.get('orgName') ?? '').trim();
-  const companyName = String(formData.get('companyName') ?? '').trim();
+  // Blank means the organization itself holds the license -- the common case
+  // for a small firm, so the form doesn't make them type the name twice.
+  const companyName = String(formData.get('companyName') ?? '').trim() || orgName;
   const licenseNumber = String(formData.get('licenseNumber') ?? '').trim();
   const provinceCode = String(formData.get('provinceCode') ?? '')
     .trim()
@@ -36,9 +38,6 @@ export async function createOrganizationAction(
 
   if (!orgName) {
     return { error: 'Organization name is required.' };
-  }
-  if (!companyName) {
-    return { error: 'Company / contractor name is required.' };
   }
   if (provinceCode && provinceCode.length !== 2) {
     return { error: 'Province code must be 2 letters (e.g. ON, AB).' };

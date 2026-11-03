@@ -165,7 +165,7 @@ export default async function CopilotPage({ params }: { params: Promise<{ id: st
             <RecalculateFeesButton applicationId={scope.applicationId} />
           </div>
           {!latestEstimate ? (
-            <p className="mt-2 text-sm text-zinc-500">Not calculated yet.</p>
+            <p className="mt-2 text-sm text-zinc-500">Not calculated yet. Press Recalculate to estimate it from the city&apos;s fee schedule.</p>
           ) : (
             <div className="mt-2 space-y-2 text-sm">
               <div className="flex justify-between gap-2">
