@@ -131,7 +131,8 @@ export function isValidPermitStatusTransition(from: PermitStatus | null, to: Per
 // PHASE_0_FINDINGS.md SS O.2) added a stateful precondition to
 // transition_permit_status() on the internal_review -> ready_to_submit edge
 // specifically: every required readiness_checklist_items row must be
-// complete, or a readiness override must already be recorded on the
+// complete, and at least one must exist (20260806000112), or a readiness
+// override must already be recorded on the
 // application. That is a live, per-row database fact (not a static
 // (from, to) edge or a static role-tier rule), so unlike Check 1/Check 2
 // above it cannot be mirrored as a pure, DB-independent function in this

@@ -11,7 +11,8 @@
 --      present).
 --   3. compute_readiness_score()/readiness_checklist_complete() correctness
 --      against a known set of required/optional/complete/incomplete rows,
---      including the 0-required-items vacuous case (100 / true).
+--      including the 0-required-items case (score 100, but not complete for
+--      the gate since 20260806000112).
 --   4. Check 5: transition_permit_status() blocks internal_review ->
 --      ready_to_submit while a required item is incomplete
 --      (readiness_incomplete, 22023), and allows it once every required item
@@ -251,8 +252,9 @@ begin
   raise notice 'PASS: compute_readiness_score() = 100, readiness_checklist_complete() = true, with every required item complete';
 end $$;
 
--- 0-required-items vacuous case: a fresh application with only an optional
--- item (or none at all) is treated as 100 / complete.
+-- 0-required-items case: a fresh application with no checklist still scores
+-- 100, but is NOT complete for the gate (20260806000112), so it cannot move
+-- to ready_to_submit without a checklist or an override.
 do $$
 declare
   score numeric;
@@ -264,10 +266,35 @@ begin
   end if;
 
   select readiness_checklist_complete('40000000-0000-0000-0000-000000000016') into complete;
-  if not complete then
-    raise exception 'FAIL: readiness_checklist_complete() returned false for an application with zero readiness_checklist_items rows';
+  if complete then
+    raise exception 'FAIL: readiness_checklist_complete() returned true for an application with zero readiness_checklist_items rows';
   end if;
-  raise notice 'PASS: compute_readiness_score() = 100 and readiness_checklist_complete() = true for the 0-required-items vacuous case';
+
+  begin
+    perform transition_permit_status('40000000-0000-0000-0000-000000000016', 'ready_to_submit');
+    raise exception 'FAIL: transition to ready_to_submit succeeded with an empty readiness checklist';
+  exception
+    when sqlstate '22023' then
+      if sqlerrm not like 'readiness_incomplete%' then
+        raise exception 'FAIL: expected readiness_incomplete for an empty checklist, got a different 22023 error: %', sqlerrm;
+      end if;
+  end;
+  raise notice 'PASS: an empty checklist scores 100 but readiness_checklist_complete() = false and ready_to_submit is blocked';
+end $$;
+
+-- Only optional items: still not complete for the gate.
+do $$
+declare
+  complete boolean;
+begin
+  insert into readiness_checklist_items (org_id, application_id, title, is_required, status)
+  values ('20000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-000000000016', 'Optional photos', false, 'complete');
+
+  select readiness_checklist_complete('40000000-0000-0000-0000-000000000016') into complete;
+  if complete then
+    raise exception 'FAIL: readiness_checklist_complete() returned true with only optional items';
+  end if;
+  raise notice 'PASS: readiness_checklist_complete() = false with only optional items';
 end $$;
 
 -- === 4. Check 5: transition_permit_status() gates internal_review -> ready_to_submit ===

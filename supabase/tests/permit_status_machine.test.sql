@@ -124,6 +124,12 @@ insert into org_members (org_id, user_id, role) values
   ('20000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000013', 'auditor_readonly')
 on conflict (org_id, user_id) do nothing;
 
+-- The readiness gate (20260806000025, 20260806000112) needs at least one
+-- complete required checklist item before ready_to_submit; this file walks
+-- the fixture application there, so give it one.
+insert into readiness_checklist_items (org_id, application_id, title, is_required, status)
+values ('20000000-0000-0000-0000-00000000000a', '40000000-0000-0000-0000-00000000000a', 'Status machine fixture item', true, 'complete');
+
 -- === 1. Fresh INSERT trigger: seed_permit_status_history() fires automatically ===
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"10000000-0000-0000-0000-00000000000a","role":"authenticated"}';
