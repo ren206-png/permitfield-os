@@ -168,7 +168,7 @@ export async function ReadinessPanel({
           <AddSuggestedItemsButton applicationId={applicationId} />
         </div>
         <p className="mt-1 text-xs text-zinc-500">
-          Required items must be complete before the status can move to Ready to submit.
+          The checklist needs at least one required item, all complete, before the status can move to Ready to submit.
         </p>
         {hasUnreviewedCityItems && (
           <p className="mt-1 text-xs text-zinc-500">
