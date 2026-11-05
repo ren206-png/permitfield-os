@@ -282,6 +282,9 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   }));
 
   const documentFilenameById = new Map((documents ?? []).map((d) => [d.id, d.original_filename]));
+  const showPermitExpiry =
+    application.permit_expires_on != null ||
+    ['approved', 'issued', 'expired', 'closed'].includes((application.permit_status as string | null) ?? '');
   const parsedExtraction = extraction?.zod_valid ? (extraction.parsed_data as PermitExtraction | null) : null;
 
   return (
@@ -338,16 +341,49 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           </div>
         </dl>
 
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4">
-          <PermitExpiryField
-            applicationId={applicationId}
-            permitExpiresOn={(application.permit_expires_on as string | null) ?? null}
-          />
-          <p className="mt-2 text-xs text-zinc-500">
-            Once issued, set the permit&apos;s expiry date here to get an email alert before (and after) it lapses.
-          </p>
-        </div>
+        {/* Only once there is a permit to expire -- on a draft the box was just noise. */}
+        {showPermitExpiry && (
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-4">
+            <PermitExpiryField
+              applicationId={applicationId}
+              permitExpiresOn={(application.permit_expires_on as string | null) ?? null}
+            />
+            <p className="mt-2 text-xs text-zinc-500">
+              Once issued, set the permit&apos;s expiry date here to get an email alert before (and after) it lapses.
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Uploading drawings is the first thing a new application needs, so Documents sits right under the
+          header instead of below the post-filing panels. */}
+      <section>
+        <h2 className="text-sm font-semibold text-zinc-900">Documents</h2>
+        <div className="mt-2 flex flex-col gap-3">
+          <DocumentUpload applicationId={applicationId} />
+          {documentsWithUrls.length > 0 ? (
+            <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white">
+              {documentsWithUrls.map((doc) => (
+                <li key={doc.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <div>
+                    <p className="font-medium text-zinc-900">{doc.original_filename}</p>
+                    <p className="text-xs text-zinc-500">
+                      {docKindLabel(doc.doc_kind)} · {Math.round(doc.byte_size / 1024)} KB
+                    </p>
+                  </div>
+                  {doc.signedUrl && (
+                    <a href={doc.signedUrl} target="_blank" rel="noreferrer noopener" className="text-xs font-medium text-zinc-700 underline">
+                      Download
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-zinc-500">No documents uploaded yet.</p>
+          )}
+        </div>
+      </section>
 
       <ReviewActions applicationId={applicationId} status={application.status} hideSubmit={citySubmission} />
 
@@ -389,34 +425,6 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           permitStatus={(application.permit_status as string | null) ?? null}
         />
       )}
-
-      <section>
-        <h2 className="text-sm font-semibold text-zinc-900">Documents</h2>
-        <div className="mt-2 flex flex-col gap-3">
-          <DocumentUpload applicationId={applicationId} />
-          {documentsWithUrls.length > 0 ? (
-            <ul className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white">
-              {documentsWithUrls.map((doc) => (
-                <li key={doc.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-                  <div>
-                    <p className="font-medium text-zinc-900">{doc.original_filename}</p>
-                    <p className="text-xs text-zinc-500">
-                      {docKindLabel(doc.doc_kind)} · {Math.round(doc.byte_size / 1024)} KB
-                    </p>
-                  </div>
-                  {doc.signedUrl && (
-                    <a href={doc.signedUrl} target="_blank" rel="noreferrer noopener" className="text-xs font-medium text-zinc-700 underline">
-                      Download
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-zinc-500">No documents uploaded yet.</p>
-          )}
-        </div>
-      </section>
 
       <section>
         <h2 className="text-sm font-semibold text-zinc-900">Extraction summary</h2>
